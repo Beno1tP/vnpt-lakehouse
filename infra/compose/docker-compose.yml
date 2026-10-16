@@ -89,25 +89,46 @@ services:
     mem_limit: 1g
     restart: unless-stopped
 
-  spark:                 # runner container: idle until `make bronze` execs a job
-    build:
-      context: ../../docker/spark
-      args:
-        SPARK_IMAGE: ${SPARK_IMAGE}
-        ICEBERG_VERSION: ${ICEBERG_VERSION}
+  spark-init:            # one-shot (root): pip deps into the pydeps volume; make the Ivy cache writable for uid 185
+    image: ${SPARK_IMAGE}
+    user: root
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+        chown 185:185 /opt/ivy
+        if cmp -s /req/requirements.txt /opt/pydeps/.requirements.txt; then echo "pydeps up to date"; exit 0; fi
+        rm -rf /opt/pydeps/*
+        python3 -m pip install --no-cache-dir --disable-pip-version-check --target /opt/pydeps -r /req/requirements.txt
+        cp /req/requirements.txt /opt/pydeps/.requirements.txt
+        echo "pydeps installed"
+    volumes:
+      - ./spark/requirements.txt:/req/requirements.txt:ro
+      - pydeps:/opt/pydeps
+      - ivy-cache:/opt/ivy
+
+  spark:                 # official image; runner container, idle until `make bronze`  execs a job
+    image: ${SPARK_IMAGE}
     depends_on:
       hive-metastore: { condition: service_started }
+      spark-init: { condition: service_completed_successfully }
     command: ["sleep", "infinity"]
     environment:
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
       AWS_REGION: us-east-1
+      PYTHONPATH: /opt/pydeps  #spark-submit appends pyspark to this
     volumes:
+      - ./spark/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+      - ivy-cache:/opt/ivy
+      - pydeps:/opt/pydeps:ro
       - ../../jobs:/opt/jobs:ro
-      - ${RAW_DATA_DIR}:/data/raw:ro          # Excel files, read-only
+      - ${RAW_DATA_DIR}:/data/raw:ro #Excel files, read-only
     ports: ["4040:4040"]                         # Spark UI while a job runs
     mem_limit: 3g
 
 volumes:
   minio-data:
   pg-data:
+  ivy-cache:
+  pydeps:

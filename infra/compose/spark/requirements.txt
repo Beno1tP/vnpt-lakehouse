@@ -1,0 +1,10 @@
+# For the Spark image's own Python 3.10; installed by spark-init into the pydeps volume
+pandas==2.2.3
+openpyxl==3.1.5
+pyarrow==17.0.0
+numpy==2.2.6
+et_xmlfile==2.0.0
+python-dateutil==2.9.0.post0
+pytz==2026.5
+tzdata==2026.5
+six==1.17.0

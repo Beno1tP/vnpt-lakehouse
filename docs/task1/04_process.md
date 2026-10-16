@@ -14,6 +14,13 @@ Time spent:
 
 ---
 
+### 2026-10-16 — 1.5 Spark on the official image (no build)
+Did: `spark` now `image: apache/spark:3.5.9-scala2.12-java17-python3-ubuntu`; `spark-defaults.conf` moved to `infra/compose/spark/` and mounted, with `spark.jars.packages` (iceberg-spark-runtime-3.5_2.12 + iceberg-aws-bundle 1.11.0) and `spark.jars.ivy=/opt/ivy` (named volume; the image has `HOME=/nonexistent`). One-shot `spark-init` (same image, root) chowns the Ivy volume to uid 185 and pip-installs `infra/compose/spark/requirements.txt` (pins copied from the old image: pandas 2.2.3, openpyxl 3.1.5, pyarrow 17.0.0, numpy 2.2.6 …) into volume `pydeps` → `PYTHONPATH=/opt/pydeps`; reinstalls only if requirements change (`cmp`).
+Observed: first `spark-sql` run → Ivy `2 artifacts copied` (109 MB); table from the old Spark still readable (data lives in MinIO + HMS); insert → 2nd snapshot `append`.
+Hiccup: pasting a long YAML block into `nano` through Windows Terminal silently dropped characters on 5 lines (one left `AWS_SECRET_ACCESS_KEY:` empty — valid YAML, would have caused a 403 later), plus a typo in a bind-mount source (`spark-defauls.conf` — Docker would create an empty dir there). `docker compose config` catches schema errors only. Heredoc (`cat > f <<'EOF'`) pastes were intact.
+Learned: `spark.jars.packages` = Ivy resolves Maven coordinates at startup and adds jars to driver/executor classpath — replaces `ADD *.jar` in a Dockerfile.
+Next: step 5 bronze ingest + validation; then delete the old custom images.
+
 ### 2026-10-16 — 1.4 E17 fixed; HMS on the official image (no build)
 Did:
 - Confirmed E17 in `/tmp/hive/hive.log` (the real HMS log; `docker logs` only shows the console): Guava `NoSuchMethodError` inside `S3AFileSystem.initialize` during `create_database`.
