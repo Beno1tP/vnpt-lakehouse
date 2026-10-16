@@ -28,7 +28,7 @@ Update this file at the end of each work block (status, decisions, blockers).
 | Iceberg (Spark runtime) | **1.11.x latest patch** (instead of 1.12.0) | ⚠️ changed | 1.12.0 was announced 2026-10-01, only 2 weeks old. It still supports Spark 3.5, but it switched the AWS SDK HTTP client (`apache-client` → `apache5-client`) and upgraded the AWS SDK and Jackson, which can cause classpath conflicts with S3/MinIO. Move to 1.12 later if you need its features |
 | Iceberg tables | Format **v2**, Parquet | ✅ keep | Readable by Spark, Trino 483 and StarRocks 3.5 |
 | Airflow | **3.3.2**, official Helm chart, **LocalExecutor** | ✅ keep | Heavy work runs in Spark pods anyway; LocalExecutor avoids Celery/Redis and the extra pods. Airflow 3 runs API server + scheduler + DAG processor + triggerer (≈2 GB) |
-| Hive Metastore | **apache/hive 4.0.x**, `SERVICE_NAME=metastore`, Postgres backend | ✅ keep (check exact tag on Docker Hub) | Metastore only, no HiveServer2. Needs the Postgres JDBC jar mounted at `/opt/hive/lib/postgres.jar` |
+| Hive Metastore | **apache/hive 3.1.3** (changed 10-16: HMS 4 incompatible with Spark's Hive 2.3 client, E16) — was 4.0.x, `SERVICE_NAME=metastore`, Postgres backend | ✅ keep (check exact tag on Docker Hub) | Metastore only, no HiveServer2. Needs the Postgres JDBC jar mounted at `/opt/hive/lib/postgres.jar` |
 | PostgreSQL | **16.x**, one instance, separate DBs (`metastore`, `airflow`, `superset`) | ✅ keep | One instance saves RAM |
 | MinIO | Latest stable image, single node | ✅ | Path-style access required in Spark/Trino |
 | Trino | **483** (released 2026-07-17) | ✅ keep, add in Phase 4 | Single node, small `-Xmx`. Container includes its own Java |
@@ -95,6 +95,28 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 | 10-15 | Hive Metastore used from Task 1 (not the Hadoop catalog) | Hadoop catalog is unsafe on S3; Trino/StarRocks need HMS later |
 | 10-15 | Images: `apache/spark:3.5.9-scala2.12-java17-python3-ubuntu` (fallback `-r-ubuntu`), `apache/hive:4.0.1`, Iceberg **1.11.0** | Tags checked on Docker Hub / Iceberg releases page |
 | 10-15 | Per-task docs: knowledge, config, plan, process, errors, validation | Bee's request; repo `docs/task<N>/` |
+| 10-15 | **Task 1 step 1.0 done**: WSL 2.6.1, Ubuntu-22.04 (default, v2), `.wslconfig` applied (10 GiB RAM, 8 CPU, 4 GiB swap), Docker Desktop 4.93 / Engine 29.8.1, WSL integration on, hello-world OK, make 4.3 / git / unzip installed | Verified by command output |
+| 10-15 | Bee uses **cmd** (not PowerShell); enters Ubuntu with `wsl` for make/bash | Preference |
+| 10-16 | **E01 seen**: `minio/minio` and `minio/mc` removed from Docker Hub (and quay.io); MinIO CE archived → use `cgr.dev/chainguard/minio:latest` (pin digest after first pull), bucket created with `amazon/aws-cli`; fallback `pgsty/silo` | Upstream distribution ended 2025–2026 |
+| 10-16 | Verified pulls: `apache/spark:3.5.9-scala2.12-java17-python3-ubuntu` ✅, `apache/hive:4.0.1` ✅ (ships hadoop-common **3.3.6** = HADOOP_AWS_VERSION ✅) | B6 output |
+| 10-16 | Stage B done: repo unzipped, data copied (2 files, 2.3 MB + 1.1 MB), `.env` ignored by `*.env` rule ✅, first commits `f2b65d7`, `698a431`. MinIO pinned: `cgr.dev/chainguard/minio@sha256:2136d593…c0c8`. Transient: `docker` not found in WSL until the shell was reopened after enabling integration | Bee output |
+| 10-16 | To fix: home dir is `/home/quang` (files owned by `quang`) → `RAW_DATA_DIR` must be `$HOME/data/vnpt-lab`; git email was saved with `< >` brackets | Bee output |
+| 10-16 | Stage B done: repo at `~/vnpt-lakehouse` (2 commits: f2b65d7, 698a431), data in `~/data/vnpt-lab` (2 xlsx), `.env` git-ignored ✅ (`.gitignore:2:*.env`), Chainguard MinIO digest `sha256:2136d593…fee0c8`, aws-cli + busybox pulled | B5b/B8 output |
+| 10-16 | Seen: `docker` not found inside WSL right after Docker Desktop restart → reopening `wsl` fixed it (integration reloads after engine start). Seen: git email set with `<>` brackets → fix + amend | Transient / typo |
+| 10-16 | Linux + Windows user is **`quang`** (Bee calls it "user"); home = `/home/quang`; `RAW_DATA_DIR=/home/quang/data/vnpt-lab` | Command output |
+| 10-16 | Docker Desktop's built-in Kubernetes (kind) found enabled → **disable it**; use Minikube as the lab requires. Remove unused images (`apache/spark:latest`, `trinodb/trino:latest`, `hello-world`, kind/envoy images); keep `postgres:16`, `apache/airflow:3.3.2` | Free RAM and disk; avoid two K8s clusters |
+| 10-16 | Found running leftovers: an old Airflow 3.3.2 **Compose** stack (`airflow-*`, 4 services + postgres) and a **kind** cluster `lab-control-plane` (kindest/node v1.37.0). Plan: `docker compose -p airflow down` (keep volumes), remove the kind cluster, delete exited containers | They consume several GB of RAM; Task 2 will run Airflow on Minikube via Helm instead |
+| 10-16 | **Task 1 steps 1.1 done**: repo in `~/vnpt-lakehouse`, git `main`, 2 commits (`f2b65d7` starter, `698a431` MinIO switch); Excel files in `~/data/vnpt-lab`; `.env` ignored by git | Command output |
+| 10-16 | Verified: `apache/spark:3.5.9-scala2.12-java17-python3-ubuntu` pulls; `apache/hive:4.0.1` ships **hadoop-common 3.3.6** → `HADOOP_AWS_VERSION=3.3.6` correct | Command output |
+| 10-16 | **E01 seen**: `minio/minio` and `minio/mc` → *pull access denied* (MinIO CE images no longer on Docker Hub). Switched to `cgr.dev/chainguard/minio` (pin by digest `sha256:2136d593…`) + `amazon/aws-cli` / `busybox` for bucket init | Bee's change; compose to be reviewed before `make up` |
+| 10-16 | **Stage C done**: MinIO up (Chainguard), bucket `lakehouse` created, Postgres healthy, Hive Metastore image built (38 s) and **schema 4.0.0 initialised**, server started | Command output |
+| 10-16 | Finding: the Hive image entrypoint runs with `set -x`, so `SERVICE_OPTS` (incl. DB password) is printed in logs → treat logs as sensitive; later move credentials to a mounted `hive-site.xml` | Security |
+| 10-16 | **E16 seen**: Spark 3.5 (Hive 2.3 client) → HMS 4.0.1 fails on table calls: `Invalid method name: 'get_table'`. Decision: **downgrade HMS to `apache/hive:3.1.3`** (tag exists), wipe `vnpt-lake_pg-data`, re-match hadoop-aws | Keeps the lab's Hive Metastore requirement; Trino/StarRocks also speak HMS 3 |
+| 10-16 | HMS 3.1.3 started: schema **3.1.0** initialised; Spark sees `SHOW NAMESPACES` → `default`. **E17**: `CREATE NAMESPACE` → connection lost; cause suspected `HADOOP_AWS_VERSION=3.1.3` vs hadoop-common **3.1.0**. Fix → 3.1.0 + `IS_RESUME=true` | Command output |
+| 10-16 | Bee asked if Hive is needed in Task 1 → kept: Iceberg always needs a catalog; the lab's architecture names Hive Metastore; Trino (Task 3) can't use Iceberg's Hadoop catalog | Decision |
+| 10-16 | C0 cleanup done: old Airflow Compose stack down (volume kept), kind cluster `lab` removed, unused images removed. Left: 1 untagged `kindest/node` image (1.34 GB), 2 old volumes (1.4 GB) | Command output |
+| 10-16 | Note: an earlier entry said repo `~/lakehouse` / user `user`; latest command output shows **`~/vnpt-lakehouse`**, project `vnpt-lake`, user `quang` → verify with `pwd`/`whoami` | Reconciled at handoff |
+| 10-16 | Docker Desktop's built-in Kubernetes to be **disabled**; unused images removed (spark:latest, trino:latest, kind/envoy/registry-mirror) | Lab uses Minikube; Docker Desktop K8s wastes RAM. Keep `apache/airflow:3.3.2` (Task 2) and `postgres:16` |
 
 ## 5b. Reading notes (Bee's ratings, 10-15)
 
@@ -117,6 +139,12 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 - [ ] Pin a MinIO image tag that pulls
 - [ ] Confirm the Spark Operator chart version that supports Spark 3.5.9
 
+## 6b. Errors met (live)
+
+| Date | Symptom | Likely cause | Fix | Status |
+|---|---|---|---|---|
+| 10-16 | In Ubuntu: `The command 'docker' could not be found in this WSL 2 distro` (worked on 10-15) | Docker Desktop's WSL integration for Ubuntu-22.04 was switched off or not yet started again after Apply & restart / Kubernetes disable / user rename | Docker Desktop running → Settings → Resources → WSL integration → toggle Ubuntu-22.04 OFF→ON → Apply & restart → reopen the Ubuntu terminal → `which docker` | open |
+
 ## 7. Risks being watched
 
 | Risk | Early sign | Response |
@@ -125,3 +153,10 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 | Version incompatibility | `ClassNotFoundException`, S3 auth errors | Stick to the matrix; change one version at a time |
 | Schedule slip | Phase not done by its day | Cut from "Could", then "Should"; never cut reconciliation |
 | Disk growth | < 30 GB free | Prune images; expire snapshots; compact the WSL2 disk |
+
+
+## 7. Handoff to Claude Code (2026-10-16 13:50)
+
+- Chat phase ended. Continue from `docs/HANDOFF.md` (sections 6–10).
+- Open: **E17** (confirm in HMS log; hadoop-aws 3.1.0), infra redesign toward pulled images + compose config, disk audit (setup used 30–50 GB).
+- Data reminder: trial/imaginary data, lab only; keep local.
