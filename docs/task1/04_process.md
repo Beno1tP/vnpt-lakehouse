@@ -14,6 +14,16 @@ Time spent:
 
 ---
 
+### 2026-10-16 — 1.4 E17 fixed; HMS on the official image (no build)
+Did:
+- Confirmed E17 in `/tmp/hive/hive.log` (the real HMS log; `docker logs` only shows the console): Guava `NoSuchMethodError` inside `S3AFileSystem.initialize` during `create_database`.
+- Added one-shot `jars-init` (`curlimages/curl:8.22.0`, script `infra/compose/fetch-jars.sh`) → downloads `hadoop-aws-3.1.0`, `aws-java-sdk-bundle-1.11.271`, `postgresql-42.7.4` into git-ignored `infra/compose/jars/`, SHA-1 checked against Maven Central.
+- `hive-metastore` now `image: apache/hive:3.1.3` + jars and `core-site.xml` bind-mounted; `IS_RESUME=true` (E07).
+- `.env.example` rewritten: digest pins (MinIO, aws-cli), `HADOOP_AWS_VERSION=3.1.0`, `CURL_IMAGE`, correct comments and `RAW_DATA_DIR`.
+Observed: jars in `/opt/hive/lib` = 3.1.0 / 1.11.271 / postgres.jar (42.7.4); smoke test OK (2 rows, snapshot `append`); MinIO shows `tmp.db/t/{metadata/*.metadata.json, *.avro, data/*.parquet}`. Harmless warnings: SLF4J multiple bindings (HMS); `ObjectStore … schema version 2.3.0` in Spark = Spark's own embedded Derby metastore for `spark_catalog`, not our HMS.
+Learned: transitive dependency drift inside a patch line (Hadoop 3.1.3 → Guava 27) breaks binary compatibility; the client only sees "connection lost", so read the server log.
+Next: 4d Spark on the official image (`spark.jars.packages` + Ivy volume, pip deps in a volume).
+
 ### 2026-10-16 — 1.3b Repo audit + disk cleanup (Claude Code session)
 Did: read handoff docs vs real files; audited disk; removed `apache/hive:4.0.1`, `apache/airflow:3.3.2`, all build cache, volume `airflow_postgres-db-volume` (Bee typed the commands).
 Observed:

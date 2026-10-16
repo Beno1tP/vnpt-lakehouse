@@ -50,21 +50,28 @@ services:
       retries: 20
     restart: unless-stopped
 
-  hive-metastore:
-    build:
-      context: ./hive
-      args:
-        HIVE_IMAGE: ${HIVE_IMAGE}
-        HADOOP_AWS_VERSION: ${HADOOP_AWS_VERSION}
-        AWS_SDK_BUNDLE_VERSION: ${AWS_SDK_BUNDLE_VERSION}
-        PG_JDBC_VERSION: ${PG_JDBC_VERSION}
+  jars-init:             # one-shot: fetch HMS jars into ./jars (git-ignored), SHA-1 checked
+    image: ${CURL_IMAGE}
+    user: "1000:1000"    # = quang, so the files on the host are owned by you
+    entrypoint: ["sh", "/fetch-jars.sh"]
+    environment:
+      HADOOP_AWS_VERSION: ${HADOOP_AWS_VERSION}
+      AWS_SDK_BUNDLE_VERSION: ${AWS_SDK_BUNDLE_VERSION}
+      PG_JDBC_VERSION: ${PG_JDBC_VERSION}
+    volumes:
+      - ./fetch-jars.sh:/fetch-jars.sh:ro
+      - ./jars:/jars
+
+  hive-metastore:        # official image; S3A + JDBC jars and core-site.xml are mounted (no build)
+    image: ${HIVE_IMAGE}
     depends_on:
       postgres: { condition: service_healthy }
       minio-init: { condition: service_completed_successfully }
+      jars-init: { condition: service_completed_successfully }
     environment:
       SERVICE_NAME: metastore
       DB_DRIVER: postgres
-      # IS_RESUME: "true"   # set after the first successful start to skip schema init
+      IS_RESUME: "true"    # schema 3.1.0 already in Postgres -> skip schematool -initSchema (E07)
       SERVICE_OPTS: >-
         -Xmx768m
         -Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver
@@ -73,6 +80,11 @@ services:
         -Djavax.jdo.option.ConnectionPassword=${PG_PASSWORD}
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+    volumes:             # hadoop-aws MUST equal the image's hadoop-common (3.1.0), see E17
+      - ./jars/hadoop-aws-${HADOOP_AWS_VERSION}.jar:/opt/hive/lib/hadoop-aws-${HADOOP_AWS_VERSION}.jar:ro
+      - ./jars/aws-java-sdk-bundle-${AWS_SDK_BUNDLE_VERSION}.jar:/opt/hive/lib/aws-java-sdk-bundle-${AWS_SDK_BUNDLE_VERSION}.jar:ro
+      - ./jars/postgresql-${PG_JDBC_VERSION}.jar:/opt/hive/lib/postgres.jar:ro
+      - ./hive/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
     ports: ["9083:9083"]
     mem_limit: 1g
     restart: unless-stopped

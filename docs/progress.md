@@ -119,6 +119,8 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 | 10-16 | Docker Desktop's built-in Kubernetes to be **disabled**; unused images removed (spark:latest, trino:latest, kind/envoy/registry-mirror) | Lab uses Minikube; Docker Desktop K8s wastes RAM. Keep `apache/airflow:3.3.2` (Task 2) and `postgres:16` |
 | 10-16 | Claude Code session: disk cleanup done (hive 4.0.1 + airflow 3.3.2 images, build cache, old airflow volume) → ~11.9 GB freed inside Docker; vhdx compaction deferred until after E17 | `docker system df` before/after |
 | 10-16 | Found: Spark image ships **Python 3.10.12** (matrix said 3.11); PySpark 3.5 + pandas 2.2.3 / pyarrow 17 support 3.10, so keep the image's Python | `python3 --version` in container |
+| 10-16 | Infra option 1 chosen: official images + compose config (mounted jars/configs, one-shot init services), no custom builds. Rejected: Starburst HMS image (vendor, 15 months old, 2 changes at once), tabulario/spark-iceberg (Spark 3.5.5/Iceberg 1.8.1, 2.3 GB), Iceberg REST (lab names HMS) | Bee's choice after options with RAM/disk/risk |
+| 10-16 | **E17 fixed**: root cause Guava NoSuchMethodError (hadoop-aws 3.1.3 built on Guava 27, image has Guava 11/19) → hadoop-aws 3.1.0; HMS runs on `apache/hive:3.1.3` with mounted jars; smoke test passes | HMS log + smoke test output |
 
 ## 5b. Reading notes (Bee's ratings, 10-15)
 
