@@ -117,6 +117,8 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 | 10-16 | C0 cleanup done: old Airflow Compose stack down (volume kept), kind cluster `lab` removed, unused images removed. Left: 1 untagged `kindest/node` image (1.34 GB), 2 old volumes (1.4 GB) | Command output |
 | 10-16 | Note: an earlier entry said repo `~/lakehouse` / user `user`; latest command output shows **`~/vnpt-lakehouse`**, project `vnpt-lake`, user `quang` → verify with `pwd`/`whoami` | Reconciled at handoff |
 | 10-16 | Docker Desktop's built-in Kubernetes to be **disabled**; unused images removed (spark:latest, trino:latest, kind/envoy/registry-mirror) | Lab uses Minikube; Docker Desktop K8s wastes RAM. Keep `apache/airflow:3.3.2` (Task 2) and `postgres:16` |
+| 10-16 | Claude Code session: disk cleanup done (hive 4.0.1 + airflow 3.3.2 images, build cache, old airflow volume) → ~11.9 GB freed inside Docker; vhdx compaction deferred until after E17 | `docker system df` before/after |
+| 10-16 | Found: Spark image ships **Python 3.10.12** (matrix said 3.11); PySpark 3.5 + pandas 2.2.3 / pyarrow 17 support 3.10, so keep the image's Python | `python3 --version` in container |
 
 ## 5b. Reading notes (Bee's ratings, 10-15)
 
@@ -133,17 +135,17 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 ## 6. Open questions / blockers
 
 - [ ] UC6 (top 12 intents vs only 2 intents in data) and UC7 (30-day comparison vs ~18 days of data): raise with leader
-- [x] `apache/hive:4.0.1` exists (also `standalone-metastore-4.1.0` / `4.2.1`)
-- [ ] Confirm the Hadoop version bundled in `apache/hive:4.0.1` → set `HADOOP_AWS_VERSION`
-- [ ] Confirm `apache/spark:3.5.9-scala2.12-java17-python3-ubuntu` pulls (else `-r-ubuntu`)
-- [ ] Pin a MinIO image tag that pulls
+- [x] `apache/hive:4.0.1` exists (also `standalone-metastore-4.1.0` / `4.2.1`) — no longer used (E16)
+- [x] Hadoop bundled in `apache/hive:3.1.3` = hadoop-common **3.1.0** → `HADOOP_AWS_VERSION=3.1.0`
+- [x] `apache/spark:3.5.9-scala2.12-java17-python3-ubuntu` pulls
+- [ ] Pin MinIO and aws-cli by digest (`.env` still says `:latest`)
 - [ ] Confirm the Spark Operator chart version that supports Spark 3.5.9
 
 ## 6b. Errors met (live)
 
 | Date | Symptom | Likely cause | Fix | Status |
 |---|---|---|---|---|
-| 10-16 | In Ubuntu: `The command 'docker' could not be found in this WSL 2 distro` (worked on 10-15) | Docker Desktop's WSL integration for Ubuntu-22.04 was switched off or not yet started again after Apply & restart / Kubernetes disable / user rename | Docker Desktop running → Settings → Resources → WSL integration → toggle Ubuntu-22.04 OFF→ON → Apply & restart → reopen the Ubuntu terminal → `which docker` | open |
+| 10-16 | In Ubuntu: `The command 'docker' could not be found in this WSL 2 distro` (worked on 10-15) | Docker Desktop's WSL integration for Ubuntu-22.04 was switched off or not yet started again after Apply & restart / Kubernetes disable / user rename | Docker Desktop running → Settings → Resources → WSL integration → toggle Ubuntu-22.04 OFF→ON → Apply & restart → reopen the Ubuntu terminal → `which docker` | fixed (`exit` → `wsl`) |
 
 ## 7. Risks being watched
 
