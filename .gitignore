@@ -1,0 +1,11 @@
+.env
+*.env
+!*.env.example
+data/
+*.xlsx
+*.parquet
+__pycache__/
+.venv/
+spark-warehouse/
+metastore_db/
+.DS_Store

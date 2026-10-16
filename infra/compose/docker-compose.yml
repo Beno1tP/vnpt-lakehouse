@@ -1,0 +1,91 @@
+# Task 1: MinIO + Postgres + Hive Metastore + Spark runner
+# Usage (from repo root):  make up   then   make bronze
+name: vnpt-lake
+
+services:
+  minio:
+    image: ${MINIO_IMAGE}
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports: ["9000:9000", "9001:9001"]
+    volumes: [minio-data:/data]
+    mem_limit: 512m
+    restart: unless-stopped
+    # no healthcheck: recent MinIO images don't ship curl; minio-init retries instead
+
+  minio-init:            # one-shot: wait for MinIO, create bucket, then exit
+    image: ${MINIO_MC_IMAGE}
+    depends_on: [minio]
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD}; do echo waiting for minio; sleep 2; done &&
+      mc mb --ignore-existing local/lakehouse && echo bucket ready"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${PG_USER}
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+      POSTGRES_DB: metastore
+    volumes: [pg-data:/var/lib/postgresql/data]
+    mem_limit: 384m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER} -d metastore"]
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+
+  hive-metastore:
+    build:
+      context: ./hive
+      args:
+        HIVE_IMAGE: ${HIVE_IMAGE}
+        HADOOP_AWS_VERSION: ${HADOOP_AWS_VERSION}
+        AWS_SDK_BUNDLE_VERSION: ${AWS_SDK_BUNDLE_VERSION}
+        PG_JDBC_VERSION: ${PG_JDBC_VERSION}
+    depends_on:
+      postgres: { condition: service_healthy }
+      minio-init: { condition: service_completed_successfully }
+    environment:
+      SERVICE_NAME: metastore
+      DB_DRIVER: postgres
+      # IS_RESUME: "true"   # set after the first successful start to skip schema init
+      SERVICE_OPTS: >-
+        -Xmx768m
+        -Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver
+        -Djavax.jdo.option.ConnectionURL=jdbc:postgresql://postgres:5432/metastore
+        -Djavax.jdo.option.ConnectionUserName=${PG_USER}
+        -Djavax.jdo.option.ConnectionPassword=${PG_PASSWORD}
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+    ports: ["9083:9083"]
+    mem_limit: 1g
+    restart: unless-stopped
+
+  spark:                 # runner container: idle until `make bronze` execs a job
+    build:
+      context: ../../docker/spark
+      args:
+        SPARK_IMAGE: ${SPARK_IMAGE}
+        ICEBERG_VERSION: ${ICEBERG_VERSION}
+    depends_on:
+      hive-metastore: { condition: service_started }
+    command: ["sleep", "infinity"]
+    environment:
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      AWS_REGION: us-east-1
+    volumes:
+      - ../../jobs:/opt/jobs:ro
+      - ${RAW_DATA_DIR}:/data/raw:ro          # Excel files, read-only
+    ports: ["4040:4040"]                         # Spark UI while a job runs
+    mem_limit: 3g
+
+volumes:
+  minio-data:
+  pg-data:
