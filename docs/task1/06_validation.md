@@ -31,6 +31,27 @@ SELECT snapshot_id, operation, summary['added-records'] FROM lake.bronze.chatlog
 Parsing note: Python's `%f` takes at most 6 fraction digits, so the 9-digit Oracle fraction was cut to 6 before parsing (`%d-%b-%y %I.%M.%S.%f %p`). In Spark use `to_timestamp(col, 'dd-MMM-yy hh.mm.ss.SSSSSSSSS a')` and confirm 0 nulls.
 
 ## Idempotency checks
-- [ ] Rerun with the same `DATE` → row counts unchanged; latest snapshot operation = `overwrite`.
-- [ ] Run with a new `DATE` → a second partition with the same counts (shows partitioning works).
-- [ ] Time travel to the first snapshot returns the first load.
+- [x] Rerun with the same `DATE` → row counts unchanged; latest snapshot operation = `overwrite`.
+- [x] Run with a new `DATE` → a second partition with the same counts (shows partitioning works).
+- [x] Time travel to the first snapshot returns the first load.
+
+## Results — Bronze, 2026-10-16 (Spark 3.5.9 / Iceberg 1.11.0 / HMS 3.1.3)
+| Check | Expected | Actual |
+|---|---|---|
+| chatlog rows / distinct ID / distinct SENDER_ID / non-null in the 5 empty cols | 21,224 / 21,224 / 89 / 0 | ✅ same |
+| predict rows / distinct ID / distinct SENDER_ID / non-null in the 4 empty cols | 10,729 / 10,729 / 89 / 0 | ✅ same |
+| Columns (source + 4 metadata) | 19 / 21 | ✅ 19 / 21 (`DESCRIBE`) |
+| `SOURCE` client / bot; client `/home` | 10,613 / 10,611; 10,378 | ✅ same |
+| `INPUT_CHANNEL` livechat / platform | 21,192 / 32 | ✅ same |
+| predict without chat row | 116 | ✅ 116 |
+| New fact | — | bot rows with `TEXT='/home'`: 10,377 |
+| `final_intent` (rule in CLAUDE.md) | — | xin_chao 10,588 · fallback 107 · bot_khong_hieu 34; `UPDATED_INTENT` 0 non-null |
+
+Snapshots of `lake.bronze.chatlog`:
+| committed_at | operation | added | deleted | total | what |
+|---|---|---|---|---|---|
+| 16:29:04 | append | 21,224 | NULL | 21,224 | first load (`create()`), DATE=10-16 |
+| 16:42:08 | overwrite | 21,224 | 21,224 | 21,224 | rerun DATE=10-16 → partition replaced |
+| 17:04:26 | overwrite | 21,224 | NULL | 42,448 | DATE=10-17 → new partition, 10-16 untouched |
+
+Time travel: `VERSION AS OF <snapshot 1>` and `TIMESTAMP AS OF '2026-10-16 16:35:00'` both return the first batch (`_batch_id` differs from the current one), 21,224 rows. `files` = 1 vs `all_data_files` = 2 before the 10-17 load → overwritten files stay on MinIO until `expire_snapshots`.

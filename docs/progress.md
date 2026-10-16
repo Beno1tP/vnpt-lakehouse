@@ -122,6 +122,7 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 | 10-16 | Infra option 1 chosen: official images + compose config (mounted jars/configs, one-shot init services), no custom builds. Rejected: Starburst HMS image (vendor, 15 months old, 2 changes at once), tabulario/spark-iceberg (Spark 3.5.5/Iceberg 1.8.1, 2.3 GB), Iceberg REST (lab names HMS) | Bee's choice after options with RAM/disk/risk |
 | 10-16 | **E17 fixed**: root cause Guava NoSuchMethodError (hadoop-aws 3.1.3 built on Guava 27, image has Guava 11/19) → hadoop-aws 3.1.0; HMS runs on `apache/hive:3.1.3` with mounted jars; smoke test passes | HMS log + smoke test output |
 | 10-16 | Spark runs on the official `apache/spark:3.5.9…` image: Iceberg via `spark.jars.packages` + Ivy volume, Python deps via `spark-init` → `pydeps` volume. **No custom images left in use** (old ones kept until bronze passes) | Smoke test on new Spark: 3 rows, 2 snapshots |
+| 10-16 | **Bronze done**: both tables match `06_validation.md`; idempotent rerun (overwrite, no duplicates), new-date partition, time travel by version and timestamp verified | Command output, `06_validation.md` results |
 
 ## 5b. Reading notes (Bee's ratings, 10-15)
 
@@ -137,7 +138,7 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 
 ## 6. Open questions / blockers
 
-- [ ] UC6 (top 12 intents vs only 2 intents in data) and UC7 (30-day comparison vs ~18 days of data): raise with leader
+- [ ] UC6 (top 12 intents vs only 2 intents in data) and UC7 (30-day comparison vs ~18 days of data): raise with leader. Facts from Bronze (10-16): `UPDATED_INTENT` 0 non-null; `INTENT_NAME` = xin_chao 10,622 · fallback 107; `final_intent` = xin_chao 10,588 · fallback 107 · bot_khong_hieu 34; NLU_THRESHOLD always 0.8; 1 BOT_ID; STEP 2 values. Proposal: UC6 = generic top-N (N=12) on `final_intent` (shows 3 now, no invented labels); UC7 = window parameter anchored to max event date, empty previous window → NULL change
 - [x] `apache/hive:4.0.1` exists (also `standalone-metastore-4.1.0` / `4.2.1`) — no longer used (E16)
 - [x] Hadoop bundled in `apache/hive:3.1.3` = hadoop-common **3.1.0** → `HADOOP_AWS_VERSION=3.1.0`
 - [x] `apache/spark:3.5.9-scala2.12-java17-python3-ubuntu` pulls

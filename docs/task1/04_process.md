@@ -14,6 +14,15 @@ Time spent:
 
 ---
 
+### 2026-10-16 — 1.6 Bronze ingest, validation, idempotency, time travel
+Did: `make bronze DATE=2026-10-16` (twice), `DATE=2026-10-17`; validation SQL (counts/labels only); `.snapshots`, `.files`, `.all_data_files`; `VERSION AS OF` / `TIMESTAMP AS OF`.
+Observed: all Bronze checks match `06_validation.md` (results table there). Snapshots: append → overwrite (deleted = added = 21,224) → overwrite (deleted NULL, total 42,448). Time travel returns the first `_batch_id`.
+Learned:
+- Idempotency = the job may run more than once (Airflow retries/backfills) but the table ends as if it ran once. `overwritePartitions()` = dynamic partition overwrite: replaces only partitions present in the new DataFrame, committed atomically as one snapshot.
+- Time travel reads an older snapshot's file list; it works because overwritten files are kept until `expire_snapshots` (disk grows meanwhile).
+- The `Q` shell wrapper hid stderr, so an invalid query (`<ID1>` placeholder) printed nothing: drop `2>/dev/null` when output is empty.
+Next: cleanup (old images, Dockerfiles, `--build`, digests, `lake.tmp`, 10-17 test partition), from-zero test, vhdx compaction.
+
 ### 2026-10-16 — 1.5 Spark on the official image (no build)
 Did: `spark` now `image: apache/spark:3.5.9-scala2.12-java17-python3-ubuntu`; `spark-defaults.conf` moved to `infra/compose/spark/` and mounted, with `spark.jars.packages` (iceberg-spark-runtime-3.5_2.12 + iceberg-aws-bundle 1.11.0) and `spark.jars.ivy=/opt/ivy` (named volume; the image has `HOME=/nonexistent`). One-shot `spark-init` (same image, root) chowns the Ivy volume to uid 185 and pip-installs `infra/compose/spark/requirements.txt` (pins copied from the old image: pandas 2.2.3, openpyxl 3.1.5, pyarrow 17.0.0, numpy 2.2.6 …) into volume `pydeps` → `PYTHONPATH=/opt/pydeps`; reinstalls only if requirements change (`cmp`).
 Observed: first `spark-sql` run → Ivy `2 artifacts copied` (109 MB); table from the old Spark still readable (data lives in MinIO + HMS); insert → 2nd snapshot `append`.
