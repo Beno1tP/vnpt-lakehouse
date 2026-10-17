@@ -68,11 +68,12 @@ services:
       postgres: { condition: service_healthy }
       minio-init: { condition: service_completed_successfully }
       jars-init: { condition: service_completed_successfully }
+      hms-schema-init: { condition: service_completed_successfully }
     environment:
       SERVICE_NAME: metastore
       DB_DRIVER: postgres
-      IS_RESUME: "true"    # schema 3.1.0 already in Postgres -> skip schematool -initSchema (E07)
-      SERVICE_OPTS: >-
+      IS_RESUME: "true"    # entrypoint never inits; hms-schema-init creates the schema only if missing (E07, E19)
+      SERVICE_OPTS: &hms_opts >-
         -Xmx768m
         -Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver
         -Djavax.jdo.option.ConnectionURL=jdbc:postgresql://postgres:5432/metastore
@@ -88,6 +89,26 @@ services:
     ports: ["9083:9083"]
     mem_limit: 1g
     restart: unless-stopped
+
+  hms-schema-init:       # one-shot: create the HMS schema only if Postgres has none (idempotent, safe on every `up`)
+    image: ${HIVE_IMAGE}
+    depends_on:
+      postgres: { condition: service_healthy }
+      jars-init: { condition: service_completed_successfully }
+    entrypoint: ["bash", "-c"]
+    command:             # $$ = literal $ for the shell (compose would interpolate a single $)
+      - |
+        export HADOOP_CLIENT_OPTS="$$SERVICE_OPTS"
+        if /opt/hive/bin/schematool -dbType postgres -info >/dev/null 2>&1; then
+          echo "HMS schema exists, nothing to do"
+        else
+          /opt/hive/bin/schematool -dbType postgres -initSchema >/dev/null 2>&1 && echo "HMS schema created"
+        fi
+    environment:
+      SERVICE_OPTS: *hms_opts
+    volumes:
+      - ./jars/postgresql-${PG_JDBC_VERSION}.jar:/opt/hive/lib/postgres.jar:ro
+    mem_limit: 1g         # SERVICE_OPTS carries -Xmx768m (~75% of 1g)
 
   spark-init:            # one-shot (root): pip deps into the pydeps volume; make the Ivy cache writable for uid 185
     image: ${SPARK_IMAGE}

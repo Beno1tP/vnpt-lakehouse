@@ -27,6 +27,8 @@ Pre-filled with **likely** errors for this stack (marked *expected*). Replace th
 
 | E18 | `docker compose config` → `services.spark.depends_on.spark-init additional properties 'conditiofully' not allowed` (2026-10-16) | Pasting a long block into `nano` via Windows Terminal dropped characters on several lines; other damaged lines were still valid YAML (empty `AWS_SECRET_ACCESS_KEY:`, wrong mount source `spark-defauls.conf`) | Retyped the lines; verified with `grep -n` + `sed -n`; paste multi-line files with a heredoc instead of into nano | `compose config` validates the schema, not intent: an empty env value or a missing bind-mount source passes (Docker creates an empty **directory** for a missing source path). Review the resolved config / `git diff` | **seen → fixed** |
 
+| E19 | (prevented) On empty volumes (`make clean`) HMS would start without tables → `relation "DBS" does not exist` style errors | `IS_RESUME=true` hard-coded skips the entrypoint's `initSchema`; without it every new container re-inits and crash-loops (E07). Both settings are wrong for one of the two cases | One-shot `hms-schema-init`: `schematool -info` (rc 0 = schema exists, rc 1 = `relation "VERSION" does not exist`, both verified) → `-initSchema` only if missing; HMS `depends_on` it; `IS_RESUME=true` permanently | Idempotent init = check-then-create, same idea as `CREATE … IF NOT EXISTS`; separate one-shot init from the long-running server (like a K8s initContainer) | **fixed 10-18**; restart test passed |
+
 ## How to debug, in order
 1. `make ps`: which container is down or restarting?
 2. `make logs SVC=<name>`: read the **first** error, not the last.

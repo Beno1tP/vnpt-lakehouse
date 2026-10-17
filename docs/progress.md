@@ -58,7 +58,7 @@ The deadline is tight for "learn K8s + 8 tools". **Learn K8s just-in-time while 
 
 | Task | Scope | Docs | Status |
 |---|---|---|---|
-| 1 | MinIO + Spark → Iceberg (Docker Compose) | `docs/task1/` | 🔄 started 10-15 |
+| 1 | MinIO + Spark → Iceberg (Docker Compose) | `docs/task1/` | 🔄 core ✅ 10-18 (Bronze validated, idempotent, restart-safe); left: from-zero test, drill, README, Silver stretch |
 | 2 | Minikube + Airflow running the Spark job | `docs/task2/` | ⬜ |
 | 3 | Trino querying Iceberg | `docs/task3/` | ⬜ |
 | 4 | StarRocks Gold via SQL/dbt | `docs/task4/` | ⬜ |
@@ -71,7 +71,7 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 | Day | Phase | Work | Done when | Status |
 |---|---|---|---|---|
 | Thu 10-15 | 0 + Task 1 | Install / configure tools, `.wslconfig`; repo skeleton + `CLAUDE.md`; DuckDB expected numbers; `docs/metrics.md`; K8s basics (Pod, Deployment, Service, PVC, Secret, ConfigMap) about 2 h | Expected numbers saved (✅ `docs/task1/06_validation.md`); `kubectl get nodes` works | 🔄 |
-| Fri 10-16 | Task 1 | Compose: MinIO + Postgres + Hive Metastore; Spark writes Bronze (Silver stretch) | Bronze counts = `06_validation.md`; rerun gives no duplicates | ⬜ |
+| Fri 10-16 | Task 1 | Compose: MinIO + Postgres + Hive Metastore; Spark writes Bronze (Silver stretch) | Bronze counts = `06_validation.md`; rerun gives no duplicates | ✅ (finished 10-18) |
 | Sat–Sun 10-17/18 | 2 | Minikube: MinIO/Postgres/HMS via Helm; Spark Operator; `SparkApplication` runs the job | `make up` from zero works | ⬜ |
 | Mon 10-19 | 3 | Airflow Helm + DAG (sensor → bronze → silver → dbt → checks) | Scheduled + manual runs succeed; retry works | ⬜ |
 | Tue 10-20 | 4–5a | Trino on Iceberg; StarRocks FE/BE + Iceberg catalog | Trino = Spark counts; StarRocks reads Iceberg | ⬜ |
@@ -123,6 +123,7 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 | 10-16 | **E17 fixed**: root cause Guava NoSuchMethodError (hadoop-aws 3.1.3 built on Guava 27, image has Guava 11/19) → hadoop-aws 3.1.0; HMS runs on `apache/hive:3.1.3` with mounted jars; smoke test passes | HMS log + smoke test output |
 | 10-16 | Spark runs on the official `apache/spark:3.5.9…` image: Iceberg via `spark.jars.packages` + Ivy volume, Python deps via `spark-init` → `pydeps` volume. **No custom images left in use** (old ones kept until bronze passes) | Smoke test on new Spark: 3 rows, 2 snapshots |
 | 10-16 | **Bronze done**: both tables match `06_validation.md`; idempotent rerun (overwrite, no duplicates), new-date partition, time travel by version and timestamp verified | Command output, `06_validation.md` results |
+| 10-18 | Idempotent HMS schema init (`hms-schema-init`), restart test passed; Task 1 core done | Command output |
 
 ## 5b. Reading notes (Bee's ratings, 10-15)
 

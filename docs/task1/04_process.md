@@ -14,6 +14,12 @@ Time spent:
 
 ---
 
+### 2026-10-18 — 1.8 Idempotent HMS schema init + restart test
+Did: added `hms-schema-init` (patch applied with `git apply`, no nano paste); `make down` → `make up` → `make bronze DATE=2026-10-16`.
+Observed: `HMS schema exists, nothing to do`; all 10 containers recreated, one-shots exit 0; Bronze reload 21,224 / 10,729 (new overwrite snapshot, no duplicates).
+Learned: `-Xmx` in shared `SERVICE_OPTS` also applies to the init container → its `mem_limit` must fit it (1g). YAML anchors (`&hms_opts` / `*hms_opts`) avoid duplicating the DB options.
+Next: optional `make clean` from-zero test, vhdx compaction, failure drill, Task 1 README; Silver stretch.
+
 ### 2026-10-18 — 1.7 Cleanup: no custom images left
 Did: removed images `vnpt-lake-hive-metastore`, `vnpt-lake-spark`; `git rm` both Dockerfiles; `make up` no longer uses `--build`; `.env` pins MinIO and aws-cli by digest; dropped `lake.tmp`; deleted the duplicate `2026-10-17` Bronze partition (both tables).
 Observed: Bronze = only `2026-10-16` (21,224); 4th snapshot `delete` 21,224 (metadata-only, file kept for time travel until `expire_snapshots`). `docker system df`: images **4.98 GB** (7, all in use), build cache 0, volumes 0.54 GB (pg, minio, ivy-cache, pydeps). Start of session: images 11.73 GB + cache 6.19 GB.
