@@ -1,8 +1,8 @@
 COMPOSE = docker compose -f infra/compose/docker-compose.yml --env-file infra/compose/.env
 DATE ?= $(shell date +%F)
 
-up:            ## build + start MinIO, Postgres, Hive Metastore, Spark runner
-	$(COMPOSE) up -d --build
+up:            ## start MinIO, Postgres, Hive Metastore, Spark runner
+	$(COMPOSE) up -d
 down:          ## stop (keeps data volumes)
 	$(COMPOSE) down
 clean:         ## stop AND delete data volumes (destructive)

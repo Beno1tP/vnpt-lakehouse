@@ -14,6 +14,13 @@ Time spent:
 
 ---
 
+### 2026-10-18 — 1.7 Cleanup: no custom images left
+Did: removed images `vnpt-lake-hive-metastore`, `vnpt-lake-spark`; `git rm` both Dockerfiles; `make up` no longer uses `--build`; `.env` pins MinIO and aws-cli by digest; dropped `lake.tmp`; deleted the duplicate `2026-10-17` Bronze partition (both tables).
+Observed: Bronze = only `2026-10-16` (21,224); 4th snapshot `delete` 21,224 (metadata-only, file kept for time travel until `expire_snapshots`). `docker system df`: images **4.98 GB** (7, all in use), build cache 0, volumes 0.54 GB (pg, minio, ivy-cache, pydeps). Start of session: images 11.73 GB + cache 6.19 GB.
+Learned: a digest pin is the content hash, a tag is a movable pointer.
+Gap found: `IS_RESUME=true` is hard-coded, so on **empty** volumes (`make clean`) HMS would skip schema init and fail. Needs an idempotent schema-init step before a true from-zero test.
+Next: restart test, idempotent HMS schema init, from-zero test, vhdx compaction.
+
 ### 2026-10-16 — 1.6 Bronze ingest, validation, idempotency, time travel
 Did: `make bronze DATE=2026-10-16` (twice), `DATE=2026-10-17`; validation SQL (counts/labels only); `.snapshots`, `.files`, `.all_data_files`; `VERSION AS OF` / `TIMESTAMP AS OF`.
 Observed: all Bronze checks match `06_validation.md` (results table there). Snapshots: append → overwrite (deleted = added = 21,224) → overwrite (deleted NULL, total 42,448). Time travel returns the first `_batch_id`.
