@@ -21,7 +21,7 @@ Next: slides + presentation; then Silver; optional vhdx compaction; Task 2.
 
 ### 2026-10-18 — 1.10 Failure drills
 Did: Drill A (HMS stopped during `make bronze`); Drill B (Spark killed between the chatlog and bot_predict commits); recovery rerun. Details in `06_validation.md`.
-Observed: A → exit 2, clear catalog error, no snapshot. B → exit 137, tables on different batches, no orphan files; rerun → one batch `5717899a…`. Three B attempts missed (job ~10 s, commit window ~2.7 s) or were suspended by job control (E22) before the log-triggered kill worked.
+Observed: A → exit 2, clear catalog error, no snapshot. B → exit 137, tables on different batches, no orphan files; rerun → one batch `5717899a…`. Earlier B attempts missed (job ~10 s, commit window ~2.7 s). Correction: the attempt with `-T` but without `< /dev/null` (08:05 local) **did run** inside the container (batch `44ab84d3…`); only the suspended WSL client never wrote the log, so "nothing ran" was a wrong reading. Lesson: check the table's snapshots, not only the client's log. 7 chatlog data files now = 7 loads, 1 current (see README time-travel note).
 Learned: atomic per table, no multi-table transactions; failed job must exit non-zero so the orchestrator retries; background `docker exec` needs `-T` and `< /dev/null`.
 Next: Task 1 README + architecture; optional vhdx compaction.
 

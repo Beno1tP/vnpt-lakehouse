@@ -120,6 +120,7 @@ Start of the session (incl. images from earlier experiments): images 11.73 GB + 
 | Rerun same date | snapshot `overwrite`, deleted = added = 21,224, total unchanged ✅ |
 | New date | new partition, total 42,448, old partition untouched ✅ |
 | Time travel | `VERSION AS OF` and `TIMESTAMP AS OF` return the earlier batch ✅ |
+| Files vs table | `data/_ingest_date=2026-10-16/` holds 7 Parquet files (1.17 MB each) = 7 loads of the same 21,224 rows; `chatlog.files` = 1 current, `all_data_files` = 7. Old files stay for time travel until `expire_snapshots` |
 | From zero (`make clean && make up && make bronze`) | counts match, 1 `append` snapshot ✅ |
 
 ## Failure drills
