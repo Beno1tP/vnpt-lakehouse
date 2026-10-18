@@ -1,7 +1,8 @@
 COMPOSE = docker compose -f infra/compose/docker-compose.yml --env-file infra/compose/.env
 DATE ?= $(shell date +%F)
 
-up:            ## start MinIO, Postgres, Hive Metastore, Spark runner
+up:            ## fetch jars, then start MinIO, Postgres, Hive Metastore, Spark runner
+	$(COMPOSE) run --rm jars-init   # bind-mount sources must exist BEFORE containers are created (E21)
 	$(COMPOSE) up -d
 down:          ## stop (keeps data volumes)
 	$(COMPOSE) down
