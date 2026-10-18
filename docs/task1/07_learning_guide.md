@@ -58,3 +58,26 @@ Suggested order before Task 2: Iceberg quickstart + writes + reliability (1 h) �
 | Why not fill empty columns like `UPDATED_INTENT`? | They are empty in the source (0 non-null); filling would fabricate data. Open question for Silver: should a future `UPDATED_INTENT` override `INTENT_NAME`? (Current rule in CLAUDE.md does not use it.) |
 | What would you change for production? | JDBC/CDC instead of Excel; baked images from CI; REST catalog or HA HMS; secrets out of logs; snapshot expiry/compaction jobs; K8s + Airflow (Task 2). |
 | How will Task 1 carry into Tasks 2–5? | Same job and versions on K8s (init steps become initContainers, `.env` becomes ConfigMap/Secret); Trino/StarRocks read the same HMS catalog; Gold builds on Silver. |
+
+## 5. Global view: roles, alternatives, other architectures
+
+| Role | Ours | Alternatives | Alternative wins when | Why ours here |
+|---|---|---|---|---|
+| Object storage | MinIO (Chainguard) | AWS S3, GCS, ADLS; Ceph RGW, SeaweedFS, Garage | Cloud: no ops; Ceph: big on-prem | S3 API locally; risk: community distribution ended (E01) |
+| Table format | Iceberg v2 | Delta Lake, Hudi, Paimon, plain Parquet | Delta: Databricks; Hudi: upsert-heavy; Paimon: Flink streaming | Engine-neutral for Spark/Trino/StarRocks |
+| Catalog | Hive Metastore 3.1.3 | Iceberg REST (Polaris, Lakekeeper, Gravitino, Unity OSS), Glue, Nessie, JDBC catalog | REST: no Hive-client coupling (would avoid E16/E17); Glue: AWS; Nessie: multi-table branches | Named by the lab; Trino/StarRocks speak HMS |
+| Catalog DB | Postgres 16 | MySQL/MariaDB, Derby (dev only), Oracle | Platform already runs MySQL | One instance for HMS, Airflow, Superset |
+| Compute | Spark 3.5.9 | Trino, Flink, DuckDB, PyIceberg + pandas/Polars, EMR/Dataproc/Databricks | Small data: DuckDB/PyIceberg (32k rows don't need Spark); SQL-only: Trino; real time: Flink | Lab teaches the scale-out path (Task 2 on K8s) |
+| Ingestion | pandas reads Excel | spark-excel, CSV/Parquet first; prod: JDBC, CDC (Debezium/Kafka), Airbyte/Fivetran | Continuous changes: CDC | Lab gives Excel; fits in the driver |
+| Runtime | Compose + official images + config | Baked CI images, Kubernetes, managed Spark | Production: immutable images, multi-node | One laptop, disk-limited, no builds |
+| Layering | Medallion | Direct typed load, Data Vault, warehouse raw schema | Many sources + strict history: Data Vault | Raw copy can't fail; per-batch rerun/audit |
+
+| Architecture | Pros | Cons | Fits when |
+|---|---|---|---|
+| **Open lakehouse (ours)** | Open formats, many engines, scales | Most moving parts, version coupling | Several engines share data (Tasks 3–5) |
+| Classic warehouse (Postgres/ClickHouse/StarRocks native) | Simplest, SQL from day one | One engine owns storage; history is manual | One engine, moderate data |
+| Single node (DuckDB, PyIceberg) | Tiny footprint, minutes to build | One machine, limited concurrency | Small data, prototypes |
+| Managed cloud (Glue+Athena/EMR, Databricks, Snowflake+Iceberg) | No infra, governance built in | Cost, lock-in; data leaves the laptop (not allowed here) | Company cloud platform |
+| Streaming (Debezium/Kafka → Flink → Iceberg/Paimon) | Near real time | Hardest to operate | Live metrics |
+
+One-liner: "DuckDB would be enough for this data size; I used the lakehouse stack because later tasks share tables across engines. Today I'd evaluate an Iceberg REST catalog instead of HMS to remove the Hive-client version chain (E16/E17)."
