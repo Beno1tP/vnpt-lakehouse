@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-10-18 — 1.11 README, learning guide, Task 1 closed
+Did: `docs/task1/README.md` (architecture, services, run, versions, design decisions vs alternatives, footprint, commands, results, drills, lessons), `docs/task1/07_learning_guide.md` (per-tool understanding, patterns, checked reading list, likely questions), root `README.md`. Corrected an external draft (make clean scope, measured vs limit RAM, unproven claims).
+Observed: Spark peak 1.41 GiB during `make bronze`; Bronze 10.4 MB on MinIO.
+Next: slides + presentation; then Silver; optional vhdx compaction; Task 2.
+
 ### 2026-10-18 — 1.10 Failure drills
 Did: Drill A (HMS stopped during `make bronze`); Drill B (Spark killed between the chatlog and bot_predict commits); recovery rerun. Details in `06_validation.md`.
 Observed: A → exit 2, clear catalog error, no snapshot. B → exit 137, tables on different batches, no orphan files; rerun → one batch `5717899a…`. Three B attempts missed (job ~10 s, commit window ~2.7 s) or were suspended by job control (E22) before the log-triggered kill worked.

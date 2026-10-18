@@ -58,7 +58,7 @@ The deadline is tight for "learn K8s + 8 tools". **Learn K8s just-in-time while 
 
 | Task | Scope | Docs | Status |
 |---|---|---|---|
-| 1 | MinIO + Spark → Iceberg (Docker Compose) | `docs/task1/` | 🔄 core ✅ 10-18 (Bronze validated, idempotent, restart-safe); left: from-zero test, drill, README, Silver stretch |
+| 1 | MinIO + Spark → Iceberg (Docker Compose) | `docs/task1/` | ✅ 10-18 (Bronze validated, idempotent, from-zero tested, failure drills, README); Silver stretch after the presentation |
 | 2 | Minikube + Airflow running the Spark job | `docs/task2/` | ⬜ |
 | 3 | Trino querying Iceberg | `docs/task3/` | ⬜ |
 | 4 | StarRocks Gold via SQL/dbt | `docs/task4/` | ⬜ |
@@ -126,6 +126,7 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 | 10-18 | Idempotent HMS schema init (`hms-schema-init`), restart test passed; Task 1 core done | Command output |
 | 10-18 | **From-zero test passed** after fixing E20/E21: `make clean && make up` (49.5 s) → `make bronze` → counts match, 1 snapshot | Command output |
 | 10-18 | **Failure drills done**: HMS down → clean fail (exit 2); Spark killed between table commits → per-table atomic, cross-table out of step, rerun recovers | `06_validation.md` |
+| 10-18 | Task 1 README (architecture, decisions + alternatives, footprint incl. Spark peak 1.41 GiB, commands, results, drills, lessons) + learning guide `07_learning_guide.md`; root README index. **Task 1 closed** (vhdx compaction optional; Silver after the presentation) | Bee reviewed |
 
 ## 5b. Reading notes (Bee's ratings, 10-15)
 
