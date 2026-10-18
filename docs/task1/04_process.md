@@ -14,6 +14,12 @@ Time spent:
 
 ---
 
+### 2026-10-18 — 1.10 Failure drills
+Did: Drill A (HMS stopped during `make bronze`); Drill B (Spark killed between the chatlog and bot_predict commits); recovery rerun. Details in `06_validation.md`.
+Observed: A → exit 2, clear catalog error, no snapshot. B → exit 137, tables on different batches, no orphan files; rerun → one batch `5717899a…`. Three B attempts missed (job ~10 s, commit window ~2.7 s) or were suspended by job control (E22) before the log-triggered kill worked.
+Learned: atomic per table, no multi-table transactions; failed job must exit non-zero so the orchestrator retries; background `docker exec` needs `-T` and `< /dev/null`.
+Next: Task 1 README + architecture; optional vhdx compaction.
+
 ### 2026-10-18 — 1.9 From-zero test (`make clean` → `make up` → `make bronze`)
 Did: recorded snapshots before wiping (append 1007854840075047324 → overwrite 6835313269239717841 → overwrite 2906472628333106691 → delete 3918703497401125186 → overwrite 235462788859916261); `make clean`, removed downloaded jars (simulates a fresh clone; only `.env` kept).
 Observed: 1st try failed (E21: Docker created root-owned dirs for missing jar mount sources → old 9.4 JDBC driver → SCRAM auth error). Pre-test also found E20 (git-ignored jars dir missing in a clone). After fixes: `make up` 49.5 s from nothing, `HMS schema created`, `pydeps installed`, all services Up / Exited (0).

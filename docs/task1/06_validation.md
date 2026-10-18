@@ -55,3 +55,12 @@ Snapshots of `lake.bronze.chatlog`:
 | 17:04:26 | overwrite | 21,224 | NULL | 42,448 | DATE=10-17 → new partition, 10-16 untouched |
 
 Time travel: `VERSION AS OF <snapshot 1>` and `TIMESTAMP AS OF '2026-10-16 16:35:00'` both return the first batch (`_batch_id` differs from the current one), 21,224 rows. `files` = 1 vs `all_data_files` = 2 before the 10-17 load → overwritten files stay on MinIO until `expire_snapshots`.
+
+## Failure drills (2026-10-18)
+| Drill | How | Result |
+|---|---|---|
+| A. Catalog down | `$DC stop hive-metastore` → `make bronze` | Fails fast: `RuntimeMetaException: Failed to connect to Hive Metastore` ← `UnknownHostException: hive-metastore` (stopped container leaves Docker DNS); `make` exit **2**; no new snapshot |
+| B. Spark killed between the two table commits | job in background (`exec -T … < /dev/null`, `PYTHONUNBUFFERED=1`), `docker compose kill spark` the moment `[bronze] bronze.chatlog` is printed | Job exit **137** (SIGKILL). `chatlog` = new batch `72ec327f…` (21,224), `bot_predict` = old batch `d435c42b…` (10,729): each table complete, tables out of step. No orphan files (predict: 4 files on MinIO = 4 in `all_data_files`) |
+| Recovery | `make bronze DATE=2026-10-16` | Both tables on batch `5717899a…`, 21,224 / 10,729 |
+
+Conclusions: Iceberg commits are **atomic per table**; there is **no cross-table transaction**, so a crash between commits leaves tables on different batches until the (idempotent) rerun. Silver should check matching `_batch_id`/`_ingest_date` before joining. The window between the two commits is ~2.7 s, so the kill had to be triggered by the log line.
