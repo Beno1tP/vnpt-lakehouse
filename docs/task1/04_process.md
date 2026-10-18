@@ -18,7 +18,8 @@ Time spent:
 Did: recorded snapshots before wiping (append 1007854840075047324 → overwrite 6835313269239717841 → overwrite 2906472628333106691 → delete 3918703497401125186 → overwrite 235462788859916261); `make clean`, removed downloaded jars (simulates a fresh clone; only `.env` kept).
 Observed: 1st try failed (E21: Docker created root-owned dirs for missing jar mount sources → old 9.4 JDBC driver → SCRAM auth error). Pre-test also found E20 (git-ignored jars dir missing in a clone). After fixes: `make up` 49.5 s from nothing, `HMS schema created`, `pydeps installed`, all services Up / Exited (0).
 Learned: a from-zero test finds bugs that a long-lived dev environment hides; discard tool output only where needed, and keep a `-dryRun`/verbose path for diagnosis.
-Next: bronze on the fresh stack, failure drill, README.
+Bronze on the fresh stack: 21,224 / 21,224 IDs / 89 senders; predict 10,729; exactly 1 snapshot `append 21224` → **from-zero test passed**.
+Next: failure drill, README.
 
 ### 2026-10-18 — 1.8 Idempotent HMS schema init + restart test
 Did: added `hms-schema-init` (patch applied with `git apply`, no nano paste); `make down` → `make up` → `make bronze DATE=2026-10-16`.

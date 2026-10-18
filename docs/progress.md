@@ -124,6 +124,7 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 | 10-16 | Spark runs on the official `apache/spark:3.5.9…` image: Iceberg via `spark.jars.packages` + Ivy volume, Python deps via `spark-init` → `pydeps` volume. **No custom images left in use** (old ones kept until bronze passes) | Smoke test on new Spark: 3 rows, 2 snapshots |
 | 10-16 | **Bronze done**: both tables match `06_validation.md`; idempotent rerun (overwrite, no duplicates), new-date partition, time travel by version and timestamp verified | Command output, `06_validation.md` results |
 | 10-18 | Idempotent HMS schema init (`hms-schema-init`), restart test passed; Task 1 core done | Command output |
+| 10-18 | **From-zero test passed** after fixing E20/E21: `make clean && make up` (49.5 s) → `make bronze` → counts match, 1 snapshot | Command output |
 
 ## 5b. Reading notes (Bee's ratings, 10-15)
 
