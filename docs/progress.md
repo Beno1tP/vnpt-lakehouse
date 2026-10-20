@@ -127,6 +127,7 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 | 10-18 | **From-zero test passed** after fixing E20/E21: `make clean && make up` (49.5 s) → `make bronze` → counts match, 1 snapshot | Command output |
 | 10-18 | **Failure drills done**: HMS down → clean fail (exit 2); Spark killed between table commits → per-table atomic, cross-table out of step, rerun recovers | `06_validation.md` |
 | 10-18 | Task 1 README (architecture, decisions + alternatives, footprint incl. Spark peak 1.41 GiB, commands, results, drills, lessons) + learning guide `07_learning_guide.md`; root README index. **Task 1 closed** (vhdx compaction optional; Silver after the presentation) | Bee reviewed |
+| 10-20 | Advisor/Bee: rebuild Task 1 the standard way (deps in thin images, config mounted, volumes for data only). Options evaluated (CI→GHCR, thin FROM official, tabulario community image, --packages, shared base): **thin images now, CI→GHCR in Task 2**; plan + commands in `docs/task1/08_standard_build.md`, Bee builds tonight. Presentation moved to Thu 10-22 | Docker Hub/Maven checks, Dockerfile lint, compose config |
 
 ## 5b. Reading notes (Bee's ratings, 10-15)
 
