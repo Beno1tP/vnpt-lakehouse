@@ -207,8 +207,11 @@ Step B2: Update .env and .env.example (digest pins, runtime image tags)      (08
    PG_DIGEST=$(docker image inspect postgres:16 --format '{{index .RepoDigests 0}}')
    for f in …; do sed -i …; cat >> "$f" <<EOF … EOF; done
    |
-   ├── Error: ____
-   │   └── Fix: ____  → back to Step B2
+   ├── Error: "make: *** No rule to make target 'build'." (twice); comment cut to "# Thin runtime images built by "
+   │   │   Root cause: the heredoc is unquoted (<<EOF, needed for ${PG_DIGEST#*@}); a comment contained `make build`
+   │   │               in backticks → bash command substitution ran make; the target doesn't exist yet → empty text
+   │   └── Fix: values were correct; sed the comment + delete stale comments; guide fixed (no backticks in unquoted heredocs)
+   │        → back to Step B2 (check with grep)
    |
 Step B3: Render secrets (hive-site.xml, pg_password; mode 600, git-ignored)  (08 §4.3)
    python3 -I infra/compose/render-secrets.py; ls -l infra/compose/secrets
@@ -230,8 +233,10 @@ Step B5: Spark config, Makefile, removed files, build, inspect     (08 §4.5)
    docker run --rm --entrypoint sh vnpt-lake-hms:… -c 'ls /opt/hive/lib | grep postgres'   1 JDBC driver
    docker builder prune -f; git add -A && git commit -m "WIP standard build"
    |
-   ├── Error: ____
-   │   └── Fix: ____  → back to Step B5
+   ├── Error (E18 again): Makefile had build/secrets/smoke TWICE; first copy damaged ("spark-sqlAMESPACES IN lake")
+   │   │   Root cause: the long printf line was pasted/run twice and the terminal dropped characters in one paste
+   │   └── Fix: delete the damaged block (sed -i '20,25d' Makefile); check with make -n up/build/secrets/smoke
+   │        → continue Step B5 (build)
    |
 Step B6: From-zero test in a separate project (demo data untouched) (08 §4.6)
    make down
@@ -242,17 +247,22 @@ Step B6: From-zero test in a separate project (demo data untouched) (08 §4.6)
    secret checks (inspect / ps / logs / postgres env)                       Expect: 0 0 0 0
    $DCS down -v
    |
-   ├── Error: ____
-   │   │   Root cause: ____
-   │   └── Fix: ____  → back to Step B6   (or rollback: 08 §6)
+   ├── Warning (harmless): "[WARN] Failed to create directory: /home/hive/.beeline"
+   │   │   Root cause: schematool shares Beeline code, which wants a history folder in hive's (missing) home dir
+   │   └── No fix needed: "schemaTool completed", version 3.1.0
+   │
+   ├── Check false positive: ps check printed 1
+   │   │   Root cause: grep ConnectionPassword matched its own command line inside the container
+   │   └── Fix: grep "[C]onnectionPassword" → 0 (guide updated)  → continue Step B6
    |
 Step B7: Switch the demo stack, remove old volumes                 (08 §4.7)
    make up; $DC up -d --remove-orphans; make smoke
    docker volume rm vnpt-lake_pydeps vnpt-lake_ivy-cache; docker image rm curlimages/curl:8.22.0
    Q "SELECT count(*) FROM lake.bronze.chatlog.snapshots;"                 Expect: 7
    |
-   ├── Error: ____
-   │   └── Fix: ____  → back to Step B7
+   ├── Warning: "Found orphan containers (vnpt-lake-spark-init-1, vnpt-lake-jars-init-1)"
+   │   └── Expected: services removed from compose; the next command (up -d --remove-orphans) deletes them
+   |   Result: HMS healthy 13.4 s; "HMS schema 3.1.0 exists, nothing to do"; smoke bronze/default; 21224 / 7 / 21224
    |
 Step B8: Merge and push                                            (08 §4.8)
    git commit --amend -m "…"; git switch main && git merge --ff-only standard-build && git push origin main

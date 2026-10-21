@@ -10,5 +10,4 @@ spark-warehouse/
 metastore_db/
 .DS_Store
 CLAUDE_CODE_PROMPT.md
-infra/compose/jars/*
-!infra/compose/jars/.gitkeep
+infra/compose/secrets/

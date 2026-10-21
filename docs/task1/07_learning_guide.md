@@ -48,7 +48,7 @@ Suggested order before Task 2: Iceberg quickstart + writes + reliability (1 h) â
 | Question | Answer |
 |---|---|
 | Why does Iceberg need a catalog? | A commit swaps the pointer to the new `metadata.json` atomically; object storage can't do compare-and-swap, the catalog can. |
-| Why not the Hadoop catalog? | It commits by file rename; S3 has no atomic rename, so concurrent writers can corrupt the table. Trino can't use it either. |
+| Why not the Hadoop catalog? | It commits by renaming the next `vN.metadata.json`, safe only where rename is atomic and fails if the target exists (HDFS). On S3 (no atomic rename) and without an external lock, two writers can both believe they committed and one commit is silently lost (lost update). Trino can't use it either. |
 | What if a load fails halfway? | Nothing is committed, so readers keep the previous snapshot; files already uploaded become orphans (cleaned by `remove_orphan_files`). Drill A: no snapshot. Drill B: table unchanged until its own commit. Rerun the date. |
 | Why are two tables out of step after a crash? | Commits are atomic per table, not across tables. The idempotent rerun realigns them; Silver should check matching `_batch_id`. |
 | Why all strings in Bronze? | The raw copy never fails or loses data on a parse error; typing is a Silver rule where errors are counted. |
@@ -67,7 +67,7 @@ Suggested order before Task 2: Iceberg quickstart + writes + reliability (1 h) â
 | Is the S3 API "the" way to object storage? Do engines see MinIO as S3? | S3 API = HTTP interface (PUT/GET/LIST/DELETE) defined by AWS, de-facto standard. MinIO implements it, so every engine uses its normal S3 client with a custom endpoint, path-style, a placeholder region, and keys. Same tables work on AWS S3 by changing endpoint/credentials. |
 | Does time travel move data? | No. A commit writes new files and moves the **pointer**; old files are never moved or edited, only unlisted from the new snapshot. Physically deleted only by `expire_snapshots`/`remove_orphan_files` (7 files = 7 loads, 1 current). |
 | Is reconciliation manual? | In Task 1 yes (pandas expected numbers, compared by eye). Next: the job must `raise` when rows read â‰  rows written; an automated validation step after each load (Airflow task in Task 2, `dbt test` in Task 4). |
-| Python deps in a volume or the image? | Lab choice: volume (no custom builds, disk). Standard: **dependencies in the image, configuration outside** (mounted / ConfigMap). For Task 2 (K8s): one thin image `FROM apache/spark:3.5.9â€¦` + pip deps + Iceberg jars. |
+| Python deps in a volume or the image? | Lab v1 used volumes (no custom builds, disk). **Standard (done 2026-10-21):** dependencies in thin images, configuration mounted, credentials as secret files, volumes for data only. Task 2 pulls the same images (CI â†’ GHCR). |
 
 ## 5. Global view: roles, alternatives, other architectures
 

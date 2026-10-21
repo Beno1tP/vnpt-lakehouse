@@ -2,7 +2,7 @@
 
 Goal: replace the lab shortcuts (pip packages and Iceberg jars in volumes, HMS jars bind-mounted from the host, the DB password in `SERVICE_OPTS`) with the standard layout, so Task 2 (Kubernetes) can pull images and mount secrets. Same versions, same job, same results.
 
-Status: **plan revised 2026-10-21 after Bee's review; build and test by Bee (results in §8).**
+Status: **done 2026-10-21** (Bee built and tested; results in §8).
 
 ## 0. Review points (Bee, 2026-10-21) → decisions
 
@@ -120,14 +120,14 @@ SPARK_IMAGE=apache/spark:3.5.9-scala2.12-java17-python3-ubuntu@sha256:f3d6eaa8ba
 HIVE_IMAGE=apache/hive:3.1.3@sha256:d102ba29ad07e93c303894896203a80b903c0001d80221f1cb9fea92dcac06e4
 POSTGRES_IMAGE=postgres:16@${PG_DIGEST#*@}
 BUSYBOX_IMAGE=busybox:1.36@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
-# Thin runtime images built by `make build`
+# Thin runtime images built by: make build
 SPARK_RUNTIME_IMAGE=vnpt-lake-spark:3.5.9-iceberg1.11.0-r1
 HMS_RUNTIME_IMAGE=vnpt-lake-hms:3.1.3-hadoopaws3.1.0-r1
 EOF
 done
 grep -v -i -E "password|secret" infra/compose/.env
 ```
-Note the heredoc here is **unquoted** (`<<EOF`) so `${PG_DIGEST#*@}` is filled in. Then open both files in VS Code and delete comments that mention the removed variables.
+Note the heredoc here is **unquoted** (`<<EOF`) so `${PG_DIGEST#*@}` is filled in. Because it is unquoted, never put backticks or `$(…)` in its comments: bash would run them (it ran `make build` once in Bee's first try — harmless, comment fixed). Then open both files in VS Code and delete comments that mention the removed variables.
 
 ### 4.3 Secret renderer
 ```bash
@@ -387,7 +387,7 @@ SELECT operation, summary['total-records'] FROM lake.bronze.chatlog.snapshots;" 
 # Secret checks (counts only; every line must print 0)
 C=vnpt-lake-std-hive-metastore-1
 docker inspect $C --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -c ConnectionPassword
-docker exec $C sh -c 'cat /proc/[0-9]*/cmdline 2>/dev/null | tr "\0" "\n" | grep -c ConnectionPassword'
+docker exec $C sh -c 'cat /proc/[0-9]*/cmdline 2>/dev/null | tr "\0" "\n" | grep -c "[C]onnectionPassword"'   # [C] so grep doesn't match its own command line
 docker logs $C 2>&1 | grep -c ConnectionPassword
 docker inspect vnpt-lake-std-postgres-1 --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -c "^POSTGRES_PASSWORD="
 
@@ -454,17 +454,17 @@ Why it works: the branch holds every change. `main` gets back its tracked files,
 
 | Check | Before (lab) | After (standard) |
 |---|---|---|
-| `make build` time | — | ___ |
-| Image sizes | spark 1.86 GB, hive 1.55 GB (official) | spark ___ , hms ___ |
-| New layers (`docker history`) | — | spark ___ MB, hms ___ MB |
-| HMS JDBC drivers on classpath | 2 (9.4 + 42.7.4) | ___ |
-| Volumes | 4 (data 64 MB + deps 483 MB) | 2 (data ___ MB) |
-| `docker system df` images / volumes / build cache | 4.98 GB / 0.54 GB / 0 | ___ / ___ / ___ |
-| `make up` from zero (test project) | 49.5 s (incl. ~200 MB downloads) | ___ s |
-| HMS health | — (no healthcheck) | ___ |
-| Schema-init branch taken (test / demo) | — | ___ / ___ |
-| Password in inspect / ps / logs (HMS), Postgres env | 1 / 3 / 4, 1 | ___ |
-| First Spark run | Ivy resolves 2 artifacts (109 MB) | ___ |
-| Bronze counts / snapshots (test) | 21,224 / 10,729 / 1 append | ___ |
-| Demo stack after switch | — | ___ (21,224, 7 snapshots, time travel) |
-| Errors met | — | ___ (log in `05_errors_and_fixes.md`) |
+| `make build` time | — | **42.3 s** (first build, downloads included) |
+| Image sizes | spark 1.86 GB, hive 1.55 GB (official) | spark 2.44 GB (content 840 MB), hms 1.72 GB (content 719 MB), incl. shared base layers |
+| New layers (`docker history`) | — | spark 283 MB pip + 63.6 + 48 MB Iceberg jars ≈ 395 MB; hms ≈ 88 MB (3 jars) |
+| HMS JDBC drivers on classpath | 2 (9.4 + 42.7.4) | **1** (`postgresql-42.7.4.jar`) |
+| Volumes | 4 (data 64 MB + deps 483 MB) | **2, data only, 63 MB** |
+| `docker system df` images / volumes / build cache | 4.98 GB / 0.54 GB / 0 | **5.69 GB / 0.06 GB / 2.09 GB shown, 43 MB reclaimable** (cache entries share the images' layers) |
+| `make up` from zero (test project) | 49.5 s (incl. ~200 MB downloads) | **19.1 s** (HMS healthy at 16.7 s, Spark started after it) |
+| HMS health | — (no healthcheck) | **healthy** (TCP 9083 probe) |
+| Schema-init branch taken (test / demo) | — | test: **No HMS schema yet → initSchema → 3.1.0** / demo: **HMS schema 3.1.0 exists, nothing to do** |
+| Password in inspect / ps / logs (HMS), Postgres env | 1 / 2 (+1 self-match of the check) / 4, 1 | **0 / 0 / 0, 0** (`SERVICE_OPTS=-Xmx768m`; secret file `-rw------- hive`) |
+| First Spark run | Ivy resolves 2 artifacts (109 MB) | no Ivy step (jars in the image) |
+| Bronze counts / snapshots (test) | 21,224 / 10,729 / 1 append | **21,224 / 21,224 IDs / 89 senders; 10,729; 1 append** |
+| Demo stack after switch | — | **21,224 rows, 7 snapshots, time travel to snapshot 1 = 21,224**; HMS healthy in 13.4 s; old `jars-init`/`spark-init` removed as orphans |
+| Errors met | — | 4.2 backticks in an unquoted heredoc ran `make build` (harmless); 4.5 Makefile targets pasted twice, one copy damaged (E18 again); 4.6 ps check matched itself (false positive). Details in `09_command_paths.md` Part B |

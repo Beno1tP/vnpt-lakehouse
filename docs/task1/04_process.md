@@ -14,6 +14,12 @@ Time spent:
 
 ---
 
+### 2026-10-21 — 1.12 Standard build (thin images, secrets as files, data-only volumes)
+Did: after Bee's review (rollback, schema-init branches, one JDBC driver, health checks, `pipefail`, digests, schematool logs, `# syntax`, password leak) rewrote the plan (`08_standard_build.md`), pre-checked HMS-with-`hive-site.xml`, Compose secret mount and the init script branches; Bee built and tested on branch `standard-build`: 2 thin images (`make build` 42.3 s), secrets rendered by `make secrets`, from-zero test in a separate Compose project, then switched the demo stack.
+Observed: from zero 19.1 s; HMS healthy, schema-init took the "no schema" branch (test) and the "exists" branch (demo); password hits inspect/ps/logs 0/0/0, Postgres env 0; Bronze 21,224 / 10,729, no Ivy step; demo kept 7 snapshots and time travel; images 5.69 GB, volumes 2 (63 MB, data only). Also found E23: after a reboot HMS stays `Exited (127)` (bind mounts not ready) → `make up`.
+Learned: dependencies belong in images, configuration outside, credentials in files, data in volumes; test a from-zero path in an isolated Compose project to protect demo data; never put backticks in an unquoted heredoc; `grep -c X` inside the same container matches itself (use `[X]…`).
+Next: slides for Thursday; Silver; Task 2 (CI → GHCR, K8s).
+
 ### 2026-10-18 — 1.11 README, learning guide, Task 1 closed
 Did: `docs/task1/README.md` (architecture, services, run, versions, design decisions vs alternatives, footprint, commands, results, drills, lessons), `docs/task1/07_learning_guide.md` (per-tool understanding, patterns, checked reading list, likely questions), root `README.md`. Corrected an external draft (make clean scope, measured vs limit RAM, unproven claims).
 Observed: Spark peak 1.41 GiB during `make bronze`; Bronze 10.4 MB on MinIO.
