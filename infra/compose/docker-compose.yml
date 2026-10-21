@@ -127,8 +127,9 @@ services:
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
       AWS_REGION: us-east-1
     volumes:
-      - ./spark/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+      - ${SPARK_DEFAULTS_FILE:-./spark/spark-defaults.conf}:/opt/spark/conf/spark-defaults.conf:ro   # per-environment Spark config (endpoints, catalog); default = local
       - ../../jobs:/opt/jobs:ro
+      - ../../tests:/opt/tests:ro               # versioned checks + expected values (make validate)
       - ${RAW_DATA_DIR}:/data/raw:ro          # Excel files, read-only
     ports: ["4040:4040"]                         # Spark UI while a job runs
     mem_limit: 3g

@@ -4,6 +4,16 @@ Load the two trial chatbot Excel files into **Bronze Iceberg tables** on MinIO, 
 
 Status (2026-10-21): Bronze validated, idempotent, restart-safe, from-zero tested, failure drills done; **standard build** done (thin images, secrets as files; `08_standard_build.md`). Silver is the next stretch step.
 
+## Stages (Git tags)
+
+| Tag | Commit | Stage | Bronze evidence (`lake.bronze.chatlog` metadata log) |
+|---|---|---|---|
+| `task1-v1-lab` | `78719bf` | Official images + runtime downloads into volumes (`jars-init`, `spark-init`, Ivy) | `00000`–`00006`, 2026-10-18 |
+| `task1-v2-standard` | `f4fca4e` | Thin images, config mounted, credentials as secret files, data-only volumes | `00007`, 2026-10-21 10:52 |
+| `task1-v3-operable` | (this commit) | + `make acceptance`, versioned checks, assertions, variables, runbook | acceptance load + reload, 2026-10-21 |
+
+Look at a stage: `git switch --detach task1-v1-lab` (read-only view; `git switch main` to return). Don't `make up` an old tag on the live stack: its compose file and `.env` keys differ.
+
 ## Architecture
 
 ```
@@ -39,12 +49,13 @@ cp infra/compose/.env.example infra/compose/.env   # change the passwords; set R
 make build                   # once per version change: builds the 2 thin images (~42 s)
 make up                      # renders secrets, starts everything (~19 s from nothing: volumes, bucket, HMS schema)
 make smoke                   # Spark -> Iceberg -> HMS -> Postgres answers SHOW NAMESPACES
+make acceptance DATE=2026-10-16   # smoke -> load -> validate (17 checks) -> reload -> validate + idempotency (23)
 make bronze DATE=2026-10-16  # load (or reload) the partition for that ingest date
 make sql                     # interactive Spark SQL, catalog `lake`
 make down                    # stop, keep data      |  make clean  # stop AND delete all volumes
 ```
 
-Footprint: see [Resource footprint](#resource-footprint). Command reference: see [Commands by phase](#commands-by-phase).
+Operating it (targets, variables, validation, what each failure means): **[10_operations.md](10_operations.md)**. Footprint: see [Resource footprint](#resource-footprint). Command reference: see [Commands by phase](#commands-by-phase).
 
 ## Versions and why
 
@@ -124,8 +135,9 @@ Start of the session (incl. images from earlier experiments): images 11.73 GB + 
 | Rerun same date | snapshot `overwrite`, deleted = added = 21,224, total unchanged ✅ |
 | New date | new partition, total 42,448, old partition untouched ✅ |
 | Time travel | `VERSION AS OF` and `TIMESTAMP AS OF` return the earlier batch ✅ |
-| Files vs table | `data/_ingest_date=2026-10-16/` holds 7 Parquet files (1.17 MB each) = 7 loads of the same 21,224 rows; `chatlog.files` = 1 current, `all_data_files` = 7. Old files stay for time travel until `expire_snapshots` |
+| Files vs table | `data/_ingest_date=2026-10-16/` holds one Parquet file (1.17 MB) **per load** of the same 21,224 rows (7 on 10-18, more after each later load/acceptance run); `chatlog.files` = 1 current, `all_data_files` = number of loads. Old files stay for time travel until `expire_snapshots` |
 | From zero (`make clean && make up && make bronze`) | counts match, 1 `append` snapshot ✅ |
+| Automated acceptance (10-21) | `make acceptance`: 17/17 then 23/23 PASS, exit 0; negative test 13 FAIL, exit 2 ✅ |
 
 ## Failure drills
 
@@ -173,3 +185,5 @@ Takeaway: commits are **atomic per table**; a failed job exits non-zero so an or
 | `docs/task1/07_learning_guide.md` | What I learned per tool, standard patterns, reading list, likely questions |
 | `docs/task1/08_standard_build.md` | Standard build: decisions, steps, rollback, results |
 | `docs/task1/09_command_paths.md` | Every command step with its error branches |
+| `docs/task1/10_operations.md` | Runbook: operator interface, validation, failure → action |
+| `jobs/validate_bronze.py`, `tests/sql/bronze_checks.sql`, `tests/expected/bronze.json` | Versioned checks, expected values, validator (PASS/FAIL, exit code) |

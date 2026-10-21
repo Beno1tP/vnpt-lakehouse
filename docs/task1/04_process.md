@@ -14,6 +14,12 @@ Time spent:
 
 ---
 
+### 2026-10-21 — 1.13 Operable stack (one acceptance command, versioned checks, assertions)
+Did: Makefile variables (`ENV_FILE`, `DATE`, `SPARK_MASTER`, `SPARK_DRIVER_MEMORY`), `make help`, `smoke` that fails when the catalog does not answer, `validate`, `acceptance`, guarded `acceptance-from-zero`; checks in `tests/sql/bronze_checks.sql` + `tests/expected/bronze.json`; `jobs/validate_bronze.py` (PASS/FAIL, exit code, optional idempotency checks); in-job assertion in `bronze_ingest.py`; selectable `SPARK_DEFAULTS_FILE` (per-environment Spark config instead of passing endpoints from `.env`, which would load passwords into make). Bee's first bronze write with the new image on the existing tables: commit `00007` (overwrite 21,224), history and time travel intact.
+Observed: `make acceptance` 17/17 then 23/23 PASS, exit 0; negative test (empty date) 13 FAIL, exit 2; 4 checks pass vacuously on an empty partition.
+Learned: make the computer read the numbers (exit codes), not the operator; a gate is only proven when it has been seen failing; keep non-vacuous checks per table.
+Next: merge `operable`; slides for Thursday.
+
 ### 2026-10-21 — 1.12 Standard build (thin images, secrets as files, data-only volumes)
 Did: after Bee's review (rollback, schema-init branches, one JDBC driver, health checks, `pipefail`, digests, schematool logs, `# syntax`, password leak) rewrote the plan (`08_standard_build.md`), pre-checked HMS-with-`hive-site.xml`, Compose secret mount and the init script branches; Bee built and tested on branch `standard-build`: 2 thin images (`make build` 42.3 s), secrets rendered by `make secrets`, from-zero test in a separate Compose project, then switched the demo stack.
 Observed: from zero 19.1 s; HMS healthy, schema-init took the "no schema" branch (test) and the "exists" branch (demo); password hits inspect/ps/logs 0/0/0, Postgres env 0; Bronze 21,224 / 10,729, no Ivy step; demo kept 7 snapshots and time travel; images 5.69 GB, volumes 2 (63 MB, data only). Also found E23: after a reboot HMS stays `Exited (127)` (bind mounts not ready) → `make up`.

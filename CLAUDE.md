@@ -33,9 +33,9 @@ Python 3.11 · Spark 3.5.9 (Scala 2.12, Java 17) · Iceberg 1.11.0 runtime, form
 ## Engineering rules
 - Idempotent jobs (`overwritePartitions` / `MERGE`), parameterised by date/interval.
 - Bronze = raw strings + load metadata; Silver = typed/deduped/flagged; Gold = dbt marts.
-- No secrets in Git or images; `.env` is git-ignored. The Hive image prints `SERVICE_OPTS` (incl. DB password) in its logs, so treat logs as sensitive.
+- No secrets in Git or images; `.env` and `infra/compose/secrets/` are git-ignored. HMS/Postgres credentials are Compose secret files rendered by `make secrets` (never in `SERVICE_OPTS`); MinIO/S3 keys are still env vars (phase 2), so still treat `docker inspect` output and logs as sensitive.
 - Log every error in `docs/task1/05_errors_and_fixes.md` (symptom → root cause → fix → theory) and every step in `docs/task1/04_process.md`; update `docs/progress.md` at session end.
 
 ## Commands
 - `DC="docker compose -f infra/compose/docker-compose.yml --env-file infra/compose/.env"` then `$DC up -d …`, `$DC logs -f <svc>`, `$DC ps -a`
-- `make up` / `make down` / `make bronze DATE=YYYY-MM-DD` / `make sql`
+- `make` (help) / `make build` / `make up` (also after a reboot, E23) / `make smoke` / `make bronze DATE=YYYY-MM-DD` / `make validate DATE=…` / `make acceptance DATE=…` / `make sql` / `make down`. Runbook: `docs/task1/10_operations.md`

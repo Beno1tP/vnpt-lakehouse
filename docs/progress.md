@@ -129,6 +129,7 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 | 10-18 | Task 1 README (architecture, decisions + alternatives, footprint incl. Spark peak 1.41 GiB, commands, results, drills, lessons) + learning guide `07_learning_guide.md`; root README index. **Task 1 closed** (vhdx compaction optional; Silver after the presentation) | Bee reviewed |
 | 10-20 | Advisor/Bee: rebuild Task 1 the standard way (deps in thin images, config mounted, volumes for data only). Options evaluated (CI→GHCR, thin FROM official, tabulario community image, --packages, shared base): **thin images now, CI→GHCR in Task 2**; plan + commands in `docs/task1/08_standard_build.md`, Bee builds tonight. Presentation moved to Thu 10-22 | Docker Hub/Maven checks, Dockerfile lint, compose config |
 | 10-21 | **Standard build done** on branch `standard-build`: thin Spark/HMS images (digest-pinned bases, SHA-256 jars, one JDBC driver), HMS/Postgres credentials as Compose secret files (0 leaks), HMS health check, safe schema init, data-only volumes; from zero 19.1 s; demo data and 7 snapshots kept. E23 logged (make up after reboot) | `08_standard_build.md` §8 |
+| 10-21 | **Operable stack**: `make acceptance` (17 + 23 PASS, exit 0), negative test exit 2; versioned checks + expected values; assertions in job and validator; Make variables + `make help`; runbook `docs/task1/10_operations.md` | `make acceptance` output |
 
 ## 5b. Reading notes (Bee's ratings, 10-15)
 

@@ -1,0 +1,26 @@
+{
+  "_comment": "Expected Bronze values for one _ingest_date (from docs/task1/06_validation.md, computed with pandas from the source files). Counts only.",
+  "chatlog": {
+    "rows": 21224,
+    "distinct_id": 21224,
+    "distinct_sender": 89,
+    "columns": 19,
+    "non_null_in_empty_cols": 0,
+    "source_client": 10613,
+    "source_bot": 10611,
+    "client_home": 10378,
+    "channel_livechat": 21192,
+    "channel_platform": 32
+  },
+  "bot_predict": {
+    "rows": 10729,
+    "distinct_id": 10729,
+    "distinct_sender": 89,
+    "columns": 21,
+    "non_null_in_empty_cols": 0,
+    "unmatched_to_chat": 116
+  },
+  "both": {
+    "distinct_batch_ids": 1
+  }
+}

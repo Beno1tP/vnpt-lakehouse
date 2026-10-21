@@ -64,6 +64,8 @@ def main() -> None:
         write_bronze(spark, table, df)
         n = spark.table(f"lake.{table}").where(F.col("_ingest_date") == args.ingest_date).count()
         print(f"[bronze] {table}: {len(pdf)} rows read, {n} rows in partition {args.ingest_date}")
+        if n != len(pdf):  # fail loudly (non-zero exit) so the caller retries/alerts instead of trusting a bad load
+            raise RuntimeError(f"{table}: {n} rows in partition {args.ingest_date} != {len(pdf)} rows read")
 
     spark.stop()
 

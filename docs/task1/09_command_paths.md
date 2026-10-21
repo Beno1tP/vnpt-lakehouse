@@ -270,7 +270,31 @@ Step B8: Merge and push                                            (08 §4.8)
 
 ---
 
-## Part C — Everyday commands (after the standard build)
+## Part B2 — Stage 3: operable stack (2026-10-21, branch `operable`)
+
+```
+Step C0: Write operator files (Claude wrote them on the branch to avoid long pastes; Bee reviewed)
+   tests/expected/bronze.json · tests/sql/bronze_checks.sql · jobs/validate_bronze.py
+   jobs/bronze_ingest.py (in-job assertion) · Makefile (variables, help, smoke/validate/acceptance)
+   docker-compose.yml (mount tests/, selectable SPARK_DEFAULTS_FILE) · render-secrets.py (takes ENV_FILE)
+   |
+Step C1: Show the interface and restart Spark with the new mount
+   make                                           = make help: targets + variables
+   make up                                        recreates spark (new /opt/tests mount)
+   |
+Step C2: Acceptance (non-destructive)
+   make acceptance DATE=2026-10-16; echo "exit code: $?"
+   Expect: [smoke] OK · 17/17 PASS · 23/23 PASS · [acceptance] PASSED · exit 0        Result: as expected
+   |
+Step C3: Negative test (the gate must stop a bad run)
+   make validate DATE=2026-10-17; echo "exit code: $?"
+   Expect: FAIL lines, exit non-zero                Result: 13 FAIL, 4/17 passed (4 vacuous checks), exit 2
+   |
+   ├── Note: 4 checks pass on an empty partition (0 non-null values, column counts)
+   │   └── Keep at least one non-vacuous check per table (rows, distinct_id) → 10_operations.md §3
+```
+
+## Part C — Everyday commands (full runbook: `10_operations.md`)
 
 | Goal | Command | What it does |
 |---|---|---|

@@ -1,9 +1,10 @@
 """Render credential files from infra/compose/.env (git-ignored) into infra/compose/secrets/ (git-ignored, mode 600).
 
 Keeps the Postgres password out of HMS's SERVICE_OPTS, so it no longer appears in
-docker inspect, ps (JVM arguments) or the container log. Run: make secrets
+docker inspect, ps (JVM arguments) or the container log. Run: make secrets [ENV_FILE=...]
 """
 import os
+import sys
 import xml.sax.saxutils as xs
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -30,7 +31,7 @@ def write_private(name, text):
 
 
 def main():
-    env = read_env(os.path.join(HERE, ".env"))
+    env = read_env(sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, ".env"))
     os.makedirs(OUT, mode=0o700, exist_ok=True)
     props = {
         "javax.jdo.option.ConnectionDriverName": "org.postgresql.Driver",

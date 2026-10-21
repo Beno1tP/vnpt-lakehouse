@@ -1,5 +1,7 @@
 # Task 1 — Validation (expected numbers)
 
+**Automated since 2026-10-21:** `make validate DATE=…` / `make acceptance DATE=…` run the checks in `tests/sql/bronze_checks.sql` against `tests/expected/bronze.json` (the numbers below) and exit non-zero on any FAIL (`10_operations.md` §3). The manual results below are kept as history.
+
 Computed with pandas from the two lab files on 2026-10-15. Every Iceberg table you write must match these.
 
 ## Bronze (raw, strings)
