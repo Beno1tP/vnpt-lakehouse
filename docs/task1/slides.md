@@ -9,17 +9,21 @@ Visual: dark title slide; small orange line "VNPT AI · DE onboarding lab · Tas
 Speaker notes: The lab builds an end-to-end lakehouse on trial chatbot logs in 5 standalone tasks. Task 1 builds the foundation every later task depends on: storage, table format, catalog and a reliable Bronze load. I will explain why each tool is there, how it works, how Task 1 uses it, and what I proved.
 
 ---
-# Slide 2 — Task 1 in one sentence, and the agenda
-Load two Excel exports into versioned, rerunnable Iceberg tables on S3-compatible storage, so any engine can query them later.
+# Slide 2 — What Task 1 does with the data
+In one sentence: load the two Excel files with Spark, process them into table form, and store them in the MinIO lake in Iceberg table format (Bronze layer).
 
-1. Why: the problem and the file formats
-2. What: Docker, MinIO, Spark, Iceberg, Hive Metastore + Postgres
-3. How: the pipeline, commits, idempotency, time travel, data quality
-4. Proof: results, failure drills, three build stages
-5. Next: open questions and Task 2
+Lab target flow: Excel files → S3 Landing Zone (raw files) → Spark ETL → Bronze (Iceberg tables on MinIO)
 
-Speaker notes: The balance is why → what → how → proof. Every number in this deck comes from command output; the full log is in docs/task1 on GitHub.
+What Task 1 implements:
+- Excel files (local folder, read-only) → Spark ETL → Bronze Iceberg tables on MinIO
+- The landing zone is not built yet: MinIO holds no .xlsx files, only Parquet data files + Iceberg metadata. The landing zone comes with Task 2 (Airflow waits for the file, then runs the job)
+- "Process" in Bronze changes the form, not the values: read every cell as text → add 4 load columns (_ingest_date, _ingested_at, _source_file, _batch_id) → write Parquet → commit one Iceberg snapshot
 
+Agenda: Why (file formats) · What (Docker, MinIO, Spark, Iceberg, Hive Metastore) · How (pipeline, commits, idempotency) · Proof
+
+Visual: four boxes left to right: "2 Excel files" → "S3 Landing Zone" (dashed border, label "planned, Task 2") → "Spark ETL" → "Bronze: Iceberg on MinIO"; under Spark a small list: "read as text · add load columns · write Parquet · commit".
+
+Speaker notes: The key question is what happens to the data. In Bronze we do not change any value; we change the form, from a spreadsheet to columnar files inside a versioned table. A landing zone would keep the original file in object storage for audit and replay. Task 1 reads from a local folder because there is no orchestrator yet; reading the file from s3://lakehouse/landing/ instead is a contained change planned for Task 2.
 ---
 # Slide 3 — The problem
 - Source: two Excel exports of a chatbot (chat log 21,224 rows; NLU predictions 10,729 rows)
@@ -42,117 +46,182 @@ Speaker notes: Excel is for people, not for pipelines. The rest of the talk is h
 | What it is | ZIP of XML parts (Office Open XML) | Plain text, one line per row | Binary, columnar |
 | Schema / types | Per cell, inferred | None (everything is text) | Stored in the file footer |
 | Layout | Row/cell oriented | Row oriented | Column oriented |
-| Compression | ZIP of the whole workbook | None by default | Per column (dictionary, run-length, Snappy/zstd) |
+| Compression | ZIP of the whole workbook | None by default | Columnar storage allows compression optimised per column: similar values sit together → dictionary / run-length encoding, then a codec (ours: zstd) |
 | Read one column | Parse the whole workbook | Scan every line | Read only that column's chunks |
 | Skip data | No | No | Yes, via min/max statistics |
 | Split across workers | No | Yes, if uncompressed | Yes, by row group |
 | Made for | People | Simple exchange | Analytics engines |
 
-Our data: chat log xlsx 2.3 MB → Parquet 1.17 MB for the same 21,224 rows.
+Evidence from our chat-log file: 23.9 MB of uncompressed column data → 1.17 MB Parquet file (xlsx: 2.3 MB). Column INPUT_CHANNEL (2 distinct values, 21,224 rows) takes 153 bytes thanks to dictionary + run-length encoding.
 
-Speaker notes: xlsx is a zipped set of XML documents designed for spreadsheet apps; a program must unzip and parse the whole workbook. CSV has no types and ambiguous quoting. Parquet stores data by column with types and statistics, so engines read less. In the job we read Excel once, with pandas, and from then on everything is Parquet.
-
+Speaker notes: xlsx is a zipped set of XML documents designed for spreadsheet apps; a program must unzip and parse the whole workbook. CSV has no types and ambiguous quoting. Parquet stores data by column, so values of the same kind sit next to each other, which is what makes dictionary and run-length encoding so effective. The numbers come from reading the footer of our own file.
 ---
-# Slide 5 — Inside a Parquet file
-- File = row groups → column chunks → pages, plus a footer with metadata
-- Row group: a horizontal slice of rows (the unit of parallel work)
-- Column chunk: all values of one column inside one row group
-- Page: the smallest unit read and decoded (about 1 MB by default), encoded + compressed
-- Footer: schema, row-group locations, per-column statistics (min, max, null count)
-- A reader opens the footer first, then reads only the needed columns and skips row groups whose min/max cannot match the filter
+# Slide 5 — Inside a Parquet file: row group → column chunk → page
+- File layout: magic "PAR1" · row groups · footer (file metadata) · footer length · "PAR1"
+- Row group: a horizontal slice of rows; the unit of parallel reading (writers target about 128 MB)
+- Column chunk: all values of one column inside one row group, stored contiguously
+- Pages: the unit that is encoded, compressed and read (about 1 MB each), each with a page header (sizes, encoding, value count)
+  - Dictionary page: first page of a chunk when dictionary encoding is used (the distinct values)
+  - Data pages: the values (as dictionary indices or plain), plus definition levels that mark nulls; compressed with the codec
+  - Optional page index (min/max per page) lets readers skip pages
+- Footer: schema + for every row group and column chunk: offsets, sizes, encodings, codec, statistics (min, max, null count)
+- Reading: jump to the end → read the footer → choose columns and row groups (statistics) → read only those pages
 
-Visual: a tall rectangle "PAR1 | row group 1 [column chunk A: pages | column chunk B: pages] | row group 2 [...] | footer (schema, offsets, stats) | PAR1"; arrows from "SELECT B WHERE A > 10" to column chunk B of row groups whose stats allow it.
+| Our chat-log file (from its footer) | Value |
+|---|---|
+| Writer | parquet-mr 1.17.1 (via Iceberg) |
+| Rows / row groups / column chunks | 21,224 / 1 / 19 |
+| Codec | ZSTD (Iceberg default) |
+| Footer size | 4,344 bytes |
+| ID (all unique) | PLAIN encoding, 849 KB → 435 KB |
+| INPUT_CHANNEL (2 values) | dictionary page + RLE data pages → 153 bytes |
 
-Speaker notes: Two optimisations come straight from this layout. Column pruning: only the columns in the query are read. Predicate pushdown: statistics let the reader skip whole row groups. Iceberg adds a second level of statistics per data file in its manifests, so planning can skip whole files before opening them.
+Visual: a tall rectangle "PAR1 | row group 1 [column chunk ID: data pages | column chunk INPUT_CHANNEL: dictionary page + data pages | …] | footer (schema, offsets, encodings, stats) | length | PAR1"; an arrow from "SELECT SOURCE WHERE …" to only the SOURCE chunk.
 
+Speaker notes: The encodings list of each chunk also shows RLE and BIT_PACKED: those encode the definition levels (where nulls are), not the values. Our file has one row group because the data is small; big tables have many row groups per file and many files per table, which is what lets engines read in parallel and skip most of the data.
 ---
 # Slide 6 — Docker: packaging and running each service
 - What: runs programs in containers built from images
 - How it works:
-  - Image = read-only layers + metadata, identified by a digest (sha256)
-  - Container = a process with its own filesystem view (image layers + a writable layer)
-  - Isolation by Linux namespaces (processes, network, mounts); limits by cgroups (our memory limits)
-  - Volumes keep data beyond a container; networks give DNS by service name
-- Architecture: docker CLI → Docker Engine (dockerd) → containerd → runc → container; images pulled from a registry
+  - Image = read-only layers + metadata, identified by a digest (sha256); pulled from a registry, unpacked by containerd's snapshotter (overlay filesystem)
+  - Container = a process with its own view of the system: Linux namespaces (processes, network, mounts, hostname) isolate it; cgroups limit it (our memory limits)
+  - Volumes keep data beyond a container; a Compose network gives DNS by service name
+- Runtime architecture:
+
+| Layer | Talks to the next by | Role |
+|---|---|---|
+| docker CLI | REST API over /var/run/docker.sock | What we type |
+| dockerd (Docker Engine) | gRPC | Images, networks, volumes, Compose |
+| containerd | spawns one shim per container | Container lifecycle, image content |
+| containerd-shim-runc-v2 | executes runc | Keeps the container's stdio and exit code |
+| runc | creates namespaces + cgroups, starts the process, then exits | OCI runtime |
+| container process | parent is now the shim, not runc | Our MinIO / HMS / Spark |
+
 - Compose: one YAML file declares all services, volumes, networks, start order and health checks
-- Task 1: 7 services, thin images, config mounted, credentials as secret files, data-only volumes
+- Task 1: 7 services, 2 thin images, config mounted, credentials as secret files, data-only volumes
 
-Visual: stack diagram "CLI → dockerd → containerd → runc → containers", a registry box feeding images, and a container drawn as "image layers + writable layer + volume".
+Visual: vertical chain CLI → dockerd → containerd → shim → runc → process, with "REST", "gRPC", "exec" on the arrows and runc drawn with a dashed outline ("exits after start").
 
-Speaker notes: A container is not a VM: it shares the host kernel and is isolated by namespaces and limited by cgroups. On Windows, Docker Desktop runs the engine in its own WSL2 VM. Pinning images by digest makes them immutable. Our rule: dependencies in images, configuration outside, credentials in files, data in volumes.
-
+Speaker notes: A container is not a VM: it shares the host kernel. The shim is why containers survive a restart of dockerd or containerd: runc exits right after starting the process, and the shim stays as its parent. On Windows, Docker Desktop runs this whole stack inside its own WSL2 VM and forwards the socket into Ubuntu. Our rule: dependencies in images, configuration outside, credentials in files, data in volumes.
 ---
-# Slide 7 — MinIO and the S3 API: where the data lives
+# Slide 7 — MinIO: how object storage works
 - What: object storage that implements the Amazon S3 API
-- How it works:
-  - Bucket → objects (key + bytes + metadata), flat namespace
-  - "Folders" are only key prefixes; there is no atomic rename (rename = copy + delete)
-  - HTTP REST API: PUT, GET, LIST, DELETE, with signed requests
-- What for: cheap, scalable storage for data files and table metadata; the same code works on AWS S3
-- Architecture: single node, single drive in this lab; production MinIO runs distributed with erasure coding (data + parity spread over drives, survives drive loss)
-- Task 1: bucket lakehouse; API port 9000, console port 9001; path-style addressing (http://minio:9000/lakehouse/key)
+- Data model: bucket → objects; an object = key + bytes + metadata; flat namespace ("folders" are only key prefixes)
+- Every action is an HTTP request: PUT, GET, LIST, DELETE on http://minio:9000/bucket/key (path-style), signed with the access key (AWS Signature v4)
+- PUT, step by step:
+  1. Authenticate the signature
+  2. Hash the key to an erasure set (SIPMOD hashing)
+  3. Split the object into data + parity shards (Reed-Solomon erasure coding; our single drive has no parity)
+  4. Write the shards with bitrot checksums, then write xl.meta (size, checksums, versions)
+  5. Reply with an ETag; from now on every GET sees the new object (strict read-after-write consistency)
+- GET: read xl.meta → read the shards → verify checksums → stream the bytes
+- No rename and no in-place edit: "rename" = copy + delete; an object is replaced, never modified
+- Large objects use multipart upload (parts uploaded in parallel, then completed)
 
-Visual: bucket icon with keys "warehouse/bronze.db/chatlog/metadata/…json", "…/data/…parquet"; a client sending "PUT/GET over HTTP".
+Visual: client → "PUT /lakehouse/…/x.parquet (signed)" → MinIO → erasure set → drive(s) with "shard + checksum" and "xl.meta".
 
-Speaker notes: Every engine talks to MinIO with its normal S3 client; only the endpoint, path-style flag, region and keys differ from AWS. No atomic rename is the reason a table format needs a catalog for commits. MinIO stopped publishing community images in 2025, so we use a Chainguard rebuild pinned by digest.
-
+Speaker notes: Every engine talks to MinIO with its normal S3 client; only the endpoint, the path-style flag, a placeholder region and the keys differ from AWS. Because objects can't be renamed or edited, a table format cannot commit by renaming files; that is why Iceberg needs a catalog for its commit. MinIO stopped publishing community images in 2025, so we use a Chainguard rebuild pinned by digest.
 ---
-# Slide 8 — Spark: the compute engine (1/2, architecture)
-- What: a distributed engine for batch (and streaming) data processing
-- Architecture:
-  - Driver program: runs main(), owns the SparkSession, turns DataFrame code into a plan of jobs → stages → tasks, schedules tasks
-  - Cluster manager: hands out resources (standalone, YARN, Kubernetes)
-  - Executors on worker nodes: JVM processes that run tasks, keep cached data, read/write shuffle data, report back to the driver
-- Execution: transformations are lazy; an action (count, write) triggers a job; shuffles split a job into stages; each stage runs one task per partition
+# Slide 7b — MinIO on disk: what is really in our volume
+- The drive is formatted as "xl-single" (single-drive erasure format, from .minio.sys/format.json)
+- Every object key is a folder on the drive:
 
-Visual: classic diagram "Driver (SparkSession, DAG scheduler) ↔ Cluster manager ↔ Worker nodes [Executor: task, task, cache]".
+| Object | On disk |
+|---|---|
+| Small: metadata.json (2,860 bytes) | Only xl.meta (3,320 bytes): the data is inlined into the metadata file |
+| Larger: our Parquet file (1,170,001 bytes) | xl.meta (389 bytes) + one data folder (a UUID) with part.1 (1,170,066 bytes: data + bitrot checksums) |
+| System | .minio.sys/: format.json, config, buckets, multipart, pool.bin |
 
-Speaker notes: The driver is the brain: it builds the logical plan, the Catalyst optimizer rewrites it, and the physical plan is split into stages at shuffle boundaries. The cluster manager only allocates resources. Executors do the actual work and talk back to the driver.
+- Distributed mode (production): the same format across many drives; an object becomes K data + M parity shards; any K shards rebuild it, so the cluster survives the loss of up to M drives
+- Rule: never touch files in the volume directly; always go through the S3 API
 
+Visual: a folder tree "lakehouse/warehouse/bronze.db/chatlog/data/_ingest_date=2026-10-16/00000-…parquet/ → xl.meta, 99fc…/part.1".
+
+Speaker notes: This is why "the table lives in MinIO" is literal: the Parquet files and Iceberg metadata files are S3 objects stored as xl.meta plus parts on the MinIO volume. The extra 65 bytes in part.1 are the bitrot checksums MinIO verifies on every read.
 ---
-# Slide 9 — Spark: deploy modes, and what Task 1 uses (2/2)
+# Slide 8 — Spark: how it processes big data (1/2)
+- Architecture: driver program (SparkSession, plans and schedules) · cluster manager (standalone, YARN, Kubernetes: gives resources) · executors on worker nodes (run tasks, cache data, exchange shuffle data)
+- Mechanism:
+  - Partition: the data is split into partitions; one task per partition; tasks run in parallel on executor cores → more executors = more parallelism
+  - Lazy evaluation: transformations only build a plan; an action (count, write) runs it, so the whole plan is optimised first
+  - Catalyst optimizer: logical plan → optimised plan (predicate pushdown, column pruning) → physical plan
+  - Tungsten engine: compact binary rows in memory, whole-stage code generation
+  - Narrow vs wide: filter / select / withColumn stay inside a partition; groupBy / join / distinct need a shuffle (redistribute data by key) → a new stage
+  - Memory: data that does not fit is spilled to disk; Adaptive Query Execution adjusts partitions and skewed joins at runtime
+  - Fault tolerance: a lost partition is recomputed from its lineage, not restored from a copy
+- Task 1: withColumn (narrow) for the load columns; the validation counts (count DISTINCT, joins) shuffle into 4 partitions (spark.sql.shuffle.partitions = 4 instead of the default 200, because the data is small)
 
-| Mode | Where the driver runs | Executors | Used for |
+Visual: a DAG: read → withColumn → [shuffle] → aggregate → write, split into Stage 1 and Stage 2 at the shuffle; each stage drawn as several parallel tasks.
+
+Speaker notes: This is what makes Spark scale: the same code runs as 2 tasks on a laptop or 2,000 tasks on a cluster. The expensive part is the shuffle, because data moves between executors over the network and through disk.
+---
+# Slide 9 — Spark: deploy modes, and our command (2/2)
+
+| | Where the driver runs | Executors | Used for |
 |---|---|---|---|
-| Local (local[N]) | One JVM on one machine | N threads in the same JVM | Development, tests, small data: Task 1 |
-| Client | On the machine that submits (e.g. a laptop or gateway) | On the cluster | Interactive work, notebooks |
-| Cluster | Inside the cluster (e.g. a driver pod) | On the cluster | Production jobs: Task 2 on Kubernetes |
+| Client deploy mode | On the machine that submits (laptop, gateway) | On the cluster | Interactive work, notebooks |
+| Cluster deploy mode | Inside the cluster (e.g. a driver pod) | On the cluster | Production jobs: Task 2 on Kubernetes |
+| Local master (not a deploy mode) | One JVM, no cluster manager | Threads inside that same JVM | Development, tests, small data: Task 1 |
 
-- Task 1: spark-submit --master local[2], driver heap 2g inside a 3 GiB container; peak 1.41 GiB
-- Catalogs plug in through configuration: catalog lake = Iceberg SparkCatalog → Hive Metastore at thrift://hive-metastore:9083, S3FileIO → MinIO
+Our command, piece by piece:
+spark-submit --master local[2] --driver-memory 2g /opt/jobs/bronze_ingest.py --ingest-date 2026-10-16
+- spark-submit: the launcher; starts the driver JVM and the Python process of our PySpark job
+- --master local[2]: no cluster manager; the driver runs the tasks itself with 2 threads (local = 1 thread, local[*] = all cores)
+- --driver-memory 2g: heap of the driver JVM (in local mode it is also the executor); container limit 3 GiB, measured peak 1.41 GiB
+- /opt/jobs/bronze_ingest.py: the application; arguments after it (--ingest-date …) go to our code
+- Catalog settings come from the mounted spark-defaults.conf (catalog lake → Hive Metastore, S3FileIO → MinIO)
+- Cluster equivalents: --master spark://host:7077 (standalone), yarn, k8s://https://api-server-host:6443 with --deploy-mode client|cluster
 
-Speaker notes: Same code, different master. In Task 2 the Spark Operator creates a driver pod in cluster mode, which asks Kubernetes for executor pods. Honest point: 32k rows don't need Spark (DuckDB would be enough); the lab teaches the path that scales.
-
+Speaker notes: Officially Spark has two deploy modes, client and cluster; local is a master setting for running everything in one process. Same code, different master: in Task 2 the Spark Operator submits in cluster mode, creating a driver pod that asks Kubernetes for executor pods. 32k rows don't need Spark (DuckDB would be enough); the lab teaches the path that scales.
 ---
-# Slide 10 — Iceberg: the table format
+# Slide 10 — Iceberg: the table format (structure)
 - What: an open specification (plus libraries) that turns files in object storage into tables
-- How it works (metadata tree):
-  - Catalog stores one pointer per table → current metadata.json
-  - metadata.json: schema, partition spec, list of snapshots
-  - Snapshot → manifest list (Avro) → manifests (Avro: data files + column statistics) → data files (Parquet)
-- What for: ACID commits, snapshots and time travel, schema evolution by column ID, hidden partitioning, many engines on one table
-- Architecture: a library inside each engine (in Spark: iceberg-spark-runtime) + a catalog + files; no Iceberg server
-- Task 1: format v2; tables lake.bronze.chatlog and lake.bronze.bot_predict, partitioned by _ingest_date
+- Structure (metadata tree):
+  - Catalog: one pointer per table → the current metadata.json
+  - metadata.json: schema (columns with IDs), partition spec, list of snapshots, current snapshot ID
+  - Snapshot = the table at one moment → manifest list (Avro)
+  - Manifest list: one entry per manifest, with partition value ranges
+  - Manifest (Avro): one entry per data file: path, partition value, record count, column statistics (min, max, null count)
+  - Data files: Parquet
+- What for: ACID commits, snapshots, schema evolution by column ID, hidden partitioning, many engines on one table
+- Architecture: a library inside each engine (in Spark: iceberg-spark-runtime) + a catalog + files; there is no Iceberg server
+- Task 1: format v2; lake.bronze.chatlog and lake.bronze.bot_predict, partitioned by _ingest_date; chatlog pointer at metadata version 00007
 
-Visual: tree "Catalog pointer → v7.metadata.json → snap list → manifest → Parquet files", with old metadata files greyed out on the side.
+Visual: tree "Catalog pointer → 00007.metadata.json → snapshot → manifest list → manifests → Parquet files", older metadata files greyed out beside it.
 
-Speaker notes: A commit never edits a file: it writes new files and moves the pointer. Our chatlog table is at metadata file 00007 after 8 commits; HMS also keeps previous_metadata_location = 00006.
+Speaker notes: A commit never edits a file: it writes new files and moves the pointer. Hidden partitioning means queries filter on the column (_ingest_date = …) and Iceberg maps that to partitions itself, without users knowing the folder layout.
+---
+# Slide 10b — Iceberg in action: how Spark reads and writes a table
+Read: SELECT … FROM lake.bronze.chatlog WHERE _ingest_date = DATE '2026-10-16'
+1. Spark asks catalog lake (Iceberg SparkCatalog → HiveCatalog) → Thrift get_table to HMS → metadata_location (…/00007-….metadata.json)
+2. S3FileIO GETs metadata.json from MinIO → schema, partition spec, current snapshot (an older snapshot for time travel)
+3. GET the manifest list → skip manifests whose partition range cannot contain 2026-10-16
+4. GET the remaining manifests → list of data files with partition values and column min/max → skip files that cannot match
+5. Plan scan tasks (split big files, combine small ones) → executors read the Parquet footers → read only the needed row groups and columns (v2: apply delete files) → rows
 
+Write (our overwritePartitions):
+1. Executors write new Parquet files to MinIO (invisible to readers)
+2. The driver writes new manifests + a new manifest list + a new metadata.json
+3. Commit: HMS lock → check the pointer is still the old one → alter_table to the new metadata.json → unlock; on conflict, refresh and retry
+
+Visual: two lanes. Top lane (read): Spark → HMS (pointer) → MinIO: metadata.json → manifest list → manifests → Parquet. Bottom lane (write): Spark → MinIO: Parquet → manifests → metadata.json → HMS: swap pointer.
+
+Speaker notes: Planning uses only metadata, so the engine knows exactly which files to open before it opens any data file. Our table has one file per load on MinIO but only one in the current snapshot, which is why a read opens one Parquet file.
 ---
 # Slide 11 — Hive Metastore + Postgres: the catalog
-- What: Hive Metastore (HMS) is a catalog service; Postgres is the database where HMS stores its catalog
-- How it works:
-  - HMS serves a Thrift API on port 9083 (get_table, create_database, lock, alter_table)
-  - HMS persists its model through DataNucleus (an object-relational mapper) over JDBC to Postgres
-  - "Schema 3.1.0" = HMS's own relational schema: 74 tables (DBS, TBLS, TABLE_PARAMS…), not our table schema
-- What for: one shared directory of tables for Spark, Trino and StarRocks
-- For Iceberg tables HMS keeps only: table_type = ICEBERG, metadata_location (and the previous one); the real schema and snapshots live in metadata.json
+- What HMS is, two things at once:
+  - A running service: a Thrift server (port 9083) that engines ask "where are the files of table X, and what are its columns?"
+  - A catalog model: maps logical names (databases, tables, columns, types, partitions) to physical paths in storage (HDFS, S3, our MinIO)
+- It never moves or processes data files; it only holds the dictionary that tells engines where data lives
+- Storage: HMS persists its catalog through DataNucleus (an object-relational mapper) over JDBC in a relational database: Postgres here (MySQL or Oracle elsewhere)
+- "Schema 3.1.0" = HMS's own relational schema: 74 tables (DBS, TBLS, TABLE_PARAMS…), not the schema of our tables
+- For Iceberg tables HMS keeps only table_type = ICEBERG and metadata_location (+ previous); the real schema and snapshots live in metadata.json on MinIO
+- HMS also provides the lock used by Iceberg commits
 - Version constraint: Spark 3.5 ships the Hive 2.3 client, which HMS 4 no longer serves (get_table) → HMS 3.1.3 (E16)
 
-Visual: "Spark / Trino / StarRocks → Thrift :9083 → HMS → JDBC :5432 → Postgres (74 tables)"; a callout "metadata_location = s3a://…/00007-….metadata.json".
+Visual: "Spark / Trino / StarRocks → Thrift :9083 → HMS → JDBC :5432 → Postgres (74 tables)"; a callout "metadata_location = s3a://…/00007-….metadata.json"; a crossed-out arrow "data files ↛ HMS".
 
 Speaker notes: No table data ever passes through HMS, only small Thrift calls. Postgres uses SCRAM-SHA-256 password authentication, which is why the old JDBC driver bundled in the Hive image failed and we ship exactly one modern driver (E21).
-
 ---
 # Slide 12 — How the pieces talk
 
