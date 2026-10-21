@@ -396,11 +396,11 @@ Speaker notes: Every strategy makes a rerun safe, but each has a different blind
 - Evidence: one Parquet file per load on MinIO, but chatlog.files = 1 current
 - Costs to manage:
   - Storage: old files stay until expire_snapshots
-  - Metadata: metadata.json grows about 1.2 KB per commit (2,860 → 10,164 bytes over 7 commits) and old versions are kept
+  - Metadata: metadata.json grows about 1.2 KB per commit (2,860 → 13,824 bytes over 10 versions, 9 increments: v00000 → v00009 on 2026-10-21) and old versions are kept
   - Many small commits → many small files → slower planning
 - Standard maintenance: expire_snapshots (retention), rewrite_data_files (compaction), rewrite_manifests, remove_orphan_files
 
-Visual: timeline of snapshots 1…8 with the pointer on the newest; files below, the current one highlighted.
+Visual: timeline of snapshots 1…10 with the pointer on the newest; files below, the current one highlighted.
 
 Speaker notes: Retention is a business decision (for example keep 7 days of history). Until then, time travel is a feature that costs storage.
 
