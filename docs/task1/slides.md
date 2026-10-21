@@ -17,20 +17,20 @@ Lab target flow: Excel files → S3 Landing Zone (raw files) → Spark ETL → B
 What Task 1 implements:
 - Excel files (local folder, read-only) → Spark ETL → Bronze Iceberg tables on MinIO
 - The landing zone is not built yet: MinIO holds no .xlsx files, only Parquet data files + Iceberg metadata. The landing zone comes with Task 2 (Airflow waits for the file, then runs the job)
-- "Process" in Bronze: no business value is altered; every cell is kept as its text representation. Steps: pandas (inside the Spark driver) parses the xlsx → Spark DataFrame → add 4 load columns (_ingest_date, _ingested_at, _source_file, _batch_id) → write Parquet → commit one Iceberg snapshot
+- "Process" in Bronze: no business value is altered; every cell is kept as its text representation. Steps: pandas, in the driver's Python process, parses the xlsx → Spark DataFrame → add 4 load columns (_ingest_date, _ingested_at, _source_file, _batch_id) → write Parquet → commit one Iceberg snapshot
 
 Agenda: Why (file formats) · What (Docker, MinIO, Spark, Iceberg, Hive Metastore) · How (pipeline, commits, idempotency) · Proof
 
 Visual: four boxes left to right: "2 Excel files" → "S3 Landing Zone" (dashed border, label "planned, Task 2") → "Spark ETL" → "Bronze: Iceberg on MinIO"; under Spark a small list: "read as text · add load columns · write Parquet · commit".
 
-Speaker notes: The key question is what happens to the data. In Bronze no business value is altered; the form changes, from a spreadsheet to columnar files inside a versioned table. Text representation means, for example, that an Excel date becomes a string; typing happens in Silver. The xlsx is parsed by pandas on the driver (an xlsx file cannot be split across workers anyway); Spark adds the Iceberg write, the transforms and the path to scale. A landing zone would keep the original file in object storage for audit and replay. Task 1 reads from a local folder because there is no orchestrator yet; reading the file from s3://lakehouse/landing/ instead is a contained change planned for Task 2.
+Speaker notes: The key question is what happens to the data. In Bronze no business value is altered; the form changes, from a spreadsheet to columnar files inside a versioned table. Text representation means, for example, that an Excel date becomes a string; typing happens in Silver. The xlsx is parsed by pandas in the driver's Python process (an xlsx file cannot be split across workers anyway); Spark adds the Iceberg write, the transforms and the path to scale. A landing zone would keep the original file in object storage for audit and replay. Task 1 reads from a local folder because there is no orchestrator yet; reading the file from s3://lakehouse/landing/ instead is a contained change planned for Task 2.
 ---
 # Slide 3 — The problem
 - Source: two Excel exports of a chatbot (chat log 21,224 rows; NLU predictions 10,729 rows)
 - Needed: tables that are correct, rerunnable, versioned, and readable by several engines (Spark now; Trino, StarRocks, Superset in Tasks 3–5)
 - Requirements:
   - Correct: numbers match an independent reference
-  - Rerunnable: a retry or backfill never duplicates data
+  - Rerunnable: a retry or backfill of the same ingest date never duplicates data
   - Versioned: history, rollback, audit
   - Open: no engine owns the data
 
@@ -142,11 +142,11 @@ Speaker notes: This is why "the table lives in MinIO" is literal: the Parquet fi
 # Slide 7c — MinIO architecture: the components
 | Component | What it is |
 |---|---|
-| Server | The single minio binary on each node: S3 API, console, healing, replication |
+| Server | The single minio binary on each node: S3 API, web console (ours at :9001: an object browser for buckets and prefixes), healing, replication |
 | Topologies | Single-node single-drive (ours: xl-single, no redundancy) · single-node multi-drive · multi-node multi-drive (production) |
 | Server pool | A group of nodes + drives started together; a cluster grows by adding pools |
 | Erasure set | A group of 2–16 drives inside a pool; each object lives in exactly one set, split into K data + M parity shards |
-| Placement | New object → pool with the most free space → erasure set chosen by hashing the key (SIPMOD) → shard order on the drives from the key hash |
+| Placement | New object → pool with the most free space (an existing key stays in the pool that holds it) → erasure set chosen by hashing the key (SIPMOD) → shard order on the drives from the key hash |
 | Bucket | Container of objects, with optional versioning, object lock (WORM), lifecycle rules, replication, event notifications |
 | Object | Key + bytes + metadata (+ versions); immutable, replaced as a whole |
 | S3 API + SigV4 | Every request is HTTP, signed with the secret key (AWS Signature Version 4) |
@@ -244,9 +244,9 @@ Speaker notes: Planning uses only metadata, so the engine knows exactly which fi
 | Deletion vector (v3) | Bitmap inside a Puffin file | Replaces position deletes: one compact bitmap per data file |
 | Puffin file | Puffin (binary blobs) | Statistics (e.g. distinct-value sketches) and v3 deletion vectors |
 
-- Immutability: no file is ever edited. A change = new files + a new metadata.json + one pointer swap. Deletes and updates are written as delete files (or deletion vectors) instead of rewriting data files; compaction later rewrites them
-- Libraries: iceberg-api / iceberg-core (the spec in code), engine runtimes (iceberg-spark-runtime), catalog clients (HiveCatalog, RESTCatalog…), FileIO (S3FileIO, HadoopFileIO): the layer that reads and writes files, so Iceberg never depends on folder listing or rename
-- Task 1 uses format v2 with data files only (no deletes yet: Bronze only appends and overwrites partitions)
+- Immutability: no file is ever edited. A change = new files + a new metadata.json + one pointer swap. Deletes and updates either rewrite the affected data files into new files (copy-on-write, Spark's default: write.delete/update/merge.mode) or write delete files / deletion vectors (merge-on-read); compaction later folds them in
+- Libraries: iceberg-api / iceberg-core (the spec in code), engine runtimes (iceberg-spark-runtime), catalog clients (HiveCatalog, RESTCatalog…), FileIO (S3FileIO, HadoopFileIO): the layer that reads and writes files, so Iceberg never depends on folder listing (except orphan-file cleanup) or rename
+- Task 1 uses format v2 with data files only, no delete files: the partition delete on slide 17 was metadata-only (it removed file entries from the manifests)
 
 Speaker notes: This immutability is why readers never see half a commit and why time travel is cheap: an old snapshot's files are simply still there. Delta Lake reaches the same goal differently: an ordered transaction log of JSON commit files (_delta_log) plus Parquet checkpoints, where Iceberg uses a tree of metadata, manifest lists and manifests.
 ---
@@ -318,7 +318,7 @@ Speaker notes: Alternatives win in other settings: Delta on Databricks, Flink fo
 
 ---
 # Slide 15 — The pipeline end to end
-- pandas, inside the Spark driver, parses both Excel files from a read-only folder (every cell as text) → createDataFrame hands them to Spark
+- pandas, in the driver's Python process, parses both Excel files from a read-only folder (every cell as text) → createDataFrame hands them to Spark
 - Adds 4 load columns: _ingest_date, _ingested_at, _source_file, _batch_id
 - Writes lake.bronze.chatlog and lake.bronze.bot_predict, partitioned by _ingest_date
 - First load create(), later loads overwritePartitions()
@@ -340,7 +340,7 @@ Speaker notes: Partitioning by load date makes every load a replaceable unit: re
 
 Visual: sequence "Spark → MinIO: data files · Spark → MinIO: manifests + new metadata.json · Spark → HMS: swap v1→v2 · HMS → Spark: committed".
 
-Speaker notes: The catalog's job is exactly this atomic swap. Iceberg's docs state the Hadoop catalog is not safe for concurrent writes on S3 unless a lock manager such as DynamoDB is configured.
+Speaker notes: The catalog's job is exactly this atomic swap. Sources: Iceberg docs, Java API quickstart ("Concurrent writes with a Hadoop catalog are not safe with a local FS or S3") and the AWS page (HadoopCatalog + DynamoDB lock manager "to ensure atomic transaction").
 
 ---
 # Slide 16b — Self-healing: Spark executors and MinIO drives
@@ -348,8 +348,8 @@ Spark (fault tolerance by recomputation):
 - The driver tracks executors by heartbeat; a lost executor's tasks are rescheduled on other executors (each task retried up to spark.task.maxFailures = 4 times)
 - Lost shuffle output → the reducer reports a fetch failure → the parent stage is re-run from its lineage
 - On Kubernetes or YARN the cluster manager starts replacement executors; slow tasks can be duplicated (speculative execution, off by default)
-- The driver is the single point of failure: if it dies, the job fails and must be rerun, which is why our jobs are idempotent
-- Task 1 (local mode): driver and executor are one JVM, so a crash ends the job (drill B) and the fix is a rerun
+- The driver is the single point of failure: if it dies, the job fails. A cluster manager can restart the whole application (YARN spark.yarn.maxAppAttempts in cluster mode, Spark Operator restartPolicy), which reruns it from the start, not resumes it; our idempotent loads are what make that restart safe
+- Task 1 (local mode): driver and executor are one JVM, and local[N] does not retry failed tasks (local[N,F] would allow F attempts), so a failure or crash ends the job (drill B) and the fix is a rerun
 
 MinIO (healing by erasure coding):
 - Every read checks the bitrot hash of each shard; a missing or corrupt shard is rebuilt from the others (data + parity) and rewritten
