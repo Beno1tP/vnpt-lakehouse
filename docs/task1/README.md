@@ -186,4 +186,5 @@ Takeaway: commits are **atomic per table**; a failed job exits non-zero so an or
 | `docs/task1/08_standard_build.md` | Standard build: decisions, steps, rollback, results |
 | `docs/task1/09_command_paths.md` | Every command step with its error branches |
 | `docs/task1/10_operations.md` | Runbook: operator interface, validation, failure → action |
+| `docs/task1/slides.md` | Presentation (22 slides + 4 appendix), plain Markdown for Google Slides/Gemini |
 | `jobs/validate_bronze.py`, `tests/sql/bronze_checks.sql`, `tests/expected/bronze.json` | Versioned checks, expected values, validator (PASS/FAIL, exit code) |
