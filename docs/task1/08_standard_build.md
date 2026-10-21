@@ -51,7 +51,9 @@ Status: **plan revised 2026-10-21 after Bee's review; build and test by Bee (res
 
 ## 4. Steps (tonight)
 
-Start Docker Desktop first. If WSL says `docker could not be found`: `exit`, then `wsl` again.
+Start Docker Desktop first. If WSL says `docker could not be found`: `exit`, then `wsl` again. After a reboot, `hive-metastore` may show `Exited (127)` (E23: bind mounts not ready when Docker Desktop auto-restarted it) → run `make up` once.
+
+Pre-checks done by Claude on 2026-10-21 (throwaway containers): HMS reads JDBC **only** from a mounted `hive-site.xml` with the 9.4 driver removed → `Metastore schema version: 3.1.0` ✅; Compose secret mounted at the absolute path `/opt/hive/conf/hive-site.xml`, `-rw------- hive` ✅; secret absent from `compose config` ✅; `bash </dev/tcp` check syntax ✅ (success path verified in 4.6).
 
 ### 4.0 Backups, branch, baseline
 ```bash
