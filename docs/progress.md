@@ -58,7 +58,7 @@ The deadline is tight for "learn K8s + 8 tools". **Learn K8s just-in-time while 
 
 | Task | Scope | Docs | Status |
 |---|---|---|---|
-| 1 | MinIO + Spark → Iceberg (Docker Compose) | `docs/task1/` | ✅ 10-18 (Bronze validated, idempotent, from-zero tested, failure drills, README); Silver stretch after the presentation |
+| 1 | MinIO + Spark → Iceberg (Docker Compose) | `docs/task1/` | ✅ 10-18 (Bronze validated, idempotent, from-zero tested, failure drills, README); presented 10-23; Silver deferred (Bronze only for now) |
 | 2 | Minikube + Airflow running the Spark job | `docs/task2/` | ⬜ |
 | 3 | Trino querying Iceberg | `docs/task3/` | ⬜ |
 | 4 | StarRocks Gold via SQL/dbt | `docs/task4/` | ⬜ |
@@ -130,6 +130,8 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 | 10-20 | Advisor/Bee: rebuild Task 1 the standard way (deps in thin images, config mounted, volumes for data only). Options evaluated (CI→GHCR, thin FROM official, tabulario community image, --packages, shared base): **thin images now, CI→GHCR in Task 2**; plan + commands in `docs/task1/08_standard_build.md`, Bee builds tonight. Presentation moved to Thu 10-22 | Docker Hub/Maven checks, Dockerfile lint, compose config |
 | 10-21 | **Standard build done** on branch `standard-build`: thin Spark/HMS images (digest-pinned bases, SHA-256 jars, one JDBC driver), HMS/Postgres credentials as Compose secret files (0 leaks), HMS health check, safe schema init, data-only volumes; from zero 19.1 s; demo data and 7 snapshots kept. E23 logged (make up after reboot) | `08_standard_build.md` §8 |
 | 10-21 | **Operable stack**: `make acceptance` (17 + 23 PASS, exit 0), negative test exit 2; versioned checks + expected values; assertions in job and validator; Make variables + `make help`; runbook `docs/task1/10_operations.md` | `make acceptance` output |
+| 10-22 | Rehearsal of Appendix A4 on the existing stack: acceptance 17 + 23 PASS, exit 0; 3 bronze runs → +3 snapshots per table (chatlog 13, metadata `00012`). Slides keep the 10-21 numbers | Command output |
+| 10-23 | **Task 1 presented.** Leader asked why this stack (Iceberg answer was weak → prepared). UC: 18 days OK, start with the 2 existing intents, re-analyse UC6/UC7 at Task 5. Bronze only for now; next: disk cleanup (C: ~60 GB free), then Task 2 | Bee |
 
 ## 5b. Reading notes (Bee's ratings, 10-15)
 
@@ -145,7 +147,7 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 
 ## 6. Open questions / blockers
 
-- [ ] UC6 (top 12 intents vs only 2 intents in data) and UC7 (30-day comparison vs ~18 days of data): raise with leader. Facts from Bronze (10-16): `UPDATED_INTENT` 0 non-null; `INTENT_NAME` = xin_chao 10,622 · fallback 107; `final_intent` = xin_chao 10,588 · fallback 107 · bot_khong_hieu 34; NLU_THRESHOLD always 0.8; 1 BOT_ID; STEP 2 values. Proposal: UC6 = generic top-N (N=12) on `final_intent` (shows 3 now, no invented labels); UC7 = window parameter anchored to max event date, empty previous window → NULL change
+- [ ] (10-23 leader: 18 days OK; start with the 2 existing intents; decide again at Task 5) UC6 (top 12 intents vs only 2 intents in data) and UC7 (30-day comparison vs ~18 days of data): raise with leader. Facts from Bronze (10-16): `UPDATED_INTENT` 0 non-null; `INTENT_NAME` = xin_chao 10,622 · fallback 107; `final_intent` = xin_chao 10,588 · fallback 107 · bot_khong_hieu 34; NLU_THRESHOLD always 0.8; 1 BOT_ID; STEP 2 values. Proposal: UC6 = generic top-N (N=12) on `final_intent` (shows 3 now, no invented labels); UC7 = window parameter anchored to max event date, empty previous window → NULL change
 - [x] `apache/hive:4.0.1` exists (also `standalone-metastore-4.1.0` / `4.2.1`) — no longer used (E16)
 - [x] Hadoop bundled in `apache/hive:3.1.3` = hadoop-common **3.1.0** → `HADOOP_AWS_VERSION=3.1.0`
 - [x] `apache/spark:3.5.9-scala2.12-java17-python3-ubuntu` pulls

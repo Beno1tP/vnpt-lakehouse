@@ -14,6 +14,12 @@ Time spent:
 
 ---
 
+### 2026-10-22/23 — 1.14 Rehearsal (A4 guide) and presentation
+Did: reproduced Appendix A4 on the existing stack (no `make build`, `.env` kept instead of `cp .env.example`): `make up` → `make smoke` → `make bronze DATE=2026-10-16` → `make acceptance DATE=2026-10-16`; MinIO console checked. Presented Task 1 to the leader.
+Observed: up in ~14 s; bronze 21,224 / 10,729 rows; acceptance 17/17 then 23/23 PASS, exit 0. Snapshots chatlog 10 → 13 (metadata `00012`), bot_predict 12 (`00011`, one behind since drill B): 3 `make bronze` runs = 3 commits per table; smoke/validate only read. Slides keep the 10-21 numbers (`00009`, 10 snapshots).
+Feedback: leader asked why this stack; "why Iceberg" was not answered well → prepared answer (README decisions table + Iceberg row in `07_learning_guide.md`). UC: 18 days of data are OK; start with the 2 existing intents; re-analyse UC6/UC7 at Task 5.
+Next: disk cleanup before Task 2 (C: ~60 GB free), then Task 2.
+
 ### 2026-10-21 — 1.13 Operable stack (one acceptance command, versioned checks, assertions)
 Did: Makefile variables (`ENV_FILE`, `DATE`, `SPARK_MASTER`, `SPARK_DRIVER_MEMORY`), `make help`, `smoke` that fails when the catalog does not answer, `validate`, `acceptance`, guarded `acceptance-from-zero`; checks in `tests/sql/bronze_checks.sql` + `tests/expected/bronze.json`; `jobs/validate_bronze.py` (PASS/FAIL, exit code, optional idempotency checks); in-job assertion in `bronze_ingest.py`; selectable `SPARK_DEFAULTS_FILE` (per-environment Spark config instead of passing endpoints from `.env`, which would load passwords into make). Bee's first bronze write with the new image on the existing tables: commit `00007` (overwrite 21,224), history and time travel intact.
 Observed: `make acceptance` 17/17 then 23/23 PASS, exit 0; negative test (empty date) 13 FAIL, exit 2; 4 checks pass vacuously on an empty partition.
