@@ -59,7 +59,7 @@ The deadline is tight for "learn K8s + 8 tools". **Learn K8s just-in-time while 
 | Task | Scope | Docs | Status |
 |---|---|---|---|
 | 1 | MinIO + Spark → Iceberg (Docker Compose) | `docs/task1/` | ✅ 10-18 (Bronze validated, idempotent, from-zero tested, failure drills, README); presented 10-23; Silver deferred (Bronze only for now) |
-| 2 | Minikube + Airflow running the Spark job | `docs/task2/` | ⬜ |
+| 2 | Minikube + Airflow running the Spark job | `docs/task2/` | 🟡 10-25 plan reviewed (operator 2.2.1, chart 1.22.0 + Airflow 3.3.2, minikube v1.39.0/K8s v1.37.0); decisions D1–D3 open |
 | 3 | Trino querying Iceberg | `docs/task3/` | ⬜ |
 | 4 | StarRocks Gold via SQL/dbt | `docs/task4/` | ⬜ |
 | 5 | Superset dashboard UC4–UC8 | `docs/task5/` | ⬜ |
@@ -133,6 +133,7 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 | 10-22 | Rehearsal of Appendix A4 on the existing stack: acceptance 17 + 23 PASS, exit 0; 3 bronze runs → +3 snapshots per table (chatlog 13, metadata `00012`). Slides keep the 10-21 numbers | Command output |
 | 10-23 | **Task 1 presented.** Leader asked why this stack (Iceberg answer was weak → prepared). UC: 18 days OK, start with the 2 existing intents, re-analyse UC6/UC7 at Task 5. Bronze only for now; next: disk cleanup (C: ~60 GB free), then Task 2 | Bee |
 | 10-25 | Disk cleanup: build cache pruned (2.085 GB), fstrim + `diskpart compact` → Docker vhdx 22.9 → 9.45 GB, Ubuntu vhdx 9.02 → 8.24 GB (−14.2 GB total); C: free 87.2 GB. Images and data volumes kept. E24 (Linux `wsl` package vs `wsl.exe`) | `dir` before/after |
+| 10-25 | **Task 2 plan** reviewed and saved in `docs/task2/01–07`. Fixes: operator webhook must stay on; chart 1.22.0 has no 3.3.x default; thin images need a second copy in Minikube (+4.16 GB); control plane missing from RAM budget; hive-site.xml secret; 6 empty days in backfill; Task 2 errors from E25 | upstream Dockerfiles, chart index, PyPI, minikube constants |
 
 ## 5b. Reading notes (Bee's ratings, 10-15)
 

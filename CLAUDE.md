@@ -8,7 +8,7 @@
 - Bee starts in **Windows cmd** (not PowerShell), then `wsl` into Ubuntu-22.04 for all project commands. Verify user/home with `whoami; pwd` (observed `quang`, `/home/quang`; Bee calls it "user").
 
 ## Lab scope and data
-- Onboarding lab only. Tasks 1–5 are standalone mini-projects on the same data (1 Spark→Iceberg on MinIO, 2 K8s+Airflow, 3 Trino, 4 StarRocks/dbt Gold, 5 Superset). Current: **Task 1 on Docker Compose**.
+- Onboarding lab only. Tasks 1–5 are standalone mini-projects on the same data (1 Spark→Iceberg on MinIO, 2 K8s+Airflow, 3 Trino, 4 StarRocks/dbt Gold, 5 Superset). Current: **Task 2** (Task 1 done: tags task1-v1-lab, task1-v2-standard, task1-v3-operable; `infra/compose/` stays unchanged and must keep running).
 - Data = **trial/imaginary chatbot logs for freshers, not real people**. Still keep it on the laptop: no uploads, no row contents in alerts/Git/public logs.
 - Raw files: `~/data/vnpt-lab/` (outside the repo).
 
@@ -35,6 +35,19 @@ Python 3.11 · Spark 3.5.9 (Scala 2.12, Java 17) · Iceberg 1.11.0 runtime, form
 - Bronze = raw strings + load metadata; Silver = typed/deduped/flagged; Gold = dbt marts.
 - No secrets in Git or images; `.env` and `infra/compose/secrets/` are git-ignored. HMS/Postgres credentials are Compose secret files rendered by `make secrets` (never in `SERVICE_OPTS`); MinIO/S3 keys are still env vars (phase 2), so still treat `docker inspect` output and logs as sensitive.
 - Log every error in `docs/task1/05_errors_and_fixes.md` (symptom → root cause → fix → theory) and every step in `docs/task1/04_process.md`; update `docs/progress.md` at session end.
+
+## Task 2 (Spark on Minikube + Airflow) — plan in docs/task2/ (01 knowledge, 02 config/versions/budgets, 03 plan)
+- Pins (checked 2026-10-25): minikube v1.39.0, K8s v1.37.0, Kubeflow Spark Operator **2.2.1** (last on Spark 3.5; 2.3+ = Spark 4.0), Airflow 3.3.2 on chart 1.22.0 (chart ships 3.2.2: decision D1), provider cncf.kubernetes 10.25.0.
+- Bee types every state-changing command (minikube, kubectl apply, helm, make k8s-*) in WSL; Claude writes files/docs and may run read-only checks.
+- Minikube `--driver=docker`; Docker Desktop + Ubuntu share the 10 GiB WSL VM: stop the Task 1 stack while Task 2 runs; requests must fit node Allocatable.
+- Minikube has its own image store (inside docker_data.vhdx): `minikube image load` the thin bases, `minikube image build` new images; `imagePullPolicy: IfNotPresent`; fixed tags, never `latest`. `minikube delete` destroys PVC data.
+- Namespaces: lake (postgres, minio, hive-metastore), spark-operator, spark-jobs, airflow. Cross-namespace DNS: `<svc>.<ns>.svc.cluster.local`.
+- Secrets from git-ignored `infra/k8s/secrets.env` (kustomize secretGenerator) and rendered `infra/k8s/secrets/hive-site.xml`; mounted as files.
+- Spark Operator **webhook stays on** (it applies volumes, env, ConfigMaps to driver/executor pods).
+- One retry layer: Airflow retries; SparkApplication `restartPolicy: Never`; validation `retries=0`.
+- Airflow 3: daily intervals via `timedelta(days=1)` or `CronDataIntervalTimetable`, not a bare cron string. Day = date as written in `CREATED_TIME`; days without a landing file are skipped.
+- Excel input comes from the MinIO landing zone `s3://landing/<table>/dt=YYYY-MM-DD/`, never a hostPath.
+- Errors: docs/task2/05_errors_and_fixes.md, IDs from **E25**.
 
 ## Commands
 - `DC="docker compose -f infra/compose/docker-compose.yml --env-file infra/compose/.env"` then `$DC up -d …`, `$DC logs -f <svc>`, `$DC ps -a`
