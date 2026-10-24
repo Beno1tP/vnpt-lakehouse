@@ -132,6 +132,7 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 | 10-21 | **Operable stack**: `make acceptance` (17 + 23 PASS, exit 0), negative test exit 2; versioned checks + expected values; assertions in job and validator; Make variables + `make help`; runbook `docs/task1/10_operations.md` | `make acceptance` output |
 | 10-22 | Rehearsal of Appendix A4 on the existing stack: acceptance 17 + 23 PASS, exit 0; 3 bronze runs → +3 snapshots per table (chatlog 13, metadata `00012`). Slides keep the 10-21 numbers | Command output |
 | 10-23 | **Task 1 presented.** Leader asked why this stack (Iceberg answer was weak → prepared). UC: 18 days OK, start with the 2 existing intents, re-analyse UC6/UC7 at Task 5. Bronze only for now; next: disk cleanup (C: ~60 GB free), then Task 2 | Bee |
+| 10-25 | Disk cleanup: build cache pruned (2.085 GB), fstrim + `diskpart compact` → Docker vhdx 22.9 → 9.45 GB, Ubuntu vhdx 9.02 → 8.24 GB (−14.2 GB total); C: free 87.2 GB. Images and data volumes kept. E24 (Linux `wsl` package vs `wsl.exe`) | `dir` before/after |
 
 ## 5b. Reading notes (Bee's ratings, 10-15)
 

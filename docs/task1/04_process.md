@@ -14,6 +14,12 @@ Time spent:
 
 ---
 
+### 2026-10-23/25 — 1.15 Disk cleanup before Task 2
+Did: `make down` (volumes kept); kept all 8 images (thin images share layers with their bases) and both volumes; `docker builder prune -af` (2.085 GB); `sudo fstrim -av` in Ubuntu; Docker Desktop quit, `wsl --shutdown` (Windows cmd; E24 when typed in Ubuntu); `diskpart` → `attach vdisk readonly` → `compact vdisk` on both disks.
+Observed: `docker_data.vhdx` 22,906,142,720 → 9,450,815,488 bytes (−13.46 GB); Ubuntu `ext4.vhdx` 9,022,996,480 → 8,243,904,512 (−0.78 GB); total −14.23 GB; C: free 87.2 GB after. Ubuntu stayed `Running` after the first `wsl --shutdown` until editors/terminals were closed.
+Learned: deleting inside Docker/WSL frees space only inside the virtual disk; Windows gets it back only after trim + compact. Shared image layers are counted once, so deleting base tags frees ~0.
+Next: Task 2 Stage 0 (Minikube; second copy of images inside the Minikube VM disk).
+
 ### 2026-10-22/23 — 1.14 Rehearsal (A4 guide) and presentation
 Did: reproduced Appendix A4 on the existing stack (no `make build`, `.env` kept instead of `cp .env.example`): `make up` → `make smoke` → `make bronze DATE=2026-10-16` → `make acceptance DATE=2026-10-16`; MinIO console checked. Presented Task 1 to the leader.
 Observed: up in ~14 s; bronze 21,224 / 10,729 rows; acceptance 17/17 then 23/23 PASS, exit 0. Snapshots chatlog 10 → 13 (metadata `00012`), bot_predict 12 (`00011`, one behind since drill B): 3 `make bronze` runs = 3 commits per table; smoke/validate only read. Slides keep the 10-21 numbers (`00009`, 10 snapshots).
