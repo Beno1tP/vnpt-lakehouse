@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-10-25 — 2.3c password rotated, admin outside Helm; E37 task logs
+Did (Bee): new admin password (`read -rs`), `make k8s-secrets`, `make airflow-install` (from this branch) → revision 2 (no credentials in NOTES, no deprecation warnings), `make airflow-admin` → `User "admin" created`, `helm get values | grep -c password` → 0. UI login OK; `hello_lake` ran (a scheduled run `scheduled__2026-10-25T14:13:01…`: catchup=False + unpaused).
+Observed: UI log view failed (E37: scheduler pod hostname not resolvable). Fix: `hostname_callable` → pod IP (same PR #6).
+
 ### 2026-10-25 — 2.3b Airflow installed (E35, E36)
 Did (Bee): PR #5 checks 4/4 green; `make airflow-install` (chart from the CDN, SHA-512 OK; volume before 8.79 GB).
 Observed: `STATUS: deployed`, Airflow 3.3.2, revision 1. **E35:** the chart NOTES printed the admin password (it came from `--set-file createUserJob.defaultUser.password`) → password must be rotated. E36: 3 deprecation warnings.

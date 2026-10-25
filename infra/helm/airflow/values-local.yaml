@@ -54,6 +54,10 @@ config:
     load_examples: "False"
     parallelism: 4                  # max concurrent task processes in the scheduler pod (RAM)
     default_timezone: utc
+    # E37: with LocalExecutor the task runs in the scheduler pod and the API server fetches its log from
+    # <hostname>:8793. A Deployment's pod hostname is not in cluster DNS, so register the pod IP instead
+    # (option documented in Airflow 3.3.2 config.yml). Logs still die with the pod: remote logs in step 2.6.
+    hostname_callable: airflow.utils.net.get_host_ip_address
 
 apiServer:
   resources: { requests: { memory: 512Mi, cpu: 200m }, limits: { memory: 1Gi } }
