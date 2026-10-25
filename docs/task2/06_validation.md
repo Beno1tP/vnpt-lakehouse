@@ -2,7 +2,7 @@
 
 ## 1. Expected counts per event day (step 2.0, decision D3)
 
-Computed independently of the job (DuckDB), stored in `tests/expected/bronze_daily.json`. Day = date as written in `CREATED_TIME`; `bot_predict` by its own `CREATED_TIME`.
+Computed with Spark SQL on the Task 1 Bronze tables (decision D3, before `make down`), independent of the landing simulator's pandas split; stored in `tests/expected/bronze_daily.json`. Day = date as written in `CREATED_TIME`; `bot_predict` by its own `CREATED_TIME`.
 
 | Day | chatlog rows | bot_predict rows | unmatched predict |
 |---|---|---|---|

@@ -22,9 +22,9 @@ Re-check before installing: `helm search repo spark-operator/spark-operator --ve
 
 | ID | Question | Options | Recommendation |
 |---|---|---|---|
-| D1 | Chart 1.22.0 defaults to Airflow 3.2.2; we want 3.3.2 | (a) chart 1.22.0 + `airflowVersion: 3.3.2`, `defaultAirflowTag: 3.3.2` (supported override, combination not released together); (b) Airflow 3.2.2 = chart default | **(a)**, because the matrix and the leader's stack say 3.3.2; if the chart's migration/job templates fail on 3.3.2, fall back to (b) and log it |
-| D2 | Days without data in the backfill window | skip run / load 0 rows | **skip** (`01_knowledge.md` A5) |
-| D3 | Where to compute per-day expected counts | DuckDB (independent engine, needs install ~50 MB in a venv) / pandas in the Spark container (no install, same library as the job) | **DuckDB in a venv**: an independent engine makes the check meaningful |
+| D1 | Chart 1.22.0 defaults to Airflow 3.2.2; we want 3.3.2 | (a) chart 1.22.0 + `airflowVersion/defaultAirflowTag: 3.3.2`; (b) Airflow 3.2.2 | **Decided 10-25: (a).** Chart 1.22.0 templates branch on the Airflow version only at `>=3.0.0` (26×), `<3.0.0` (13×), `<2.11.0` (1×) (`grep semverCompare chart/templates`, tag `helm-chart/1.22.0`), so 3.3.2 renders exactly the same objects as 3.2.2. Remaining risk: config keys deprecated in 3.3 → read warnings at install; fallback (b) |
+| D2 | Which days to run / backfill (data: 18 days with rows inside 2024-07-02 → 07-25) | see `03_plan.md` §C 2.5 | **Open: to discuss with Bee** |
+| D3 | Where to compute per-day expected counts | **Decided 10-25: Spark only, no new tool.** Spark SQL on the Task 1 Bronze tables (Compose stack, already validated: 21,224 / 10,729), grouped by the date in `CREATED_TIME`. Independent of the landing simulator (pandas split). Task 2 stack = Minikube + Airflow + Spark; query engine (Trino) belongs to Task 3 | |
 
 ## 2. RAM budget
 
