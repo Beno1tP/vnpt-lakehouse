@@ -51,7 +51,7 @@ jobs:
           load: true
           tags: vnpt-lake-airflow:ci
       - name: Import every DAG and check the rules
-        run: docker run --rm -v "$PWD/tests/dags:/tests:ro" vnpt-lake-airflow:ci python /tests/test_dag_integrity.py
+        run: docker run --rm -e AIRFLOW__CORE__LOAD_EXAMPLES=False -v "$PWD/tests/dags:/tests:ro" vnpt-lake-airflow:ci python /tests/test_dag_integrity.py
 
   dockerfiles:
     name: Dockerfile checks
