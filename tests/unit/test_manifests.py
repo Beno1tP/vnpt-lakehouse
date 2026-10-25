@@ -5,19 +5,19 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
-FILL = {"__NAME__": "bronze-2024-07-02", "__DATE__": "2024-07-02", "__IMAGE__": "img:tag",
-        "__EXTRA_ARGS__": ', "--check-idempotency"'}
+FILL = {"{{ ds }}": "2024-07-02", "{{ var.value.spark_job_image }}": "img@sha256:x"}   # what make/Airflow render
 
 
 @pytest.mark.parametrize("app", ["bronze", "validate"])
 def test_sparkapp_template(app):
-    text = (ROOT / f"infra/k8s/spark-jobs/{app}-sparkapp.yaml").read_text()
+    text = (ROOT / f"dags/templates/{app}_sparkapp.yaml").read_text()
     for key, value in FILL.items():
         text = text.replace(key, value)
-    assert "__" not in text.replace("__init__", "")
+    assert "{{" not in text and "__" not in text                       # only the two documented expressions
     doc = yaml.safe_load(text)
     spec = doc["spec"]
     assert doc["kind"] == "SparkApplication" and doc["metadata"]["namespace"] == "spark-jobs"
+    assert doc["metadata"]["name"] == f"{app}-2024-07-02" and spec["imagePullSecrets"] == ["ghcr-pull"]
     assert spec["restartPolicy"]["type"] == "Never"                    # one retry layer: Airflow
     assert spec["driver"]["serviceAccount"] == "spark-operator-spark"
     for role in ("driver", "executor"):
@@ -52,3 +52,20 @@ def test_no_local_only_images_left():
         assert "imagePullPolicy: Never" not in text, path.name
         if "ghcr.io/beno1tp" in text or "__IMAGE__" in text:
             assert "ghcr-pull" in text, f"{path.name}: GHCR image without imagePullSecrets"
+
+
+def test_validate_template_runs_rules_and_make_can_add_idempotency():
+    text = (ROOT / "dags/templates/validate_sparkapp.yaml").read_text()
+    assert '"/opt/tests/sql/bronze_rules.sql"]' in text          # the exact string the Makefile IDEMPOTENCY_SED edits
+    assert "IDEMPOTENCY_SED" in (ROOT / "Makefile").read_text()
+
+
+def test_airflow_may_only_manage_spark_jobs():
+    docs = list(yaml.safe_load_all((ROOT / "infra/k8s/spark-jobs/rbac-airflow.yaml").read_text()))
+    role = next(d for d in docs if d["kind"] == "Role")
+    binding = next(d for d in docs if d["kind"] == "RoleBinding")
+    assert role["metadata"]["namespace"] == "spark-jobs"                # a Role, not a ClusterRole
+    assert binding["subjects"] == [{"kind": "ServiceAccount", "name": "airflow-scheduler", "namespace": "airflow"}]
+    for rule in role["rules"]:
+        assert "*" not in rule["verbs"] and "*" not in rule["resources"]
+        assert "secrets" not in rule["resources"]

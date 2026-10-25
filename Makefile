@@ -18,8 +18,7 @@ include infra/k8s/images.env
 JOB_SRC              = jobs/ tests/ docker/spark-job/
 JOB_TAG              = $(shell git log -1 --format=%h -- $(JOB_SRC))
 APP                 ?= bronze
-comma               := ,
-K8S_EXTRA_ARGS       = $(if $(filter yes,$(IDEMPOTENCY)),$(comma) "--check-idempotency",)
+IDEMPOTENCY_SED      = -e 's|"/opt/tests/sql/bronze_rules.sql"]|"/opt/tests/sql/bronze_rules.sql", "--check-idempotency"]|'
 LOCAL_JOB_IMAGE      = vnpt-lake-spark-job:$(JOB_TAG)
 JOB_IMAGE           ?= $(SPARK_JOB_IMAGE_REF)
 
@@ -99,10 +98,11 @@ k8s-job-image: ## Task 2 FALLBACK (G6, CI blocked): build locally + load; then m
 	rm -rf $(HOME)/.minikube/cache/images
 	minikube image ls | grep vnpt-lake-spark-job
 	@echo "fallback image loaded: run make sparkapp JOB_IMAGE=$(LOCAL_JOB_IMAGE) DATE=..."
-sparkapp:      ## Task 2: run one SparkApplication by hand: make sparkapp [APP=bronze|validate] DATE=2024-07-24 [IDEMPOTENCY=yes]
+sparkapp:      ## Task 2: run one SparkApplication by hand (same template as the DAG): make sparkapp [APP=bronze|validate] DATE=2024-07-24 [IDEMPOTENCY=yes]
 	kubectl -n spark-jobs delete sparkapplication $(APP)-$(DATE) --ignore-not-found --wait=true
-	sed -e 's/__NAME__/$(APP)-$(DATE)/' -e 's/__DATE__/$(DATE)/g' -e 's|__IMAGE__|$(JOB_IMAGE)|' -e 's/__EXTRA_ARGS__/$(K8S_EXTRA_ARGS)/' \
-	    infra/k8s/spark-jobs/$(APP)-sparkapp.yaml | kubectl apply -f -
+	sed -e 's/{{ ds }}/$(DATE)/g' -e 's|{{ var.value.spark_job_image }}|$(JOB_IMAGE)|' \
+	    $(if $(filter yes,$(IDEMPOTENCY)),$(IDEMPOTENCY_SED)) \
+	    dags/templates/$(APP)_sparkapp.yaml | kubectl apply -f -
 	@for i in $$(seq 1 120); do \
 	  s=$$(kubectl -n spark-jobs get sparkapplication $(APP)-$(DATE) -o jsonpath='{.status.applicationState.state}'); \
 	  echo "[sparkapp] $$(date +%T) state=$${s:-PENDING}"; \
@@ -118,6 +118,7 @@ airflow-install: airflow-chart ## Task 2: helm upgrade --install Airflow 3.3.2 (
 	helm upgrade --install airflow $(AIRFLOW_CHART) -n airflow \
 	  -f infra/helm/airflow/values-local.yaml \
 	  --set images.airflow.digest=$(lastword $(subst @, ,$(AIRFLOW_IMAGE_REF))) \
+	  --set env[0].name=AIRFLOW_VAR_SPARK_JOB_IMAGE --set env[0].value=$(SPARK_JOB_IMAGE_REF) \
 	  --wait --timeout 15m
 airflow-admin: ## Task 2: (re)create the Airflow UI user admin with the password from infra/k8s/secrets/airflow-admin-password
 	@test -s infra/k8s/secrets/airflow-admin-password || { echo "run make k8s-secrets first"; exit 1; }

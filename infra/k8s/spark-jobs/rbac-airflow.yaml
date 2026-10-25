@@ -1,0 +1,35 @@
+# Task 2 step 2.4: let Airflow's scheduler (LocalExecutor runs tasks there) manage SparkApplications in spark-jobs,
+# and nothing else. SparkKubernetesOperator (provider 10.22.0) creates/deletes the CR, finds and follows the driver
+# pod and its log (reattach on restart).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: airflow-spark-submitter
+  namespace: spark-jobs
+rules:
+  - apiGroups: [sparkoperator.k8s.io]
+    resources: [sparkapplications, sparkapplications/status]
+    verbs: [create, get, list, watch, patch, delete]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch, patch]          # patch: the operator annotates pods it already checked (reattach)
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: airflow-spark-submitter
+  namespace: spark-jobs
+subjects:
+  - kind: ServiceAccount
+    name: airflow-scheduler                   # created by the Airflow chart (release "airflow")
+    namespace: airflow
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: airflow-spark-submitter

@@ -15,7 +15,12 @@ images:
     repository: ghcr.io/beno1tp/vnpt-lake-airflow
     tag: ~                          # digest only (set by make)
     pullPolicy: IfNotPresent
-imagePullSecrets: [ghcr-pull]       # private GHCR package, token read:packages only (2.0c); `registry:` is deprecated
+imagePullSecrets: [ghcr-pull]
+# Airflow connections minio_landing + kubernetes_in_cluster as AIRFLOW_CONN_* env vars (Secret airflow-connections,
+# rendered by make k8s-secrets); AIRFLOW_VAR_SPARK_JOB_IMAGE is set by make airflow-install from images.env
+extraEnvFrom: |
+  - secretRef:
+      name: airflow-connections       # private GHCR package, token read:packages only (2.0c); `registry:` is deprecated
 
 executor: LocalExecutor             # tasks run inside the scheduler pod; heavy work runs in Spark pods
 

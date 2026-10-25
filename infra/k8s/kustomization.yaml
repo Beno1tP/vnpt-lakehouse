@@ -8,6 +8,7 @@ resources:
   - lake/bucket-init-job.yaml
   - lake/hive-metastore.yaml
   - lake/minio-users-job.yaml
+  - spark-jobs/rbac-airflow.yaml
 images:                                # GHCR digests (2.0c); keep equal to infra/k8s/images.env (checked by CI)
   - name: ghcr.io/beno1tp/vnpt-lake-hms
     digest: sha256:9446f7d1e0ab211f1fe32b0f8def318699e6afa40a5e1fcebfa3d07d134b91ff
@@ -42,6 +43,7 @@ secretGenerator:                       # from files rendered by `make k8s-secret
   - { name: airflow-fernet-key, namespace: airflow, envs: [secrets/airflow-fernet.env], options: { disableNameSuffixHash: true } }
   - { name: airflow-api-secret-key, namespace: airflow, envs: [secrets/airflow-api.env], options: { disableNameSuffixHash: true } }
   - { name: airflow-jwt-secret, namespace: airflow, envs: [secrets/airflow-jwt.env], options: { disableNameSuffixHash: true } }
+  - { name: airflow-connections, namespace: airflow, envs: [secrets/airflow-connections.env], options: { disableNameSuffixHash: true } }
 configMapGenerator:
   - name: postgres-initdb
     namespace: lake
@@ -55,4 +57,5 @@ configMapGenerator:
   - name: minio-users-script
     namespace: lake
     files: [lake/minio-users/minio_users.sh, lake/minio-users/lake-spark-jobs.json,
-            lake/minio-users/lake-landing-writer.json, lake/minio-users/lake-hms.json]
+            lake/minio-users/lake-landing-writer.json, lake/minio-users/lake-hms.json,
+            lake/minio-users/lake-landing-reader.json]

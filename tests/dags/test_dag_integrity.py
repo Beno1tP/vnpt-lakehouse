@@ -34,6 +34,10 @@ for dag_id, dag in sorted(bag.dags.items()):
         problems.append("needs tags")
     if dag.start_date is None or dag.start_date.tzinfo is None:
         problems.append("start_date must be timezone-aware")
+    if "lake" in dag.tags:                       # production DAGs: every task bounded in time, validation never retried
+        problems += [f"{t.task_id}: needs execution_timeout" for t in dag.tasks if t.execution_timeout is None]
+        problems += [f"{t.task_id}: validation must not retry" for t in dag.tasks
+                     if "validate" in t.task_id and t.retries]
     for p in problems:
         print(f"[dags] RULE {dag_id}: {p}")
     errors += len(problems)

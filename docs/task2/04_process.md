@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-10-25 — 2.4a done (23/23 ×3 days); 2.4b DAG prepared on branch `task2/dag`
+Did (Bee): PR #8 merged (main `821f981`); validate 2024-07-02 / 07-24 / 07-25 with the new image: **23/23 each** (10 reconciliation + 13 rules), incl. `event_day_matches_partition` = 0 and `unmatched_to_chat` = 116 on 07-25. **Step 2.4a done.**
+Checked (provider cncf.kubernetes 10.22.0 source): SparkKubernetesOperator `random_name_suffix=True` by default → each try gets a new name (no `AlreadyExists`, review item A4 closed); `application_file` is Jinja-rendered (`template_ext` yaml); `delete_on_termination=True` deletes the app after streaming the driver log; `reattach_on_restart` finds the driver by labels (needs pods get/list/patch).
+Prepared (Claude): `dags/chatbot_bronze.py` (timedelta(days=1), start 2024-07-02 UTC, catchup False, max_active_runs 1, dagrun_timeout 1h, retries 2 / 5 min, execution_timeout 20 min; `check_landing` (S3Hook, skip day without files, fail if only one table) → `bronze` → `validate` (retries 0) → `notify`); SparkApplication templates moved to `dags/templates/*_sparkapp.yaml` as **one** Jinja template for both Airflow and `make sparkapp` (sed fills `{{ ds }}` and `{{ var.value.spark_job_image }}`); MinIO user `airflow-landing` (read landing only); Secret `airflow-connections` (`AIRFLOW_CONN_MINIO_LANDING`, `AIRFLOW_CONN_KUBERNETES_IN_CLUSTER`) via chart `extraEnvFrom`; `AIRFLOW_VAR_SPARK_JOB_IMAGE` from images.env via `make airflow-install`; Role `airflow-spark-submitter` in spark-jobs bound to SA `airflow-scheduler`; DAG integrity rules for `lake` DAGs (execution_timeout everywhere, validate never retries). Tests 27 passed; kustomize + helm template render OK.
+
 ### 2026-10-25 — 2.4a PR #7 merged; spark-job digest promoted (PR #8)
 Did (Bee): PR #7 4/4 green, merged (main `efa10a8`); images run 40203340278: spark-job `efa10a8` → `sha256:f56c2321…88cd` (airflow also rebuilt, DAGs unchanged → its digest is not promoted).
 
