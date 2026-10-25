@@ -12,3 +12,4 @@ metastore_db/
 CLAUDE_CODE_PROMPT.md
 infra/compose/secrets/
 infra/k8s/secrets/
+!infra/k8s/images.env
