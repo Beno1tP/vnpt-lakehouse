@@ -1,0 +1,58 @@
+# Task 2 step 2.1b: MinIO (S3 API) for Iceberg data (bucket lakehouse) and the landing zone (bucket landing).
+# Same Chainguard image digest as Task 1 (.env MINIO_IMAGE); runs as uid 65532. The PV directory of minikube's
+# "standard" provisioner is mode 0777 (checked), so no chown step is needed (Task 1 needed minio-perms).
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: lake
+spec:
+  selector: { app: minio }
+  ports:
+    - { name: s3, port: 9000 }          # http://minio.lake.svc.cluster.local:9000
+    - { name: console, port: 9001 }     # browser: kubectl -n lake port-forward svc/minio 9001:9001
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: minio
+  namespace: lake
+spec:
+  serviceName: minio
+  replicas: 1
+  selector:
+    matchLabels: { app: minio }
+  template:
+    metadata:
+      labels: { app: minio }
+    spec:
+      containers:
+        - name: minio
+          image: cgr.dev/chainguard/minio@sha256:2136d593beacf4461187035eca949fe49abd589d5079735025c711ca58fee0c8
+          imagePullPolicy: IfNotPresent
+          args: ["server", "/data", "--console-address", ":9001"]
+          env:                           # env, as in Task 1 (phase 2: files); kubectl describe shows only the secret reference
+            - name: MINIO_ROOT_USER
+              valueFrom: { secretKeyRef: { name: minio-credentials, key: MINIO_ROOT_USER } }
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom: { secretKeyRef: { name: minio-credentials, key: MINIO_ROOT_PASSWORD } }
+          ports:
+            - { name: s3, containerPort: 9000 }
+            - { name: console, containerPort: 9001 }
+          readinessProbe:                # HTTP probe: the image has no shell or curl
+            httpGet: { path: /minio/health/ready, port: 9000 }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /minio/health/live, port: 9000 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests: { memory: 256Mi, cpu: 100m }
+            limits:   { memory: 512Mi }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: { requests: { storage: 5Gi } }

@@ -4,11 +4,19 @@ kind: Kustomization
 resources:
   - 00-namespaces.yaml
   - lake/postgres.yaml
+  - lake/minio.yaml
+  - lake/bucket-init-job.yaml
 secretGenerator:                       # from files rendered by `make k8s-secrets` (git-ignored)
   - name: postgres-credentials
     namespace: lake
     envs: [secrets/postgres.env]
+  - name: minio-credentials
+    namespace: lake
+    envs: [secrets/minio.env]
 configMapGenerator:
   - name: postgres-initdb
     namespace: lake
     files: [lake/postgres-initdb/10-airflow-db.sh]
+  - name: bucket-init-script
+    namespace: lake
+    files: [lake/bucket-init/bucket_init.py]

@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-10-25 — 2.1a-fix Postgres re-initialised; 2.1b prepared
+Did (Bee): `make k8s-secrets` (new Secret hash: password changed), deleted StatefulSet + PVC, `kubectl apply -k`. Checks (Claude, read-only): log only `airflow role and database created`; secret files `-r--r----- 0 999`; `psql -h postgres.lake.svc.cluster.local -U airflow` → `airflow|airflow`. **E27 fixed.**
+Prepared (Claude): `lake/minio.yaml` (StatefulSet, Task 1 digest, httpGet probes `/minio/health/ready|live`, 256/512 Mi, PVC 5 Gi; minikube PV dirs are 0777 so no chown step); `lake/bucket-init-job.yaml` + `bucket_init.py` (pyarrow S3FileSystem in the already-loaded Spark image instead of amazon/aws-cli: saves ~650 MB; fsGroup 185, `imagePullPolicy: Never`, TTL 600 s). Dry-run + `kubectl diff`: only new MinIO objects.
+
 ### 2026-10-25 — 2.1a Postgres applied (E26, E27)
 Did: removed `~/.minikube/cache/images` (1.5 GB; `~/.minikube` back to 856 MB); created `infra/k8s/secrets.env`; `make k8s-secrets`; `kubectl apply -k infra/k8s`.
 Observed: postgres-0 Running in 32 s, PVC `data-postgres-0` Bound 2Gi `standard`, headless Service; DBs airflow, metastore, postgres. Network login as `airflow` failed: **E27** (secret file unreadable by uid 999 → empty password). E26 = my quoting mistake in a check command.

@@ -1,0 +1,34 @@
+# Task 2 step 2.1b: one-shot Job = Task 1's minio-init. Idempotent; deleted 10 min after it finishes, so the next
+# `kubectl apply -k` recreates and reruns it (a finished Job cannot be updated in place: its pod template is immutable).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: bucket-init
+  namespace: lake
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        fsGroup: 185                       # uid/gid "spark" in the image: secret files readable (lesson E27)
+      containers:
+        - name: bucket-init
+          image: vnpt-lake-spark:3.5.9-iceberg1.11.0-r1
+          imagePullPolicy: Never           # loaded with `minikube image load`; never look for it on Docker Hub
+          command: ["python3", "/scripts/bucket_init.py"]
+          env:
+            - { name: S3_ENDPOINT, value: "minio.lake.svc.cluster.local:9000" }
+            - { name: BUCKETS, value: "lakehouse landing" }
+          resources:
+            requests: { memory: 128Mi, cpu: 100m }
+            limits:   { memory: 256Mi }
+          volumeMounts:
+            - { name: credentials, mountPath: /run/secrets/minio, readOnly: true }
+            - { name: scripts, mountPath: /scripts, readOnly: true }
+      volumes:
+        - name: credentials
+          secret: { secretName: minio-credentials, defaultMode: 0440 }
+        - name: scripts
+          configMap: { name: bucket-init-script }
