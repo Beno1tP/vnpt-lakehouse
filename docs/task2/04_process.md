@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-10-25 — 2.3b Airflow installed (E35, E36)
+Did (Bee): PR #5 checks 4/4 green; `make airflow-install` (chart from the CDN, SHA-512 OK; volume before 8.79 GB).
+Observed: `STATUS: deployed`, Airflow 3.3.2, revision 1. **E35:** the chart NOTES printed the admin password (it came from `--set-file createUserJob.defaultUser.password`) → password must be rotated. E36: 3 deprecation warnings.
+Prepared (Claude, branch `task2/airflow-admin`): `createUserJob.enabled: false`, `make airflow-admin` (user created inside the scheduler pod from the secret file), deprecated key removed, `enableServiceLinks: false`, `recommendedProbeSetting: true`. `helm template` renders 4 Deployments + 1 Job (migrations), no create-user Job.
+
 ### 2026-10-25 — 2.3a PR #4 merged (Airflow image), digests promoted (PR #5)
 Did (Bee): PR #4: first run red (E34, Airflow 2 `DagBag(include_examples=…)`), fixed, 4/4 green incl. the new DAG integrity check inside the 3.3.2 image; merged (main `a226c4f`); images run 40199225449 success.
 Digests: spark `aee0deb9…` and hms `9446f7d1…` (`built=false`); spark-job `a226c4f` → `sha256:4e873c12…388e1f`; **airflow `a226c4f` → `sha256:6fbd3133…25d5a4`**.

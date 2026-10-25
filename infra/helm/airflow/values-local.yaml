@@ -1,5 +1,5 @@
 # Apache Airflow chart 1.22.0 with Airflow 3.3.2 (decision D1: the chart only branches on >=3.0.0, docs/task2/02_config.md).
-# Install: make airflow-install   (admin password passed with --set-file from infra/k8s/secrets/, never stored in Git)
+# Install: make airflow-install, then make airflow-admin (admin user from infra/k8s/secrets/, never in Helm values: E35)
 # Image (D5): ghcr.io/beno1tp/vnpt-lake-airflow = apache/airflow:3.3.2-python3.12 + dags/ baked in, built by CI.
 # The digest is NOT in this file: make airflow-install passes AIRFLOW_IMAGE_REF from infra/k8s/images.env
 # (--set images.airflow.digest), so images.env stays the single record of what is deployed.
@@ -33,9 +33,12 @@ statsd: { enabled: false }
 pgbouncer: { enabled: false }
 flower: { enabled: false }
 workers:
-  persistence: { enabled: false }   # with LocalExecutor this would turn the scheduler into a StatefulSet + 100Gi PVC
   celery:
-    persistence: { enabled: false }
+    persistence: { enabled: false } # with LocalExecutor this would turn the scheduler into a StatefulSet + 100Gi PVC
+enableServiceLinks: false           # we use DNS names; avoids the chart-2.0 default-change warning
+dags:
+  gitSync:
+    recommendedProbeSetting: true   # not used (DAGs are baked in); silences the deprecation warning
 
 # --wait + Helm hooks deadlock (pods wait for the migration job that only runs after they are ready): plain Jobs
 migrateDatabaseJob:
@@ -43,10 +46,8 @@ migrateDatabaseJob:
   applyCustomEnv: false
   resources: { requests: { memory: 256Mi, cpu: 100m }, limits: { memory: 768Mi } }
 createUserJob:
-  useHelmHooks: false
-  applyCustomEnv: false
-  defaultUser: { username: admin, role: Admin, email: admin@lab.local, firstName: admin, lastName: lab }
-  resources: { requests: { memory: 256Mi, cpu: 100m }, limits: { memory: 768Mi } }
+  enabled: false                    # E35: the chart's NOTES print defaultUser.password after every install/upgrade;
+                                    # the admin user is created by `make airflow-admin` from the secret file instead
 
 config:
   core:
