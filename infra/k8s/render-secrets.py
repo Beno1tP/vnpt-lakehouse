@@ -4,6 +4,7 @@ kustomize (secretGenerator in infra/k8s/kustomization.yaml) turns these files in
 one Secret per consumer, so each pod only gets the keys it needs. Run: make k8s-secrets [K8S_ENV_FILE=...]
 """
 import base64
+import json
 import os
 import secrets
 import sys
@@ -24,6 +25,7 @@ GENERATED = {
     "MINIO_SPARK_JOBS_SECRET": lambda: secrets.token_hex(24),
     "MINIO_LANDING_WRITER_SECRET": lambda: secrets.token_hex(24),
     "MINIO_HMS_SECRET": lambda: secrets.token_hex(24),
+    "MINIO_AIRFLOW_LANDING_SECRET": lambda: secrets.token_hex(24),          # step 2.4: DAG check_landing
 }
 
 
@@ -66,7 +68,8 @@ def main():
     # MinIO root credentials (server, bucket-init, and S3 clients until per-service keys exist)
     write_private("minio.env", "".join(f"{k}={env[k]}\n" for k in ("MINIO_ROOT_USER", "MINIO_ROOT_PASSWORD")))
     # MinIO service users (step 2.1b): passwords for the minio-users Job, and per-consumer S3 keys (AWS SDK env names)
-    users = ("MINIO_SPARK_JOBS_SECRET", "MINIO_LANDING_WRITER_SECRET", "MINIO_HMS_SECRET")
+    users = ("MINIO_SPARK_JOBS_SECRET", "MINIO_LANDING_WRITER_SECRET", "MINIO_HMS_SECRET",
+             "MINIO_AIRFLOW_LANDING_SECRET")
     write_private("minio-service-users.env", "".join(f"{k}={env[k]}\n" for k in users))
 
     def s3_keys(user, secret_key):
@@ -82,6 +85,12 @@ def main():
     write_private("airflow-api.env", f"api-secret-key={env['AIRFLOW_API_SECRET_KEY']}\n")
     write_private("airflow-jwt.env", f"jwt-secret={env['AIRFLOW_JWT_SECRET']}\n")
     write_private("airflow-admin-password", env["AIRFLOW_ADMIN_PASSWORD"])
+    # Airflow connections as env vars (AIRFLOW_CONN_<ID>, JSON form) -> Secret airflow-connections (step 2.4)
+    minio = {"conn_type": "aws", "login": "airflow-landing", "password": env["MINIO_AIRFLOW_LANDING_SECRET"],
+             "extra": {"endpoint_url": "http://minio.lake.svc.cluster.local:9000", "region_name": "us-east-1"}}
+    kube = {"conn_type": "kubernetes", "extra": {"in_cluster": True}}
+    write_private("airflow-connections.env", f"AIRFLOW_CONN_MINIO_LANDING={json.dumps(minio)}\n"
+                                             f"AIRFLOW_CONN_KUBERNETES_IN_CLUSTER={json.dumps(kube)}\n")
     # HMS JDBC settings as a file (never in SERVICE_OPTS: the entrypoint prints it with set -x)
     props = {
         "javax.jdo.option.ConnectionDriverName": "org.postgresql.Driver",

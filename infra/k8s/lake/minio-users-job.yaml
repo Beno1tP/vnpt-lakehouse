@@ -47,3 +47,4 @@ spec:
               - { key: lake-spark-jobs.json, path: lake-spark-jobs.json }
               - { key: lake-landing-writer.json, path: lake-landing-writer.json }
               - { key: lake-hms.json, path: lake-hms.json }
+              - { key: lake-landing-reader.json, path: lake-landing-reader.json }

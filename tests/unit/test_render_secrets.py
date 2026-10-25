@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -48,3 +49,7 @@ def test_generates_keys_once_and_escapes(tmp_path, monkeypatch):
     assert (out / "landing-writer.env").read_text().startswith("AWS_ACCESS_KEY_ID=landing-writer\n")
     assert (out / "hms-s3.env").read_text().startswith("AWS_ACCESS_KEY_ID=hive-metastore\n")
     assert first.count("MINIO_SPARK_JOBS_SECRET=") == 1
+    conns = dict(line.split("=", 1) for line in (out / "airflow-connections.env").read_text().splitlines())
+    minio = json.loads(conns["AIRFLOW_CONN_MINIO_LANDING"])
+    assert minio["login"] == "airflow-landing" and minio["extra"]["endpoint_url"].endswith(":9000")
+    assert json.loads(conns["AIRFLOW_CONN_KUBERNETES_IN_CLUSTER"])["extra"]["in_cluster"] is True

@@ -1,21 +1,22 @@
-# Task 2 step 2.2c: Bronze load of ONE day from the landing zone, as a SparkApplication (applied by hand:
-# `make sparkapp DATE=YYYY-MM-DD`; Airflow will template the same object in step 2.4).
-# Placeholders filled by make: __NAME__ (bronze-YYYY-MM-DD), __DATE__, __IMAGE__ (spark-job image by digest, infra/k8s/images.env).
+# Bronze load of ONE day from the landing zone (step 2.2c), Jinja template used by BOTH:
+#  - Airflow DAG chatbot_bronze (SparkKubernetesOperator renders {{ ds }} and {{ var.value.spark_job_image }};
+#    the operator adds a random suffix to metadata.name, so a retry never collides: provider 10.22.0)
+#  - make sparkapp (sed fills the same two expressions from DATE and infra/k8s/images.env)
 apiVersion: sparkoperator.k8s.io/v1beta2
 kind: SparkApplication
 metadata:
-  name: __NAME__
+  name: bronze-{{ ds }}
   namespace: spark-jobs
 spec:
   type: Python
   pythonVersion: "3"
   mode: cluster
   sparkVersion: "3.5.9"
-  image: __IMAGE__
+  image: {{ var.value.spark_job_image }}
   imagePullPolicy: IfNotPresent
   imagePullSecrets: [ghcr-pull]                # private GHCR package (2.0c)
   mainApplicationFile: local:///opt/jobs/bronze_ingest.py
-  arguments: ["--ingest-date", "__DATE__", "--source", "s3://landing"]
+  arguments: ["--ingest-date", "{{ ds }}", "--source", "s3://landing"]
   restartPolicy: { type: Never }               # one retry layer only: Airflow (01_knowledge.md A4)
   timeToLiveSeconds: 86400                     # the operator deletes the app (and its driver pod) after 1 day
   sparkConf:                                   # = infra/compose/spark/spark-defaults.conf with cluster DNS names
@@ -37,7 +38,7 @@ spec:
     memory: 1g                                 # JVM heap
     memoryOverhead: 1g                         # pandas + Python live here (pod = 2 GiB)
     serviceAccount: spark-operator-spark       # created by the operator chart; may create executor pods
-    labels: { app: bronze, ingest-date: "__DATE__" }
+    labels: { app: bronze, ingest-date: "{{ ds }}" }
     env: &env
       - { name: S3_ENDPOINT, value: "minio.lake.svc.cluster.local:9000" }   # landing reads (pyarrow)
       - { name: AWS_REGION, value: us-east-1 }
@@ -48,6 +49,6 @@ spec:
     cores: 1
     memory: 768m
     memoryOverhead: 384m                       # pod = 1.1 GiB
-    labels: { app: bronze, ingest-date: "__DATE__" }
+    labels: { app: bronze, ingest-date: "{{ ds }}" }
     env: *env
     envFrom: *envFrom

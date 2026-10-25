@@ -1,22 +1,23 @@
-# Task 2 step 2.2d: validate ONE day of Bronze against tests/expected/bronze_daily.json (validator baked into the
-# job image). By hand: `make sparkapp APP=validate DATE=YYYY-MM-DD [IDEMPOTENCY=yes]`; Airflow templates it in 2.4.
-# Placeholders filled by make: __NAME__ (validate-YYYY-MM-DD), __DATE__, __IMAGE__ (spark-job image by digest, infra/k8s/images.env), __EXTRA_ARGS__.
+# Validation of ONE day: exact reconciliation (bronze_daily.json) + day-generic rules (step 2.4a). Used by BOTH:
+#  - Airflow DAG chatbot_bronze (SparkKubernetesOperator renders {{ ds }} and {{ var.value.spark_job_image }};
+#    the operator adds a random suffix to metadata.name, so a retry never collides: provider 10.22.0)
+#  - make sparkapp (sed fills the same two expressions from DATE and infra/k8s/images.env)
 apiVersion: sparkoperator.k8s.io/v1beta2
 kind: SparkApplication
 metadata:
-  name: __NAME__
+  name: validate-{{ ds }}
   namespace: spark-jobs
 spec:
   type: Python
   pythonVersion: "3"
   mode: cluster
   sparkVersion: "3.5.9"
-  image: __IMAGE__
+  image: {{ var.value.spark_job_image }}
   imagePullPolicy: IfNotPresent
   imagePullSecrets: [ghcr-pull]                # private GHCR package (2.0c)
   mainApplicationFile: local:///opt/jobs/validate_bronze.py
-  arguments: ["--ingest-date", "__DATE__", "--expected", "/opt/tests/expected/bronze_daily.json",
-              "--sql", "/opt/tests/sql/bronze_checks.sql", "--rules", "/opt/tests/sql/bronze_rules.sql"__EXTRA_ARGS__]
+  arguments: ["--ingest-date", "{{ ds }}", "--expected", "/opt/tests/expected/bronze_daily.json",
+              "--sql", "/opt/tests/sql/bronze_checks.sql", "--rules", "/opt/tests/sql/bronze_rules.sql"]
   restartPolicy: { type: Never }               # a wrong number is deterministic: no retry anywhere
   timeToLiveSeconds: 86400                     # the operator deletes the app (and its driver pod) after 1 day
   sparkConf:                                   # = infra/compose/spark/spark-defaults.conf with cluster DNS names
@@ -38,7 +39,7 @@ spec:
     memory: 1g                                 # JVM heap
     memoryOverhead: 512m                       # no pandas here (pod = 1.5 GiB)
     serviceAccount: spark-operator-spark       # created by the operator chart; may create executor pods
-    labels: { app: validate, ingest-date: "__DATE__" }
+    labels: { app: validate, ingest-date: "{{ ds }}" }
     env: &env
       - { name: AWS_REGION, value: us-east-1 }
     envFrom: &envFrom
@@ -48,6 +49,6 @@ spec:
     cores: 1
     memory: 768m
     memoryOverhead: 384m                       # pod = 1.1 GiB
-    labels: { app: validate, ingest-date: "__DATE__" }
+    labels: { app: validate, ingest-date: "{{ ds }}" }
     env: *env
     envFrom: *envFrom
