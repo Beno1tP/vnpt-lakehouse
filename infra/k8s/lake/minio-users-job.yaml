@@ -1,0 +1,49 @@
+# Task 2 step 2.1b (gap #9): create least-privilege MinIO users + policies. Like bucket-init: idempotent one-shot Job,
+# deleted 10 min after it finishes. The Chainguard minio-client image has no shell, so an initContainer only copies
+# its `mc` binary into an emptyDir and a bash script runs it from the (already present) Spark base image.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-users
+  namespace: lake
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{ name: ghcr-pull }]
+      securityContext:
+        fsGroup: 185                       # uid/gid "spark": secret files readable (lesson E27)
+      initContainers:
+        - name: get-mc
+          image: cgr.dev/chainguard/minio-client@sha256:1a1b84b36947e93b2d0eb9373e1c886eadfdcf223c91f47bcaa3756d3437785c
+          imagePullPolicy: IfNotPresent
+          args: ["cp", "/usr/bin/mc", "/tools/mc"]     # entrypoint is /usr/bin/mc; `mc cp` also copies local files
+          resources: { requests: { memory: 32Mi, cpu: 50m }, limits: { memory: 128Mi } }
+          volumeMounts: [{ name: tools, mountPath: /tools }]
+      containers:
+        - name: minio-users
+          image: ghcr.io/beno1tp/vnpt-lake-spark       # digest set in kustomization.yaml (images:); bash + python3
+          imagePullPolicy: IfNotPresent
+          command: ["bash", "/scripts/minio_users.sh"]
+          envFrom:
+            - secretRef: { name: minio-credentials }    # MINIO_ROOT_USER / MINIO_ROOT_PASSWORD
+            - secretRef: { name: minio-service-users }  # generated passwords of the 3 service users
+          resources: { requests: { memory: 64Mi, cpu: 50m }, limits: { memory: 256Mi } }
+          volumeMounts:
+            - { name: tools, mountPath: /tools, readOnly: true }
+            - { name: scripts, mountPath: /scripts, readOnly: true }
+            - { name: policies, mountPath: /policies, readOnly: true }
+      volumes:
+        - name: tools
+          emptyDir: { sizeLimit: 64Mi }
+        - name: scripts
+          configMap: { name: minio-users-script, items: [{ key: minio_users.sh, path: minio_users.sh }] }
+        - name: policies
+          configMap:
+            name: minio-users-script
+            items:
+              - { key: lake-spark-jobs.json, path: lake-spark-jobs.json }
+              - { key: lake-landing-writer.json, path: lake-landing-writer.json }
+              - { key: lake-hms.json, path: lake-hms.json }

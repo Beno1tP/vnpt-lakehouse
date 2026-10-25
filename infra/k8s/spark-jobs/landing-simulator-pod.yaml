@@ -21,7 +21,7 @@ spec:
       env:
         - { name: S3_ENDPOINT, value: "minio.lake.svc.cluster.local:9000" }
       envFrom:
-        - secretRef: { name: s3-credentials }  # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (stable name, see kustomization)
+        - secretRef: { name: landing-writer-credentials }  # MinIO user landing-writer (2.1b): rw landing only
       resources:
         requests: { memory: 512Mi, cpu: 200m }
         limits:   { memory: 1Gi }

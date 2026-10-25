@@ -28,7 +28,7 @@ SPARK_SUBMIT = $(COMPOSE) exec -T spark /opt/spark/bin/spark-submit --master $(S
 SPARK_SQL    = $(COMPOSE) exec -T spark /opt/spark/bin/spark-sql --master local[1]
 NOISE        = ^Time taken|^:: loading settings
 
-.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image sparkapp airflow-chart airflow-dags airflow-install airflow-ui
+.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart airflow-dags airflow-install airflow-ui
 
 help:          ## list targets and variables
 	@awk -F':.*## ' '/^[a-zA-Z0-9_-]+:.*## /{printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -83,6 +83,15 @@ landing:       ## Task 2: split the Excel files by day -> s3://landing/<table>/d
 	for f in bot_dvc_hcm.xlsx bot_ddvc_hcm_bot_predict.xlsx; do kubectl -n spark-jobs cp $(K8S_RAW_DIR)/$$f landing-simulator:/work/$$f; done; \
 	kubectl -n spark-jobs exec landing-simulator -- python3 /opt/jobs/landing_simulator.py --src /work --dest s3://landing \
 	  --expected /opt/tests/expected/bronze_daily.json
+s3-access-test: ## Task 2: prove least privilege of the MinIO users spark-jobs + landing-writer (allowed AND denied ops)
+	kubectl -n spark-jobs create configmap s3-access-check --from-file=tests/k8s/s3_access_check.py --dry-run=client -o yaml | kubectl apply -f -
+	@set -e; rc=0; for p in spark-jobs:s3-credentials landing-writer:landing-writer-credentials; do \
+	  prof=$${p%%:*}; sec=$${p#*:}; \
+	  kubectl -n spark-jobs delete pod s3-access-test-$$prof --ignore-not-found >/dev/null; \
+	  sed -e "s|__PROFILE__|$$prof|g" -e "s|__SECRET__|$$sec|" -e 's|__IMAGE__|$(JOB_IMAGE)|' tests/k8s/s3-access-test-pod.yaml | kubectl apply -f - >/dev/null; \
+	  kubectl -n spark-jobs wait --for=jsonpath='{.status.phase}'=Succeeded pod/s3-access-test-$$prof --timeout=120s >/dev/null || rc=1; \
+	  kubectl -n spark-jobs logs s3-access-test-$$prof; kubectl -n spark-jobs delete pod s3-access-test-$$prof --wait=false >/dev/null; \
+	done; exit $$rc
 k8s-job-image: ## Task 2 FALLBACK (G6, CI blocked): build locally + load; then make sparkapp JOB_IMAGE=<LOCAL_JOB_IMAGE>
 	@git diff --quiet HEAD -- $(JOB_SRC) || { echo "commit $(JOB_SRC) first: the image tag is their last commit"; exit 1; }
 	docker build -f docker/spark-job/Dockerfile --build-context tests=tests -t $(LOCAL_JOB_IMAGE) jobs/

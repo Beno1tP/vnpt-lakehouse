@@ -72,10 +72,8 @@ spec:
             - { name: DB_DRIVER, value: postgres }
             - { name: IS_RESUME, value: "true" }        # entrypoint never inits; the initContainer does (E07, E19)
             - { name: SERVICE_OPTS, value: "-Xmx768m" }  # no credentials here (the entrypoint prints it with set -x)
-            - name: AWS_ACCESS_KEY_ID                    # S3A EnvironmentVariableCredentialsProvider (phase 2: per-service key)
-              valueFrom: { secretKeyRef: { name: minio-credentials, key: MINIO_ROOT_USER } }
-            - name: AWS_SECRET_ACCESS_KEY
-              valueFrom: { secretKeyRef: { name: minio-credentials, key: MINIO_ROOT_PASSWORD } }
+          envFrom:                                       # MinIO user hive-metastore (2.1b): rw lakehouse only
+            - secretRef: { name: hms-s3-credentials }     # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY for S3A
           ports: [{ name: thrift, containerPort: 9083 }]
           readinessProbe:
             tcpSocket: { port: 9083 }

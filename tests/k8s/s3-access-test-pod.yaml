@@ -1,0 +1,24 @@
+# Step 2.1b: runs tests/k8s/s3_access_check.py with ONE service user's keys. Filled and applied by `make s3-access-test`.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: s3-access-test-__PROFILE__
+  namespace: spark-jobs
+spec:
+  restartPolicy: Never
+  activeDeadlineSeconds: 300
+  imagePullSecrets: [{ name: ghcr-pull }]
+  containers:
+    - name: check
+      image: __IMAGE__
+      imagePullPolicy: IfNotPresent
+      command: ["python3", "/check/s3_access_check.py", "__PROFILE__"]
+      env:
+        - { name: S3_ENDPOINT, value: "minio.lake.svc.cluster.local:9000" }
+      envFrom:
+        - secretRef: { name: __SECRET__ }
+      resources: { requests: { memory: 128Mi, cpu: 100m }, limits: { memory: 512Mi } }
+      volumeMounts: [{ name: check, mountPath: /check, readOnly: true }]
+  volumes:
+    - name: check
+      configMap: { name: s3-access-check }

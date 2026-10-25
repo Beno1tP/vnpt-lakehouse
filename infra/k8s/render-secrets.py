@@ -20,6 +20,10 @@ GENERATED = {
     "AIRFLOW_FERNET_KEY": lambda: base64.urlsafe_b64encode(os.urandom(32)).decode(),
     "AIRFLOW_API_SECRET_KEY": lambda: secrets.token_hex(32),
     "AIRFLOW_JWT_SECRET": lambda: secrets.token_hex(32),
+    # MinIO service users (step 2.1b): spark-jobs, landing-writer, hive-metastore
+    "MINIO_SPARK_JOBS_SECRET": lambda: secrets.token_hex(24),
+    "MINIO_LANDING_WRITER_SECRET": lambda: secrets.token_hex(24),
+    "MINIO_HMS_SECRET": lambda: secrets.token_hex(24),
 }
 
 
@@ -61,9 +65,15 @@ def main():
     write_private("postgres.env", "".join(f"{k}={env[k]}\n" for k in ("PG_USER", "PG_PASSWORD", "AIRFLOW_DB_PASSWORD")))
     # MinIO root credentials (server, bucket-init, and S3 clients until per-service keys exist)
     write_private("minio.env", "".join(f"{k}={env[k]}\n" for k in ("MINIO_ROOT_USER", "MINIO_ROOT_PASSWORD")))
-    # S3 client keys for Spark jobs / landing simulator in spark-jobs (AWS SDK env names; MinIO root until phase 2)
-    write_private("s3.env", f"AWS_ACCESS_KEY_ID={env['MINIO_ROOT_USER']}\n"
-                            f"AWS_SECRET_ACCESS_KEY={env['MINIO_ROOT_PASSWORD']}\n")
+    # MinIO service users (step 2.1b): passwords for the minio-users Job, and per-consumer S3 keys (AWS SDK env names)
+    users = ("MINIO_SPARK_JOBS_SECRET", "MINIO_LANDING_WRITER_SECRET", "MINIO_HMS_SECRET")
+    write_private("minio-service-users.env", "".join(f"{k}={env[k]}\n" for k in users))
+
+    def s3_keys(user, secret_key):
+        return f"AWS_ACCESS_KEY_ID={user}\nAWS_SECRET_ACCESS_KEY={env[secret_key]}\n"
+    write_private("s3.env", s3_keys("spark-jobs", "MINIO_SPARK_JOBS_SECRET"))           # r landing, rw lakehouse
+    write_private("landing-writer.env", s3_keys("landing-writer", "MINIO_LANDING_WRITER_SECRET"))  # rw landing
+    write_private("hms-s3.env", s3_keys("hive-metastore", "MINIO_HMS_SECRET"))         # rw lakehouse
     # Airflow (namespace airflow): metadata DB connection + keys, one file per Secret the Helm chart expects
     pw = urllib.parse.quote(env["AIRFLOW_DB_PASSWORD"], safe="")
     write_private("airflow-metadata.env",

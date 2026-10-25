@@ -44,7 +44,7 @@ Python 3.11 · Spark 3.5.9 (Scala 2.12, Java 17) · Iceberg 1.11.0 runtime, form
 - Minikube `--driver=docker --kubernetes-version=v1.37.0 --memory=8192 --cpus=6 --extra-config=kubelet.system-reserved=memory=3686Mi` (E25: kubelet sees 10.7 GiB host RAM, cap is 8 GiB → Allocatable 7268 Mi); node runtime containerd (use `crictl`, not docker, inside the node); Docker Desktop + Ubuntu share the 10 GiB WSL VM: stop the Task 1 stack while Task 2 runs; requests must fit node Allocatable.
 - Minikube has its own image store (inside docker_data.vhdx); images come from GHCR (`imagePullPolicy: IfNotPresent`, SHA tags/digests, never `latest`); local build + `minikube image load` only as fallback. `minikube delete` destroys PVC data.
 - Namespaces: lake (postgres, minio, hive-metastore), spark-operator, spark-jobs, airflow. Cross-namespace DNS: `<svc>.<ns>.svc.cluster.local`.
-- Secrets from git-ignored `infra/k8s/secrets.env` (kustomize secretGenerator) and rendered `infra/k8s/secrets/hive-site.xml`; mounted as files.
+- Secrets from git-ignored `infra/k8s/secrets.env` (kustomize secretGenerator) and rendered `infra/k8s/secrets/hive-site.xml`; mounted as files. MinIO root keys only for MinIO, bucket-init, minio-users; consumers use service users (2.1b): spark-jobs (`s3-credentials`), landing-writer, hive-metastore.
 - Spark Operator **webhook stays on** (it applies volumes, env, ConfigMaps to driver/executor pods).
 - One retry layer: Airflow retries; SparkApplication `restartPolicy: Never`; validation `retries=0`.
 - Airflow 3: daily intervals via `timedelta(days=1)` or `CronDataIntervalTimetable`, not a bare cron string. Day = date as written in `CREATED_TIME`; daily runs 2024-07-02 → 07-25 (D2 = A): 18 days load, 6 days without a landing file are skipped.
