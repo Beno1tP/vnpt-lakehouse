@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-10-25 — 2.2b landing applied; 2.2c prepared
+Did (Bee): `make k8s-secrets` (now also s3.env), `kubectl apply -k` (secret/s3-credentials created), `make landing`; listing pod.
+Observed: 36 `[landing] … OK` lines, 21,224 / 10,729 written = read, 18 days each, pod deleted by the trap; listing: **36 files, 4,057,683 bytes** in `s3://landing`.
+Prepared (Claude): `bronze_ingest.py --source` (default = Task 1 folder; `s3://landing` → `<table>/dt=<date>/<file>` via pyarrow, `_source_file` = full S3 path; Task 1 code path unchanged); `docker/spark-job/Dockerfile` (FROM thin Spark image + `jobs/*.py`, build context `jobs/` only so secrets never reach the builder); `make k8s-job-image` (tag = last commit of jobs/, refuses uncommitted jobs/, docker build → minikube image load → delete tar cache); `infra/k8s/spark-jobs/bronze-sparkapp.yaml` (driver 1g + 1g overhead, 1 executor 768m + 384m, `restartPolicy: Never`, TTL 1 day, sparkConf = Task 1 spark-defaults with FQDNs, envFrom s3-credentials); `make sparkapp DATE=` (delete old app → apply → poll state → driver `[bronze]` lines → exit non-zero unless COMPLETED). Server dry-run of the SparkApplication accepted.
+
 ### 2026-10-25 — 2.2b prepared: landing simulator (Claude)
 Did: `jobs/landing_simulator.py` (pandas split by the date written in `CREATED_TIME`, one xlsx per day and table, sheet name kept, replaces the table's landing prefix → idempotent, optional `--expected` check); `infra/k8s/spark-jobs/landing-simulator-pod.yaml` (one-off pod, Spark image, 30 min deadline); `make landing` (apply pod → `kubectl cp` files → exec → delete pod via trap); secret `s3-credentials` in spark-jobs with a **stable name** (`disableNameSuffixHash`: SparkApplications/Airflow templates reference it from outside kustomize); renderer writes `secrets/s3.env`.
 Observed (local test in the Spark image, `--network none`, output to scratch): 18 days per table, **every day = `bronze_daily.json`** (pandas split agrees with the Spark SQL counts: two engines), 21,224 / 10,729 written = read; round trip (read all daily files back, sort by ID) → columns and all cells **identical** to the source; 36 files, 4.1 MB. Test output removed.
