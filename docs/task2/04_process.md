@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-10-25 — 2.2a Spark Operator 2.2.1 installed
+Did (Bee): `helm repo add spark-operator https://kubeflow.github.io/spark-operator`; `helm upgrade --install … --version 2.2.1 -f infra/helm/spark-operator/values-local.yaml --wait`.
+Observed (Claude, read-only): release `deployed`, chart spark-operator-2.2.1; controller + webhook Running (image `ghcr.io/kubeflow/spark-operator/controller:2.2.1`, 10 Mi / 13 Mi); CRDs sparkapplications + scheduledsparkapplications (v1beta2); SA/Role/RoleBinding `spark-operator-spark` in spark-jobs; `auth can-i create pods` → yes; mutating webhook `spark-operator-webhook` (3 webhooks); no errors in controller log. Node requests 1892 Mi of 7268 (26 %), limits 3036 Mi. Disk: node volume 6.833 → 8.596 GB (+1.76 GB since 2.0e: Postgres, MinIO, busybox, operator images + PV data).
+
 ### 2026-10-25 — 2.1 done: HMS restart + cross-namespace test; 2.2 prepared
 Did (Bee): applied E28 fix (HMS restarted); busybox `net-test` pod in `spark-jobs`.
 Observed: second start → `HMS schema 3.1.0 exists, nothing to do` (no .beeline warning); bucket-init re-created after its TTL and reran. From `spark-jobs`: `hive-metastore.lake.svc.cluster.local` → 10.97.127.92 (= Service ClusterIP), `thrift 9083: open`, MinIO `/minio/health/ready` → `HTTP/1.1 200 OK`. Read-only (Claude): Postgres `VERSION` = 3.1.0, 74 HMS tables; 0 exceptions in HMS log; top: HMS 408 Mi, MinIO 64 Mi, Postgres 69 Mi. **Step 2.1 done.**
