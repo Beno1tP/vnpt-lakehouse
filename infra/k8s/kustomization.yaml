@@ -17,6 +17,10 @@ secretGenerator:                       # from files rendered by `make k8s-secret
   - name: hms-hive-site
     namespace: lake
     files: [secrets/hive-site.xml]
+  - name: s3-credentials                # referenced by SparkApplications and Airflow templates outside kustomize,
+    namespace: spark-jobs               # so the name must stay stable (no hash suffix)
+    envs: [secrets/s3.env]
+    options: { disableNameSuffixHash: true }
 configMapGenerator:
   - name: postgres-initdb
     namespace: lake

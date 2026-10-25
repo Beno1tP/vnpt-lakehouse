@@ -43,6 +43,8 @@ def main():
     write_private("postgres.env", "".join(f"{k}={env[k]}\n" for k in ("PG_USER", "PG_PASSWORD", "AIRFLOW_DB_PASSWORD")))
     # MinIO root credentials (server, bucket-init, and S3 clients until per-service keys exist)
     write_private("minio.env", "".join(f"{k}={env[k]}\n" for k in ("MINIO_ROOT_USER", "MINIO_ROOT_PASSWORD")))
+    # S3 client keys for Spark jobs / landing simulator in spark-jobs (AWS SDK env names; MinIO root until phase 2)
+    write_private("s3.env", f"AWS_ACCESS_KEY_ID={env['MINIO_ROOT_USER']}\nAWS_SECRET_ACCESS_KEY={env['MINIO_ROOT_PASSWORD']}\n")
     # HMS JDBC settings as a file (never in SERVICE_OPTS: the entrypoint prints it with set -x)
     props = {
         "javax.jdo.option.ConnectionDriverName": "org.postgresql.Driver",

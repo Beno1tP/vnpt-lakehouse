@@ -1,0 +1,30 @@
+# Task 2 step 2.2b: one-off pod that plays the source system (jobs/landing_simulator.py). Not in kustomization:
+# `make landing` creates it, copies the Excel files in with kubectl cp, runs the script, deletes the pod.
+# The raw data goes laptop -> pod memory/emptyDir -> MinIO inside Minikube; it never leaves the laptop.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: landing-simulator
+  namespace: spark-jobs
+spec:
+  restartPolicy: Never
+  activeDeadlineSeconds: 1800                # safety net: the pod ends after 30 min even if never deleted
+  securityContext:
+    fsGroup: 185                             # uid/gid "spark" (lesson E27)
+  containers:
+    - name: simulator
+      image: vnpt-lake-spark:3.5.9-iceberg1.11.0-r1
+      imagePullPolicy: Never
+      command: ["sleep", "1800"]             # idle until `kubectl exec` runs the script
+      env:
+        - { name: S3_ENDPOINT, value: "minio.lake.svc.cluster.local:9000" }
+      envFrom:
+        - secretRef: { name: s3-credentials }  # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (stable name, see kustomization)
+      resources:
+        requests: { memory: 512Mi, cpu: 200m }
+        limits:   { memory: 1Gi }
+      volumeMounts:
+        - { name: work, mountPath: /work }
+  volumes:
+    - name: work
+      emptyDir: { sizeLimit: 256Mi }

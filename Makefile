@@ -11,13 +11,14 @@ SPARK_MASTER        ?= local[2]
 SPARK_DRIVER_MEMORY ?= 2g
 VALIDATE_ARGS       ?=
 K8S_ENV_FILE        ?= infra/k8s/secrets.env
+K8S_RAW_DIR         ?= $(HOME)/data/vnpt-lab
 
 COMPOSE      = docker compose -f infra/compose/docker-compose.yml --env-file $(ENV_FILE)
 SPARK_SUBMIT = $(COMPOSE) exec -T spark /opt/spark/bin/spark-submit --master $(SPARK_MASTER) --driver-memory $(SPARK_DRIVER_MEMORY)
 SPARK_SQL    = $(COMPOSE) exec -T spark /opt/spark/bin/spark-sql --master local[1]
 NOISE        = ^Time taken|^:: loading settings
 
-.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets
+.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing
 
 help:          ## list targets and variables
 	@awk -F':.*## ' '/^[a-zA-Z_-]+:.*## /{printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -65,3 +66,11 @@ acceptance-from-zero: ## DESTRUCTIVE: clean -> up -> acceptance (needs CONFIRM=y
 # ---- Task 2 (Minikube) ----
 k8s-secrets:   ## Task 2: render K8s secret files from K8S_ENV_FILE into infra/k8s/secrets/ (mode 600)
 	python3 -I infra/k8s/render-secrets.py $(K8S_ENV_FILE)
+landing:       ## Task 2: split the Excel files by day -> s3://landing/<table>/dt=YYYY-MM-DD/ (one-off pod, deleted after)
+	kubectl apply -f infra/k8s/spark-jobs/landing-simulator-pod.yaml
+	kubectl -n spark-jobs wait --for=condition=Ready pod/landing-simulator --timeout=120s
+	set -e; trap 'kubectl -n spark-jobs delete pod landing-simulator --wait=false' EXIT; \
+	for f in bot_dvc_hcm.xlsx bot_ddvc_hcm_bot_predict.xlsx; do kubectl -n spark-jobs cp $(K8S_RAW_DIR)/$$f landing-simulator:/work/$$f; done; \
+	kubectl -n spark-jobs cp jobs/landing_simulator.py landing-simulator:/work/landing_simulator.py; \
+	kubectl -n spark-jobs cp tests/expected/bronze_daily.json landing-simulator:/work/bronze_daily.json; \
+	kubectl -n spark-jobs exec landing-simulator -- python3 /work/landing_simulator.py --src /work --dest s3://landing --expected /work/bronze_daily.json

@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-10-25 — 2.2b prepared: landing simulator (Claude)
+Did: `jobs/landing_simulator.py` (pandas split by the date written in `CREATED_TIME`, one xlsx per day and table, sheet name kept, replaces the table's landing prefix → idempotent, optional `--expected` check); `infra/k8s/spark-jobs/landing-simulator-pod.yaml` (one-off pod, Spark image, 30 min deadline); `make landing` (apply pod → `kubectl cp` files → exec → delete pod via trap); secret `s3-credentials` in spark-jobs with a **stable name** (`disableNameSuffixHash`: SparkApplications/Airflow templates reference it from outside kustomize); renderer writes `secrets/s3.env`.
+Observed (local test in the Spark image, `--network none`, output to scratch): 18 days per table, **every day = `bronze_daily.json`** (pandas split agrees with the Spark SQL counts: two engines), 21,224 / 10,729 written = read; round trip (read all daily files back, sort by ID) → columns and all cells **identical** to the source; 36 files, 4.1 MB. Test output removed.
+
 ### 2026-10-25 — 2.2a Spark Operator 2.2.1 installed
 Did (Bee): `helm repo add spark-operator https://kubeflow.github.io/spark-operator`; `helm upgrade --install … --version 2.2.1 -f infra/helm/spark-operator/values-local.yaml --wait`.
 Observed (Claude, read-only): release `deployed`, chart spark-operator-2.2.1; controller + webhook Running (image `ghcr.io/kubeflow/spark-operator/controller:2.2.1`, 10 Mi / 13 Mi); CRDs sparkapplications + scheduledsparkapplications (v1beta2); SA/Role/RoleBinding `spark-operator-spark` in spark-jobs; `auth can-i create pods` → yes; mutating webhook `spark-operator-webhook` (3 webhooks); no errors in controller log. Node requests 1892 Mi of 7268 (26 %), limits 3036 Mi. Disk: node volume 6.833 → 8.596 GB (+1.76 GB since 2.0e: Postgres, MinIO, busybox, operator images + PV data).
