@@ -14,6 +14,9 @@ Time spent:
 
 ---
 
+### 2026-10-25 — 2.4b PR #9 merged; Airflow digest promoted (PR #10)
+Did (Bee): PR #9 4/4 green (DAG integrity imported chatbot_bronze inside the 3.3.2 image), merged (main `d107f0e`); images run 40207562055: airflow `d107f0e` → `sha256:20b2929d…7c07` (spark-job rebuilt with unchanged code → not promoted).
+
 ### 2026-10-25 — 2.4a done (23/23 ×3 days); 2.4b DAG prepared on branch `task2/dag`
 Did (Bee): PR #8 merged (main `821f981`); validate 2024-07-02 / 07-24 / 07-25 with the new image: **23/23 each** (10 reconciliation + 13 rules), incl. `event_day_matches_partition` = 0 and `unmatched_to_chat` = 116 on 07-25. **Step 2.4a done.**
 Checked (provider cncf.kubernetes 10.22.0 source): SparkKubernetesOperator `random_name_suffix=True` by default → each try gets a new name (no `AlreadyExists`, review item A4 closed); `application_file` is Jinja-rendered (`template_ext` yaml); `delete_on_termination=True` deletes the app after streaming the driver log; `reattach_on_restart` finds the driver by labels (needs pods get/list/patch).
