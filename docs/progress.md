@@ -59,7 +59,7 @@ The deadline is tight for "learn K8s + 8 tools". **Learn K8s just-in-time while 
 | Task | Scope | Docs | Status |
 |---|---|---|---|
 | 1 | MinIO + Spark → Iceberg (Docker Compose) | `docs/task1/` | ✅ 10-18 (Bronze validated, idempotent, from-zero tested, failure drills, README); presented 10-23; Silver deferred (Bronze only for now) |
-| 2 | Minikube + Airflow running the Spark job | `docs/task2/` | 🟡 10-25 plan reviewed (operator 2.2.1, chart 1.22.0 + Airflow 3.3.2, minikube v1.39.0/K8s v1.37.0); decisions D1–D3 open |
+| 2 | Minikube + Airflow running the Spark job | `docs/task2/` | 🟡 10-25 plan reviewed (operator 2.2.1, chart 1.22.0 + Airflow 3.3.2, minikube v1.39.0/K8s v1.37.0); D1 chart 1.22.0 + Airflow 3.3.2, D2 = A (daily 07-02→07-25, 6 skipped), D3 Spark-only expected counts |
 | 3 | Trino querying Iceberg | `docs/task3/` | ⬜ |
 | 4 | StarRocks Gold via SQL/dbt | `docs/task4/` | ⬜ |
 | 5 | Superset dashboard UC4–UC8 | `docs/task5/` | ⬜ |

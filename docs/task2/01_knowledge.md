@@ -89,4 +89,4 @@ To make daily runs and backfill meaningful, a one-off **landing simulator** scri
 **[review] Semantics to fix before coding:**
 - Bronze `_ingest_date` = the run's day = the landing `dt=` (in Task 1 it was one load date for the whole file).
 - `bot_predict` rows are split by **their own** `CREATED_TIME`; the 116 predict rows without a chat row stay in their day. Per-day expected counts must be computed the same way.
-- Days without data (6 of the 24 calendar days 07-02 → 07-25; decision D2 open): decide whether `check_landing` **skips** the run (`AirflowSkipException`, downstream skipped) or the simulator writes an empty file and the run loads 0 rows. Recommendation: skip — an empty export is not the same as a missing export.
+- Days without data (6 of the 24 calendar days 07-02 → 07-25): **decided (D2 = A): skip.** Options were whether `check_landing` **skips** the run (`AirflowSkipException`, downstream skipped) or the simulator writes an empty file and the run loads 0 rows. Recommendation: skip — an empty export is not the same as a missing export.
