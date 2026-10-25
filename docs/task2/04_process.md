@@ -14,6 +14,9 @@ Time spent:
 
 ---
 
+### 2026-10-25 — 2.4a PR #7 merged; spark-job digest promoted (PR #8)
+Did (Bee): PR #7 4/4 green, merged (main `efa10a8`); images run 40203340278: spark-job `efa10a8` → `sha256:f56c2321…88cd` (airflow also rebuilt, DAGs unchanged → its digest is not promoted).
+
 ### 2026-10-25 — 2.3 done (E37 fixed); 2.4a prepared: day-generic DQ rules
 Did (Bee): PR #6 merged (main `52d11b3`), `make airflow-install` → revision 3 (hostname_callable), manual trigger `--logical-date 2024-07-03`.
 Observed: UI log view works (`http://10.244.0.63:8793/log/…` = pod IP). `[hello] ds=2024-07-03 interval=[2026-10-25 14:23:28.535927+00:00, 2026-10-25 14:23:28.535927+00:00)` → **manual runs: ds = logical date, data interval = [trigger time, trigger time)** → the DAG must take the day from `ds` (01_knowledge A3). **Step 2.3 done.**
