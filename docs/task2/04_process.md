@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-10-25 — 2.4b deployed; first chatbot_bronze runs (in progress)
+Did (Bee): `make k8s-secrets` (MINIO_AIRFLOW_LANDING_SECRET + airflow-connections.env), deleted + re-applied the minio-users Job, `kubectl apply -k`, `make airflow-install` (revision 4), unpause + trigger 2024-07-02 and 2024-07-07; PR #10 merged (main `1e652df`).
+Observed: Role + RoleBinding created; Job: `user airflow-landing: policy lake-landing-reader`; `auth can-i create sparkapplications` → **yes**, `can-i list secrets` → **no**; `chatbot_bronze` and `hello_lake` listed; Variable `spark_job_image` = spark-job `f56c2321…`. Scheduled run created on unpause: `scheduled__2026-10-25T16:29:09…`, **logical_date = run_after = 2026-10-25T16:29:09** (not midnight, not the interval start) → success (skipped: no export). Manual runs: logical_date 2024-07-02 / 07-07, data interval = [trigger time, trigger time).
+Finding for 2.5: with `timedelta(days=1)` + catchup False, scheduled intervals start at the unpause time (16:29), and Airflow 3 sets the scheduled run's logical date to its run_after → `ds` of a scheduled run is the day the interval ENDS. Decide before the backfill: align to midnight (`CronDataIntervalTimetable("0 0 * * *", "UTC")`) and take the day from data_interval_start for scheduled/backfill runs.
+
 ### 2026-10-25 — 2.4b PR #9 merged; Airflow digest promoted (PR #10)
 Did (Bee): PR #9 4/4 green (DAG integrity imported chatbot_bronze inside the 3.3.2 image), merged (main `d107f0e`); images run 40207562055: airflow `d107f0e` → `sha256:20b2929d…7c07` (spark-job rebuilt with unchanged code → not promoted).
 
