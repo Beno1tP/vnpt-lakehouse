@@ -28,7 +28,7 @@ SPARK_SUBMIT = $(COMPOSE) exec -T spark /opt/spark/bin/spark-submit --master $(S
 SPARK_SQL    = $(COMPOSE) exec -T spark /opt/spark/bin/spark-sql --master local[1]
 NOISE        = ^Time taken|^:: loading settings
 
-.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart airflow-install airflow-ui
+.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart airflow-install airflow-admin airflow-ui
 
 help:          ## list targets and variables
 	@awk -F':.*## ' '/^[a-zA-Z0-9_-]+:.*## /{printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -118,7 +118,12 @@ airflow-install: airflow-chart ## Task 2: helm upgrade --install Airflow 3.3.2 (
 	helm upgrade --install airflow $(AIRFLOW_CHART) -n airflow \
 	  -f infra/helm/airflow/values-local.yaml \
 	  --set images.airflow.digest=$(lastword $(subst @, ,$(AIRFLOW_IMAGE_REF))) \
-	  --set-file createUserJob.defaultUser.password=infra/k8s/secrets/airflow-admin-password \
 	  --wait --timeout 15m
+airflow-admin: ## Task 2: (re)create the Airflow UI user admin with the password from infra/k8s/secrets/airflow-admin-password
+	@test -s infra/k8s/secrets/airflow-admin-password || { echo "run make k8s-secrets first"; exit 1; }
+	-@kubectl -n airflow exec deploy/airflow-scheduler -c scheduler -- airflow users delete --username admin >/dev/null 2>&1
+	@kubectl -n airflow exec deploy/airflow-scheduler -c scheduler -- airflow users create --username admin --role Admin \
+	  --firstname admin --lastname lab --email admin@lab.local --password "$$(cat infra/k8s/secrets/airflow-admin-password)" \
+	  | grep -v -i password
 airflow-ui:    ## Task 2: open the Airflow UI on http://localhost:8080 (Ctrl+C to stop)
 	kubectl -n airflow port-forward svc/airflow-api-server 8080:8080

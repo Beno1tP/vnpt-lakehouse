@@ -14,6 +14,20 @@ Time spent:
 
 ---
 
+### 2026-10-25 — 2.3c password rotated, admin outside Helm; E37 task logs
+Did (Bee): new admin password (`read -rs`), `make k8s-secrets`, `make airflow-install` (from this branch) → revision 2 (no credentials in NOTES, no deprecation warnings), `make airflow-admin` → `User "admin" created`, `helm get values | grep -c password` → 0. UI login OK; `hello_lake` ran (a scheduled run `scheduled__2026-10-25T14:13:01…`: catchup=False + unpaused).
+Observed: UI log view failed (E37: scheduler pod hostname not resolvable). Fix: `hostname_callable` → pod IP (same PR #6).
+
+### 2026-10-25 — 2.3b Airflow installed (E35, E36)
+Did (Bee): PR #5 checks 4/4 green; `make airflow-install` (chart from the CDN, SHA-512 OK; volume before 8.79 GB).
+Observed: `STATUS: deployed`, Airflow 3.3.2, revision 1. **E35:** the chart NOTES printed the admin password (it came from `--set-file createUserJob.defaultUser.password`) → password must be rotated. E36: 3 deprecation warnings.
+Prepared (Claude, branch `task2/airflow-admin`): `createUserJob.enabled: false`, `make airflow-admin` (user created inside the scheduler pod from the secret file), deprecated key removed, `enableServiceLinks: false`, `recommendedProbeSetting: true`. `helm template` renders 4 Deployments + 1 Job (migrations), no create-user Job.
+
+### 2026-10-25 — 2.3a PR #4 merged (Airflow image), digests promoted (PR #5)
+Did (Bee): PR #4: first run red (E34, Airflow 2 `DagBag(include_examples=…)`), fixed, 4/4 green incl. the new DAG integrity check inside the 3.3.2 image; merged (main `a226c4f`); images run 40199225449 success.
+Digests: spark `aee0deb9…` and hms `9446f7d1…` (`built=false`); spark-job `a226c4f` → `sha256:4e873c12…388e1f`; **airflow `a226c4f` → `sha256:6fbd3133…25d5a4`**.
+Prepared (Claude, branch `task2/airflow-deploy`): `images.env` gets `AIRFLOW_IMAGE_REF` and the new spark-job digest — promotion of built images to "deployed" happens only through a reviewed PR.
+
 ### 2026-10-25 — 2.1b applied (PR #3); 2.3 Airflow image prepared on branch `task2/airflow-image`
 Did (Bee): PR #3 3/3 green, merged (main `2a616ed`); `make k8s-secrets` (3 MinIO user passwords generated once), `kubectl apply -k`, minio-users Job, HMS rollout, `make s3-access-test`, bronze + validate 2024-07-02, `make landing`.
 Observed: Job: 3 policies created, users `spark-jobs`/`landing-writer`/`hive-metastore` attached; **s3-access-test 4/4 + 4/4** (spark-jobs: write landing **denied**, create bucket **denied**; landing-writer: lakehouse **denied**); bronze 12/12, 6/6 and validate **10/10** with the spark-jobs user; landing 36 OK with landing-writer; HMS restarted on its own user. Airflow Secrets showed `configured` (re-render; Airflow not installed yet). **Step 2.1b done.**
