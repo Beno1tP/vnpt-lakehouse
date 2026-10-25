@@ -51,3 +51,11 @@ def test_expected_for_day_shape():
 def test_expected_for_empty_day_exits():
     with pytest.raises(SystemExit):
         vb.expected_for_day(DAILY, "2024-07-07")
+
+
+def test_rules_file_parses_and_targets_one_partition():
+    rules = vb.load_checks(str(ROOT / "tests/sql/bronze_rules.sql"), marker="rule")
+    assert len(rules) == 13
+    assert {n.split(".", 1)[0] for n in rules} == {"chatlog", "bot_predict", "both"}
+    assert all("${ingest_date}" in sql for sql in rules.values())
+    assert not vb.load_checks(str(ROOT / "tests/sql/bronze_rules.sql"))        # no '-- check:' blocks mixed in

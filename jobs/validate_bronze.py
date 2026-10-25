@@ -21,13 +21,13 @@ import sys
 TABLES = ("chatlog", "bot_predict")
 
 
-def load_checks(path: str) -> dict[str, str]:
-    """Parse '-- check: <name>' blocks into {name: sql}; other comment lines are ignored."""
+def load_checks(path: str, marker: str = "check") -> dict[str, str]:
+    """Parse '-- <marker>: <name>' blocks into {name: sql}; other comment lines are ignored."""
     checks: dict[str, str] = {}
     name, lines = None, []
     with open(path) as f:
         for line in f:
-            m = re.match(r"\s*--\s*check:\s*(\S+)", line)
+            m = re.match(rf"\s*--\s*{marker}:\s*(\S+)", line)
             if m:
                 if name:
                     checks[name] = "".join(lines).strip().rstrip(";")
@@ -59,6 +59,7 @@ def main() -> None:
     ap.add_argument("--ingest-date", required=True, help="YYYY-MM-DD; the partition to check")
     ap.add_argument("--expected", required=True)
     ap.add_argument("--sql", required=True)
+    ap.add_argument("--rules", help="SQL file of '-- rule:' blocks returning violation counts (each must be 0)")
     ap.add_argument("--check-idempotency", action="store_true",
                     help="also assert the latest snapshot replaced exactly one batch (run after a reload)")
     args = ap.parse_args()
@@ -87,6 +88,11 @@ def main() -> None:
             continue
         actual = spark.sql(sql.replace("${ingest_date}", args.ingest_date)).collect()[0][0]
         check(name, actual, expected[table][key])
+
+    if args.rules:                                   # day-generic data-quality rules (gap #6): violations must be 0
+        for name, sql in load_checks(args.rules, marker="rule").items():
+            violations = spark.sql(sql.replace("${ingest_date}", args.ingest_date)).collect()[0][0]
+            check(f"rule {name}", violations, 0)
 
     for table in TABLES:
         check(f"{table}.columns", len(spark.table(f"lake.bronze.{table}").columns), expected[table]["columns"])

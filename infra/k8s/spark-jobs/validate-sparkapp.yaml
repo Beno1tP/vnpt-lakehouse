@@ -16,7 +16,7 @@ spec:
   imagePullSecrets: [ghcr-pull]                # private GHCR package (2.0c)
   mainApplicationFile: local:///opt/jobs/validate_bronze.py
   arguments: ["--ingest-date", "__DATE__", "--expected", "/opt/tests/expected/bronze_daily.json",
-              "--sql", "/opt/tests/sql/bronze_checks.sql"__EXTRA_ARGS__]
+              "--sql", "/opt/tests/sql/bronze_checks.sql", "--rules", "/opt/tests/sql/bronze_rules.sql"__EXTRA_ARGS__]
   restartPolicy: { type: Never }               # a wrong number is deterministic: no retry anywhere
   timeToLiveSeconds: 86400                     # the operator deletes the app (and its driver pod) after 1 day
   sparkConf:                                   # = infra/compose/spark/spark-defaults.conf with cluster DNS names

@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-10-25 — 2.3 done (E37 fixed); 2.4a prepared: day-generic DQ rules
+Did (Bee): PR #6 merged (main `52d11b3`), `make airflow-install` → revision 3 (hostname_callable), manual trigger `--logical-date 2024-07-03`.
+Observed: UI log view works (`http://10.244.0.63:8793/log/…` = pod IP). `[hello] ds=2024-07-03 interval=[2026-10-25 14:23:28.535927+00:00, 2026-10-25 14:23:28.535927+00:00)` → **manual runs: ds = logical date, data interval = [trigger time, trigger time)** → the DAG must take the day from `ds` (01_knowledge A3). **Step 2.3 done.**
+Prepared (Claude, branch `task2/dq-rules`): `tests/sql/bronze_rules.sql` — 13 rules that return violation counts (expected 0) for any day: partition not empty, ID not null + unique, SOURCE ∈ {client, bot}, CREATED_TIME parseable, event day = partition (new with the daily split), ID_CHATLOG not null, one batch for both tables; validator `--rules`; validate SparkApplication passes it; unit test.
+
 ### 2026-10-25 — 2.3c password rotated, admin outside Helm; E37 task logs
 Did (Bee): new admin password (`read -rs`), `make k8s-secrets`, `make airflow-install` (from this branch) → revision 2 (no credentials in NOTES, no deprecation warnings), `make airflow-admin` → `User "admin" created`, `helm get values | grep -c password` → 0. UI login OK; `hello_lake` ran (a scheduled run `scheduled__2026-10-25T14:13:01…`: catchup=False + unpaused).
 Observed: UI log view failed (E37: scheduler pod hostname not resolvable). Fix: `hostname_callable` → pod IP (same PR #6).
