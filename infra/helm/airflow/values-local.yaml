@@ -1,12 +1,21 @@
 # Apache Airflow chart 1.22.0 with Airflow 3.3.2 (decision D1: the chart only branches on >=3.0.0, docs/task2/02_config.md).
 # Install: make airflow-install   (admin password passed with --set-file from infra/k8s/secrets/, never stored in Git)
-# Image: official apache/airflow pulled by digest straight into Minikube (no custom build: providers cncf.kubernetes
-# 10.22.0, fab 3.9.0, postgres 7.0.2 come from the 3.3.2 constraints). DAGs: ConfigMap airflow-dags (make airflow-dags).
+# Image (D5): ghcr.io/beno1tp/vnpt-lake-airflow = apache/airflow:3.3.2-python3.12 + dags/ baked in, built by CI.
+# The digest is NOT in this file: make airflow-install passes AIRFLOW_IMAGE_REF from infra/k8s/images.env
+# (--set images.airflow.digest), so images.env stays the single record of what is deployed.
 
 airflowVersion: "3.3.2"
+# containers that do not need our code (chart helper "default_airflow_image") use the official base; same layers as
+# our image (FROM it), so no extra download
 defaultAirflowRepository: apache/airflow
 defaultAirflowTag: "3.3.2-python3.12"
 defaultAirflowDigest: sha256:9df9c8be4096b9cc626bd7cb1f2b8c712eef66c59c615f8c7e6200871ca10bd1
+images:
+  airflow:
+    repository: ghcr.io/beno1tp/vnpt-lake-airflow
+    tag: ~                          # digest only (set by make)
+    pullPolicy: IfNotPresent
+imagePullSecrets: [ghcr-pull]       # private GHCR package, token read:packages only (2.0c); `registry:` is deprecated
 
 executor: LocalExecutor             # tasks run inside the scheduler pod; heavy work runs in Spark pods
 
@@ -44,13 +53,6 @@ config:
     load_examples: "False"
     parallelism: 4                  # max concurrent task processes in the scheduler pod (RAM)
     default_timezone: utc
-
-# DAG files from ConfigMap airflow-dags, mounted on every Airflow pod (dag-processor parses, scheduler runs tasks)
-volumes:
-  - name: dags
-    configMap: { name: airflow-dags }
-volumeMounts:
-  - { name: dags, mountPath: /opt/airflow/dags, readOnly: true }
 
 apiServer:
   resources: { requests: { memory: 512Mi, cpu: 200m }, limits: { memory: 1Gi } }
