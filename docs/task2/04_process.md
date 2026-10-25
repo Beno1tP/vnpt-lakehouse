@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-10-25 — 2.2c-A Task 1 regression after the bronze_ingest.py change
+Did (Bee): `make up && make acceptance DATE=2026-10-16`; `make down` (Minikube kept running alongside).
+Observed: `[smoke] OK`; bronze 21,224 / 10,729; validate **17/17**, then **23/23** with idempotency; `[acceptance] PASSED`, exit=0. Task 1 behaviour unchanged by `--source` (default path).
+
 ### 2026-10-25 — 2.2b landing applied; 2.2c prepared
 Did (Bee): `make k8s-secrets` (now also s3.env), `kubectl apply -k` (secret/s3-credentials created), `make landing`; listing pod.
 Observed: 36 `[landing] … OK` lines, 21,224 / 10,729 written = read, 18 days each, pod deleted by the trap; listing: **36 files, 4,057,683 bytes** in `s3://landing`.

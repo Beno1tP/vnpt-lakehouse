@@ -34,6 +34,6 @@ Observed 2026-10-25: 0 parse failures (no NULL day); `unmatched_same_day` = `unm
 |---|---|---|---|
 | One day via SparkApplication (2.2) | per-day table | | |
 | Rerun same day → `overwrite`, total unchanged | | | |
-| Task 1 `make acceptance` after `bronze_ingest.py` change | PASSED | | |
+| Task 1 `make acceptance` after `bronze_ingest.py` change | PASSED | 17/17, 23/23, PASSED, exit 0 | 2026-10-25 |
 | Backfill 07-02 → 07-25 (18 loaded, 6 skipped) | sums = totals above | | |
 | Backfill ×2 → identical counts per day | | | |
