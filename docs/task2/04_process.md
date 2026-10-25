@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-10-25 — 2.1a Postgres applied (E26, E27)
+Did: removed `~/.minikube/cache/images` (1.5 GB; `~/.minikube` back to 856 MB); created `infra/k8s/secrets.env`; `make k8s-secrets`; `kubectl apply -k infra/k8s`.
+Observed: postgres-0 Running in 32 s, PVC `data-postgres-0` Bound 2Gi `standard`, headless Service; DBs airflow, metastore, postgres. Network login as `airflow` failed: **E27** (secret file unreadable by uid 999 → empty password). E26 = my quoting mistake in a check command.
+Fix: fsGroup 999 + mode 0440 + stricter init script; re-init Postgres (empty) by deleting StatefulSet + PVC.
+
 ### 2026-10-25 — 2.1a prepared: secrets renderer + Postgres manifest (Claude)
 Did: `infra/k8s/secrets.env.example`, `infra/k8s/render-secrets.py` (+ `make k8s-secrets`) → `infra/k8s/secrets/{postgres.env, minio.env, hive-site.xml}` (git-ignored, 0600, one Secret per consumer); `infra/k8s/lake/postgres.yaml` (headless Service + StatefulSet, Task 1 digest, password via `POSTGRES_PASSWORD_FILE`, 256/512 Mi, PVC 2 Gi); init script creates role + DB `airflow`; `infra/k8s/kustomization.yaml` (secretGenerator/configMapGenerator).
 Observed: test with dummy secrets in a scratch copy: renderer refuses `change-me` values, kustomize builds 4 Namespaces + ConfigMap + Secret (hash suffixes) + Service + StatefulSet; `kubectl apply -k --dry-run=server` accepted; `git check-ignore` confirms secrets.env and secrets/ ignored, example tracked.

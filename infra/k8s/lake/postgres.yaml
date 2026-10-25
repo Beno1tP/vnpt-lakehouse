@@ -24,6 +24,8 @@ spec:
     metadata:
       labels: { app: postgres }
     spec:
+      securityContext:
+        fsGroup: 999                   # group "postgres" in the image: secret files get gid 999 (E27)
       containers:
         - name: postgres
           image: postgres:16@sha256:1a6ab3f5345eb6dbe04a1349529caabdb0ab09293a09590fad07b2246bfa4b54
@@ -47,7 +49,7 @@ spec:
             - { name: initdb, mountPath: /docker-entrypoint-initdb.d, readOnly: true }
       volumes:
         - name: credentials
-          secret: { secretName: postgres-credentials, defaultMode: 0400 }
+          secret: { secretName: postgres-credentials, defaultMode: 0440 }   # root + group postgres; init scripts run as postgres (E27)
         - name: initdb
           configMap: { name: postgres-initdb, defaultMode: 0555 }
   volumeClaimTemplates:                # PVC data-postgres-0, minikube default StorageClass "standard" (hostPath in the node)
