@@ -30,7 +30,7 @@ SPARK_SUBMIT = $(COMPOSE) exec -T spark /opt/spark/bin/spark-submit --master $(S
 SPARK_SQL    = $(COMPOSE) exec -T spark /opt/spark/bin/spark-sql --master local[1]
 NOISE        = ^Time taken|^:: loading settings
 
-.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart airflow-install airflow-admin airflow-ui backfill dag-runs dag-report
+.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report
 
 help:          ## list targets and variables
 	@awk -F':.*## ' '/^[a-zA-Z0-9_-]+:.*## /{printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -116,13 +116,19 @@ airflow-chart: ## Task 2: download Airflow chart 1.22.0 from the Apache CDN and 
 	mkdir -p $(dir $(AIRFLOW_CHART))
 	test -f $(AIRFLOW_CHART) || curl -fL --retry 3 -o $(AIRFLOW_CHART) https://dlcdn.apache.org/airflow/helm-chart/1.22.0/airflow-1.22.0.tgz
 	echo "$(AIRFLOW_CHART_SHA512)  $(AIRFLOW_CHART)" | sha512sum --check
-airflow-install: airflow-chart ## Task 2: helm upgrade --install Airflow 3.3.2 (chart 1.22.0); image = AIRFLOW_IMAGE_REF in images.env
+airflow-install: airflow-chart deploy-guard ## Task 2: helm upgrade --install Airflow 3.3.2 (chart 1.22.0); image = AIRFLOW_IMAGE_REF in images.env
 	@test -n "$(AIRFLOW_IMAGE_REF)" || { echo "AIRFLOW_IMAGE_REF missing in infra/k8s/images.env (bump it after the images run)"; exit 1; }
 	helm upgrade --install airflow $(AIRFLOW_CHART) -n airflow \
 	  -f infra/helm/airflow/values-local.yaml \
 	  --set images.airflow.digest=$(lastword $(subst @, ,$(AIRFLOW_IMAGE_REF))) \
 	  --set env[0].name=AIRFLOW_VAR_SPARK_JOB_IMAGE --set env[0].value=$(SPARK_JOB_IMAGE_REF) \
+	  --description "git $$(git rev-parse --short HEAD)" \
 	  --wait --timeout 15m
+deploy-guard:  ## Task 2: refuse to deploy unless on main with a clean tree (deployed = reviewed + merged, E39); ALLOW_BRANCH=yes overrides
+	@test "$(ALLOW_BRANCH)" = yes || { b=$$(git rev-parse --abbrev-ref HEAD); \
+	  test "$$b" = main || { echo "refusing: on branch '$$b'. Merge the PR, then: git switch main && git pull"; exit 1; }; \
+	  git diff --quiet HEAD || { echo "refusing: uncommitted changes"; exit 1; }; }
+	@echo "deploying git $$(git rev-parse --short HEAD) from $$(git rev-parse --abbrev-ref HEAD)"
 airflow-admin: ## Task 2: (re)create the Airflow UI user admin with the password from infra/k8s/secrets/airflow-admin-password
 	@test -s infra/k8s/secrets/airflow-admin-password || { echo "run make k8s-secrets first"; exit 1; }
 	-@kubectl -n airflow exec deploy/airflow-scheduler -c scheduler -- airflow users delete --username admin >/dev/null 2>&1
