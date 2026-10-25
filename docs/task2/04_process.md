@@ -14,6 +14,12 @@ Time spent:
 
 ---
 
+### 2026-10-25 — 2.0c Task 1 down, minikube v1.39.0 installed
+Did: `make down` (volumes kept); resource check; downloaded `minikube-linux-amd64` v1.39.0 + `.sha256`, `sha256sum --check` OK, `sudo install` to `/usr/local/bin`, temp dir removed.
+Observed: Docker `CPUs=8 Mem=11486326784` (10.70 GiB); Ubuntu `free -m` total 10,954 MiB, used 2,132; `/` 6.2 GB used; `minikube version: v1.39.0` (commit 7a9f6a84). Binary 136 MiB.
+Decision: Docker shows ≥ 9.5 GiB → start Minikube with `--memory=8192 --cpus=6` (`02_config.md` §2 rule); fall back to 7168/4 if Windows/WSL swaps.
+Next: 2.0d `minikube start`.
+
 ### 2026-10-25 — 2.0b Per-day expected counts
 Did: pushed 5 commits (`6151651..2788fa9`); `make up && make smoke` (Task 1, OK); ran `tests/sql/bronze_daily_counts.sql` with spark-sql on Task 1 Bronze.
 Observed: 18 days, totals 21,224 / 10,729 / 116, 0 NULL days; all 116 unmatched on 07-25 (same-day = any-day); empty days 07-07, 07-12–14, 07-20, 07-21. Saved to `tests/expected/bronze_daily.json` and `06_validation.md`.
