@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-10-25 — 2.2d Validate on K8s + rerun idempotency (step 2.2 done for one day)
+Did (Bee): `make k8s-job-image` (tag 74c5a42), `make sparkapp APP=validate DATE=2024-07-02`, `make sparkapp DATE=2024-07-02` (reload), `make sparkapp APP=validate DATE=2024-07-02 IDEMPOTENCY=yes`; Task 1 `make validate DATE=2026-10-16` (regression for the validator change).
+Observed: validate **10/10** (8 checks + 2 column counts, 7 SKIP); reload 12/12, 6/6 (no duplicates); with idempotency **16/16** (last snapshot `overwrite`, added = deleted = 12 / 6); each app ~21 s. Task 1 validate **17/17** (full mode unchanged).
+
 ### 2026-10-25 — 2.2c-B First SparkApplication COMPLETED; 2.2d prepared
 Did (Bee): `make k8s-job-image` (9.1 s build, one `COPY *.py` layer; `~/.minikube` back to 856 MB); `make sparkapp DATE=2024-07-02`.
 Observed: PENDING → RUNNING → COMPLETED in **21 s** (04:18:19 → 04:18:40), 1 attempt; executor `…-exec-1` COMPLETED and removed; driver `Completed` (pod limits/requests 2Gi = 1g + 1g overhead); webhook injected `S3_ENDPOINT`, `AWS_REGION` and envFrom `s3-credentials`; `[bronze] bronze.chatlog: 12 rows read, 12 rows in partition 2024-07-02`, `bot_predict: 6 / 6` = `bronze_daily.json`. Only WARNs: native-hadoop library, k8s client closed at shutdown (both benign). Operator 2.2.1 (Spark 3.5.5 submit) → our 3.5.9 driver: no skew problem.
