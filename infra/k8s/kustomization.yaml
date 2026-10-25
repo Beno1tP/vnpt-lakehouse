@@ -7,6 +7,11 @@ resources:
   - lake/minio.yaml
   - lake/bucket-init-job.yaml
   - lake/hive-metastore.yaml
+images:                                # GHCR digests (2.0c); keep equal to infra/k8s/images.env (checked by CI)
+  - name: ghcr.io/beno1tp/vnpt-lake-hms
+    digest: sha256:9446f7d1e0ab211f1fe32b0f8def318699e6afa40a5e1fcebfa3d07d134b91ff
+  - name: ghcr.io/beno1tp/vnpt-lake-spark
+    digest: sha256:aee0deb990471c57e37936f10aa6f91880ef7cff3713e09a4cc974d5bb0cad5c
 secretGenerator:                       # from files rendered by `make k8s-secrets` (git-ignored)
   - name: postgres-credentials
     namespace: lake

@@ -1,5 +1,6 @@
-# Task 2 step 2.2b: one-off pod that plays the source system (jobs/landing_simulator.py). Not in kustomization:
-# `make landing` creates it, copies the Excel files in with kubectl cp, runs the script, deletes the pod.
+# Task 2 step 2.2b: one-off pod that plays the source system (jobs/landing_simulator.py, baked into the spark-job
+# image). Not in kustomization: `make landing` fills __IMAGE__ from infra/k8s/images.env, copies only the Excel files
+# in with kubectl cp, runs the script, deletes the pod.
 # The raw data goes laptop -> pod memory/emptyDir -> MinIO inside Minikube; it never leaves the laptop.
 apiVersion: v1
 kind: Pod
@@ -8,13 +9,14 @@ metadata:
   namespace: spark-jobs
 spec:
   restartPolicy: Never
+  imagePullSecrets: [{ name: ghcr-pull }]
   activeDeadlineSeconds: 1800                # safety net: the pod ends after 30 min even if never deleted
   securityContext:
     fsGroup: 185                             # uid/gid "spark" (lesson E27)
   containers:
     - name: simulator
-      image: vnpt-lake-spark:3.5.9-iceberg1.11.0-r1
-      imagePullPolicy: Never
+      image: __IMAGE__
+      imagePullPolicy: IfNotPresent
       command: ["sleep", "1800"]             # idle until `kubectl exec` runs the script
       env:
         - { name: S3_ENDPOINT, value: "minio.lake.svc.cluster.local:9000" }

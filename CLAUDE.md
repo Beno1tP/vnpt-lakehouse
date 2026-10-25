@@ -50,6 +50,7 @@ Python 3.11 · Spark 3.5.9 (Scala 2.12, Java 17) · Iceberg 1.11.0 runtime, form
 - Airflow 3: daily intervals via `timedelta(days=1)` or `CronDataIntervalTimetable`, not a bare cron string. Day = date as written in `CREATED_TIME`; daily runs 2024-07-02 → 07-25 (D2 = A): 18 days load, 6 days without a landing file are skipped.
 - Task 2 tech = Minikube + Airflow + Spark only (no DuckDB etc.); Trino is Task 3. Expected counts via Spark SQL (D3).
 - Excel input comes from the MinIO landing zone `s3://landing/<table>/dt=YYYY-MM-DD/`, never a hostPath.
+- Deployed image digests: `infra/k8s/images.env` (+ kustomize `images:`), bumped by PR after an images run.
 - Errors: docs/task2/05_errors_and_fixes.md, IDs from **E25**.
 
 ## Commands
