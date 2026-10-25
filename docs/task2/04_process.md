@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-10-25 — 2.0b Per-day expected counts
+Did: pushed 5 commits (`6151651..2788fa9`); `make up && make smoke` (Task 1, OK); ran `tests/sql/bronze_daily_counts.sql` with spark-sql on Task 1 Bronze.
+Observed: 18 days, totals 21,224 / 10,729 / 116, 0 NULL days; all 116 unmatched on 07-25 (same-day = any-day); empty days 07-07, 07-12–14, 07-20, 07-21. Saved to `tests/expected/bronze_daily.json` and `06_validation.md`.
+Next: 2.0c `make down`, install minikube v1.39.0, `minikube start`.
+
 ### 2026-10-25 — 2.0a Decisions D1–D3
 Did: D1 = chart 1.22.0 + Airflow 3.3.2 (chart gates only at >=3.0.0); D2 = A (24 daily runs, 18 load, 6 skip); D3 = expected counts with Spark SQL on Task 1 Bronze (`tests/sql/bronze_daily_counts.sql`), no extra tool. Task 2 tech = Minikube + Airflow + Spark; Trino = Task 3.
 Next: 2.0b run the per-day query (Task 1 stack up), then `make down`, install minikube v1.39.0.

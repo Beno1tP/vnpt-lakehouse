@@ -1,0 +1,112 @@
+{
+  "_comment": "Expected Bronze counts per event day (date as written in CREATED_TIME). From tests/sql/bronze_daily_counts.sql on Task 1 Bronze (_ingest_date 2026-10-16), 2026-10-25. Counts only. Days in 2024-07-02..2024-07-25 not listed have no data and are skipped (D2=A).",
+  "range": {
+    "from": "2024-07-02",
+    "to": "2024-07-25"
+  },
+  "empty_days": [
+    "2024-07-07",
+    "2024-07-12",
+    "2024-07-13",
+    "2024-07-14",
+    "2024-07-20",
+    "2024-07-21"
+  ],
+  "totals": {
+    "chatlog_rows": 21224,
+    "bot_predict_rows": 10729,
+    "unmatched_to_chat": 116
+  },
+  "days": {
+    "2024-07-02": {
+      "chatlog_rows": 12,
+      "bot_predict_rows": 6,
+      "unmatched_to_chat": 0
+    },
+    "2024-07-03": {
+      "chatlog_rows": 2,
+      "bot_predict_rows": 1,
+      "unmatched_to_chat": 0
+    },
+    "2024-07-04": {
+      "chatlog_rows": 14,
+      "bot_predict_rows": 7,
+      "unmatched_to_chat": 0
+    },
+    "2024-07-05": {
+      "chatlog_rows": 4,
+      "bot_predict_rows": 2,
+      "unmatched_to_chat": 0
+    },
+    "2024-07-06": {
+      "chatlog_rows": 18,
+      "bot_predict_rows": 9,
+      "unmatched_to_chat": 0
+    },
+    "2024-07-08": {
+      "chatlog_rows": 12,
+      "bot_predict_rows": 6,
+      "unmatched_to_chat": 0
+    },
+    "2024-07-09": {
+      "chatlog_rows": 86,
+      "bot_predict_rows": 43,
+      "unmatched_to_chat": 0
+    },
+    "2024-07-10": {
+      "chatlog_rows": 14,
+      "bot_predict_rows": 7,
+      "unmatched_to_chat": 0
+    },
+    "2024-07-11": {
+      "chatlog_rows": 10,
+      "bot_predict_rows": 5,
+      "unmatched_to_chat": 0
+    },
+    "2024-07-15": {
+      "chatlog_rows": 36,
+      "bot_predict_rows": 18,
+      "unmatched_to_chat": 0
+    },
+    "2024-07-16": {
+      "chatlog_rows": 156,
+      "bot_predict_rows": 78,
+      "unmatched_to_chat": 0
+    },
+    "2024-07-17": {
+      "chatlog_rows": 94,
+      "bot_predict_rows": 48,
+      "unmatched_to_chat": 0
+    },
+    "2024-07-18": {
+      "chatlog_rows": 186,
+      "bot_predict_rows": 93,
+      "unmatched_to_chat": 0
+    },
+    "2024-07-19": {
+      "chatlog_rows": 40,
+      "bot_predict_rows": 20,
+      "unmatched_to_chat": 0
+    },
+    "2024-07-22": {
+      "chatlog_rows": 6,
+      "bot_predict_rows": 3,
+      "unmatched_to_chat": 0
+    },
+    "2024-07-23": {
+      "chatlog_rows": 12,
+      "bot_predict_rows": 6,
+      "unmatched_to_chat": 0
+    },
+    "2024-07-24": {
+      "chatlog_rows": 12970,
+      "bot_predict_rows": 6485,
+      "unmatched_to_chat": 0
+    },
+    "2024-07-25": {
+      "chatlog_rows": 7552,
+      "bot_predict_rows": 3892,
+      "unmatched_to_chat": 116
+    }
+  }
+}
