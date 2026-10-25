@@ -1,0 +1,30 @@
+# Kubeflow Spark Operator, chart 2.2.1 (last release built on Spark 3.5: docs/task2/02_config.md).
+# Install: helm upgrade --install spark-operator spark-operator/spark-operator --version 2.2.1 \
+#            -n spark-operator -f infra/helm/spark-operator/values-local.yaml --wait
+# Image ghcr.io/kubeflow/spark-operator/controller:2.2.1 (tag = chart appVersion).
+
+controller:
+  replicas: 1
+  workers: 2                       # reconcile threads; 1-2 SparkApplications at a time here (default 10)
+  resources:
+    requests: { memory: 128Mi, cpu: 100m }
+    limits:   { memory: 512Mi }
+
+webhook:
+  enable: true                     # REQUIRED: applies volumes, env, ConfigMaps to driver/executor pods (01_knowledge.md A2)
+  replicas: 1
+  failurePolicy: Fail              # if the webhook is down, Spark pods are rejected instead of starting without config
+  resources:
+    requests: { memory: 64Mi, cpu: 50m }
+    limits:   { memory: 256Mi }
+
+spark:
+  jobNamespaces: [spark-jobs]      # operator watches only this namespace; chart creates SA spark-operator-spark + Role there
+  serviceAccount:
+    create: true
+  rbac:
+    create: true                   # driver may manage pods, configmaps, services, PVCs in spark-jobs (executors)
+
+prometheus:
+  metrics:
+    enable: false                  # no Prometheus in this lab

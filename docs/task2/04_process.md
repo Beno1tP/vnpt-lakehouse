@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-10-25 — 2.1 done: HMS restart + cross-namespace test; 2.2 prepared
+Did (Bee): applied E28 fix (HMS restarted); busybox `net-test` pod in `spark-jobs`.
+Observed: second start → `HMS schema 3.1.0 exists, nothing to do` (no .beeline warning); bucket-init re-created after its TTL and reran. From `spark-jobs`: `hive-metastore.lake.svc.cluster.local` → 10.97.127.92 (= Service ClusterIP), `thrift 9083: open`, MinIO `/minio/health/ready` → `HTTP/1.1 200 OK`. Read-only (Claude): Postgres `VERSION` = 3.1.0, 74 HMS tables; 0 exceptions in HMS log; top: HMS 408 Mi, MinIO 64 Mi, Postgres 69 Mi. **Step 2.1 done.**
+Prepared: `infra/helm/spark-operator/values-local.yaml` (chart 2.2.1, jobNamespaces=[spark-jobs], webhook on, 2 workers, resources, metrics off). Chart 2.2.1 present in https://kubeflow.github.io/spark-operator index; its Spark Role grants pods/configmaps/services/PVCs.
+
 ### 2026-10-25 — 2.1c Hive Metastore applied (E28)
 Did (Bee): `kubectl apply -k infra/k8s`; rollout.
 Observed: rolled out in < 1 min; schema-init: `No HMS schema yet -> schematool -initSchema` … `schemaTool completed`, `Metastore schema version: 3.1.0`; warning E28 (`/home/hive/.beeline`, harmless, emptyDir added); HMS log `Starting Hive Metastore Server`, no exception. `kubectl top`: hive-metastore 401 Mi, minio 64 Mi, postgres 69 Mi.
