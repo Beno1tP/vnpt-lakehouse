@@ -7,6 +7,7 @@ resources:
   - lake/minio.yaml
   - lake/bucket-init-job.yaml
   - lake/hive-metastore.yaml
+  - lake/minio-users-job.yaml
 images:                                # GHCR digests (2.0c); keep equal to infra/k8s/images.env (checked by CI)
   - name: ghcr.io/beno1tp/vnpt-lake-hms
     digest: sha256:9446f7d1e0ab211f1fe32b0f8def318699e6afa40a5e1fcebfa3d07d134b91ff
@@ -22,10 +23,20 @@ secretGenerator:                       # from files rendered by `make k8s-secret
   - name: hms-hive-site
     namespace: lake
     files: [secrets/hive-site.xml]
-  - name: s3-credentials                # referenced by SparkApplications and Airflow templates outside kustomize,
-    namespace: spark-jobs               # so the name must stay stable (no hash suffix)
+  - name: s3-credentials                # MinIO user spark-jobs (2.1b). Referenced by SparkApplications and Airflow
+    namespace: spark-jobs               # templates outside kustomize, so the name must stay stable (no hash suffix)
     envs: [secrets/s3.env]
     options: { disableNameSuffixHash: true }
+  - name: landing-writer-credentials    # MinIO user landing-writer (landing simulator pod, outside kustomize)
+    namespace: spark-jobs
+    envs: [secrets/landing-writer.env]
+    options: { disableNameSuffixHash: true }
+  - name: minio-service-users           # passwords for the minio-users Job
+    namespace: lake
+    envs: [secrets/minio-service-users.env]
+  - name: hms-s3-credentials            # MinIO user hive-metastore
+    namespace: lake
+    envs: [secrets/hms-s3.env]
   # Airflow chart (step 2.3) reads these by fixed name (values-local.yaml), so no hash suffix
   - { name: airflow-metadata, namespace: airflow, envs: [secrets/airflow-metadata.env], options: { disableNameSuffixHash: true } }
   - { name: airflow-fernet-key, namespace: airflow, envs: [secrets/airflow-fernet.env], options: { disableNameSuffixHash: true } }
@@ -41,3 +52,7 @@ configMapGenerator:
   - name: hms-core-site
     namespace: lake
     files: [lake/hive/core-site.xml]
+  - name: minio-users-script
+    namespace: lake
+    files: [lake/minio-users/minio_users.sh, lake/minio-users/lake-spark-jobs.json,
+            lake/minio-users/lake-landing-writer.json, lake/minio-users/lake-hms.json]

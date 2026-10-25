@@ -44,3 +44,7 @@ def test_generates_keys_once_and_escapes(tmp_path, monkeypatch):
     assert (out / "airflow-metadata.env").read_text().count("Pw1%40x") == 1   # password URL-encoded
     assert "Pw1@x" in (out / "hive-site.xml").read_text()
     assert oct((out / "s3.env").stat().st_mode & 0o777) == "0o600"
+    assert (out / "s3.env").read_text().startswith("AWS_ACCESS_KEY_ID=spark-jobs\n")     # not the root user (2.1b)
+    assert (out / "landing-writer.env").read_text().startswith("AWS_ACCESS_KEY_ID=landing-writer\n")
+    assert (out / "hms-s3.env").read_text().startswith("AWS_ACCESS_KEY_ID=hive-metastore\n")
+    assert first.count("MINIO_SPARK_JOBS_SECRET=") == 1
