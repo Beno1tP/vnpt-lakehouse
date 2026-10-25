@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-10-26 — PR #11 merged (E38 + D6); Airflow digest promoted, backfill targets (PR #12)
+Did (Bee): PR #11 merged (main `1ec904c`); images run 40214717360: airflow `1ec904c` → `sha256:fb7bf910…0976` (CronDataIntervalTimetable).
+Prepared (Claude, branch `task2/backfill`): images.env bump; `make backfill FROM= TO= REPROCESS= DRY=` (Airflow 3.3.2 CLI checked: `airflow backfill create --dag-id --from-date --to-date` both **inclusive**, `--reprocess-behavior none|completed|failed` (default none = keep days that already have a run), `--max-active-runs`, `--dry-run`); `make dag-runs`; `make dag-report` (per-day landing/bronze/validate lines from the task logs).
+
 ### 2026-10-25 — Lab doc re-read: Silver required (D6)
 Did (Claude): read `~/data/Engineering Onboarding Labs.docx` (copied by Bee). Findings: architecture = **Lakehouse Medallion (Bronze → Silver → Gold)**: Oracle → Excel → **S3 landing zone** → **Spark ETL → Iceberg on MinIO** → **dbt builds Gold** for StarRocks/Trino/Superset; **Airflow orchestrates everything**. Step 1 goal = raw Iceberg tables (Bronze). Silver has no step of its own. D6 first proposed in Task 2 (2.5d); **Bee decided Task 3, before Trino**, because step 2's goal is only "the step-1 Spark job on K8s, orchestrated by Airflow"; to confirm with the leader. Other requirements to track: pytest topics (constants, table_exists, **watermark**, **parse Oracle timestamp**, pandas → spark types, S3 reads), `make lint` / `make test` / `make all`, CI jobs lint/test/**dbt-lint** (dbt → Task 4), **pre-commit hooks**, dbt tests incl. `dbt_test_gold` task in the DAG (Task 4), Prometheus + Grafana optional, Minikube `--memory=7168 --cpus=4` (we run 8192/6, Allocatable 7268 Mi).
 
