@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-10-25 — 2.0c-2 PR #2 merged; HMS + bucket-init from GHCR (E32, E33)
+Did (Bee): PR #2 (CI red once: E32 images.env ignored by `*.env`; fixed, 3/3 green), merged (main `ffe69c9`); images run 40191763230: both bases `built=false` (18 s each), spark-job `ffe69c9` → `sha256:583f95a0…` (not deployed; code unchanged). Baseline: Minikube volume 10.29 GB, 4 local `docker.io/library/vnpt-lake-*` images in the node. First apply failed (E33: Airflow Secrets in kustomization before 2.3) → added `AIRFLOW_ADMIN_PASSWORD`, `make k8s-secrets` (fernet/api/jwt keys generated once), applied again.
+Observed: 4 Airflow Secrets created early (for 2.3); HMS rolled out from `ghcr.io/beno1tp/vnpt-lake-hms@sha256:9446f7d1…` (pulled with `ghcr-pull`), `HMS schema 3.1.0 exists, nothing to do`; bucket-init from the GHCR spark base: both buckets `exists`.
+
 ### 2026-10-25 — 2.0c-1 pull token + Secrets; 2.0c-2 prepared on branch `task2/ghcr`
 Did (Bee): classic token `minikube-ghcr-pull` with only `read:packages`; `read -rs` + Secret `ghcr-pull` (dockerconfigjson) in lake, spark-jobs, airflow (E30: my check command). Digests from the run summary (E31: not in the log):
 vnpt-lake-spark `3.5.9-iceberg1.11.0-r1` `sha256:aee0deb9…cad5c`; vnpt-lake-hms `3.1.3-hadoopaws3.1.0-r1` `sha256:9446f7d1…b91ff`; vnpt-lake-spark-job `041717a` `sha256:2e5f830e…ca243` (base = spark @aee0deb9…).
