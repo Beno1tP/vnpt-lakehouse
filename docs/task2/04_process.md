@@ -14,6 +14,17 @@ Time spent:
 
 ---
 
+### 2026-10-25 — Lab doc re-read: Silver required (D6)
+Did (Claude): read `~/data/Engineering Onboarding Labs.docx` (copied by Bee). Findings: architecture = **Lakehouse Medallion (Bronze → Silver → Gold)**: Oracle → Excel → **S3 landing zone** → **Spark ETL → Iceberg on MinIO** → **dbt builds Gold** for StarRocks/Trino/Superset; **Airflow orchestrates everything**. Step 1 goal = raw Iceberg tables (Bronze). Silver has no step of its own. D6 first proposed in Task 2 (2.5d); **Bee decided Task 3, before Trino**, because step 2's goal is only "the step-1 Spark job on K8s, orchestrated by Airflow"; to confirm with the leader. Other requirements to track: pytest topics (constants, table_exists, **watermark**, **parse Oracle timestamp**, pandas → spark types, S3 reads), `make lint` / `make test` / `make all`, CI jobs lint/test/**dbt-lint** (dbt → Task 4), **pre-commit hooks**, dbt tests incl. `dbt_test_gold` task in the DAG (Task 4), Prometheus + Grafana optional, Minikube `--memory=7168 --cpus=4` (we run 8192/6, Allocatable 7268 Mi).
+
+### 2026-10-25 — 2.4b first DAG runs OK; E38 schedule fix prepared
+Observed (Bee): 3 runs `success`. 2024-07-02: check_landing → bronze (24 s, `12 rows read, 12 rows in partition`, `6 / 6`) → validate (`23/23 checks passed`) → notify, driver log lines streamed into Airflow (`[spark-kubernetes-driver] …`). 2024-07-07: `chatlog=no, bot_predict=no` → check_landing **skipped** → all downstream skipped (D2). Scheduled run: `ds=2026-10-25 data_interval=[16:29:09, 16:29:09)` → **E38** (timedelta = DeltaTriggerTimetable in Airflow 3). Fix on this branch: CronDataIntervalTimetable at midnight + CI rule.
+
+### 2026-10-25 — 2.4b deployed; first chatbot_bronze runs (in progress)
+Did (Bee): `make k8s-secrets` (MINIO_AIRFLOW_LANDING_SECRET + airflow-connections.env), deleted + re-applied the minio-users Job, `kubectl apply -k`, `make airflow-install` (revision 4), unpause + trigger 2024-07-02 and 2024-07-07; PR #10 merged (main `1e652df`).
+Observed: Role + RoleBinding created; Job: `user airflow-landing: policy lake-landing-reader`; `auth can-i create sparkapplications` → **yes**, `can-i list secrets` → **no**; `chatbot_bronze` and `hello_lake` listed; Variable `spark_job_image` = spark-job `f56c2321…`. Scheduled run created on unpause: `scheduled__2026-10-25T16:29:09…`, **logical_date = run_after = 2026-10-25T16:29:09** (not midnight, not the interval start) → success (skipped: no export). Manual runs: logical_date 2024-07-02 / 07-07, data interval = [trigger time, trigger time).
+Finding for 2.5: with `timedelta(days=1)` + catchup False, scheduled intervals start at the unpause time (16:29), and Airflow 3 sets the scheduled run's logical date to its run_after → `ds` of a scheduled run is the day the interval ENDS. Decide before the backfill: align to midnight (`CronDataIntervalTimetable("0 0 * * *", "UTC")`) and take the day from data_interval_start for scheduled/backfill runs.
+
 ### 2026-10-25 — 2.4b PR #9 merged; Airflow digest promoted (PR #10)
 Did (Bee): PR #9 4/4 green (DAG integrity imported chatbot_bronze inside the 3.3.2 image), merged (main `d107f0e`); images run 40207562055: airflow `d107f0e` → `sha256:20b2929d…7c07` (spark-job rebuilt with unchanged code → not promoted).
 

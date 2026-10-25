@@ -34,6 +34,8 @@ for dag_id, dag in sorted(bag.dags.items()):
         problems.append("needs tags")
     if dag.start_date is None or dag.start_date.tzinfo is None:
         problems.append("start_date must be timezone-aware")
+    if "lake" in dag.tags and "DataIntervalTimetable" not in type(dag.timetable).__name__:
+        problems.append(f"schedule must be a data-interval timetable, got {type(dag.timetable).__name__} (E38)")
     if "lake" in dag.tags:                       # production DAGs: every task bounded in time, validation never retried
         problems += [f"{t.task_id}: needs execution_timeout" for t in dag.tasks if t.execution_timeout is None]
         problems += [f"{t.task_id}: validation must not retry" for t in dag.tasks
