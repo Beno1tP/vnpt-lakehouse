@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-10-25 — 2.1c Hive Metastore applied (E28)
+Did (Bee): `kubectl apply -k infra/k8s`; rollout.
+Observed: rolled out in < 1 min; schema-init: `No HMS schema yet -> schematool -initSchema` … `schemaTool completed`, `Metastore schema version: 3.1.0`; warning E28 (`/home/hive/.beeline`, harmless, emptyDir added); HMS log `Starting Hive Metastore Server`, no exception. `kubectl top`: hive-metastore 401 Mi, minio 64 Mi, postgres 69 Mi.
+
 ### 2026-10-25 — 2.1b MinIO + buckets applied; 2.1c prepared
 Did (Bee): `kubectl apply -k infra/k8s`; rollout + `kubectl wait` job.
 Observed: minio-0 Running in ~20 s; bucket-init: 5× `NETWORK_CONNECTION … curlCode: 7` (connection refused while MinIO started; the retry loop absorbed it), then `bucket lakehouse: created`, `bucket landing: created`; PVC data-minio-0 Bound 5Gi. `statefulset.apps/postgres configured` without a pod restart (no-op apply; `kubectl diff` showed no Postgres change).

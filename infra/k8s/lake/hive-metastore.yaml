@@ -61,6 +61,7 @@ spec:
             limits:   { memory: 1Gi }
           volumeMounts:
             - { name: hive-site, mountPath: /opt/hive/conf/hive-site.xml, subPath: hive-site.xml, readOnly: true }
+            - { name: hive-home, mountPath: /home/hive }   # schematool (Beeline code) wants ~/.beeline; the image has no /home/hive
       containers:
         - name: hive-metastore
           image: vnpt-lake-hms:3.1.3-hadoopaws3.1.0-r1
@@ -90,6 +91,8 @@ spec:
             - { name: hive-site, mountPath: /opt/hive/conf/hive-site.xml, subPath: hive-site.xml, readOnly: true }
             - { name: core-site, mountPath: /opt/hadoop/etc/hadoop/core-site.xml, subPath: core-site.xml, readOnly: true }
       volumes:
+        - name: hive-home
+          emptyDir: { sizeLimit: 16Mi }       # scratch, deleted with the pod
         - name: hive-site
           secret: { secretName: hms-hive-site, defaultMode: 0440 }
         - name: core-site
