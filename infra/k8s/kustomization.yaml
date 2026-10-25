@@ -1,0 +1,14 @@
+# Task 2 manifests. Apply: kubectl apply -k infra/k8s   (grows one component per step, docs/task2/03_plan.md §C)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - 00-namespaces.yaml
+  - lake/postgres.yaml
+secretGenerator:                       # from files rendered by `make k8s-secrets` (git-ignored)
+  - name: postgres-credentials
+    namespace: lake
+    envs: [secrets/postgres.env]
+configMapGenerator:
+  - name: postgres-initdb
+    namespace: lake
+    files: [lake/postgres-initdb/10-airflow-db.sh]

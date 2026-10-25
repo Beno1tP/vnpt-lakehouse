@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-10-25 — 2.1a prepared: secrets renderer + Postgres manifest (Claude)
+Did: `infra/k8s/secrets.env.example`, `infra/k8s/render-secrets.py` (+ `make k8s-secrets`) → `infra/k8s/secrets/{postgres.env, minio.env, hive-site.xml}` (git-ignored, 0600, one Secret per consumer); `infra/k8s/lake/postgres.yaml` (headless Service + StatefulSet, Task 1 digest, password via `POSTGRES_PASSWORD_FILE`, 256/512 Mi, PVC 2 Gi); init script creates role + DB `airflow`; `infra/k8s/kustomization.yaml` (secretGenerator/configMapGenerator).
+Observed: test with dummy secrets in a scratch copy: renderer refuses `change-me` values, kustomize builds 4 Namespaces + ConfigMap + Secret (hash suffixes) + Service + StatefulSet; `kubectl apply -k --dry-run=server` accepted; `git check-ignore` confirms secrets.env and secrets/ ignored, example tracked.
+Next: Bee renders secrets and applies.
+
 ### 2026-10-25 — 2.0e Namespaces + thin images in Minikube (step 2.0 done)
 Did: `kubectl top node` (191m CPU, 537 Mi); `kubectl apply -f infra/k8s/00-namespaces.yaml` (lake, spark-operator, spark-jobs, airflow Active); `minikube image load` both thin images.
 Observed: `minikube image ls` → `docker.io/library/vnpt-lake-spark:3.5.9-iceberg1.11.0-r1`, `docker.io/library/vnpt-lake-hms:3.1.3-hadoopaws3.1.0-r1`. Disk: node volume 1.209 → **6.833 GB (+5.62 GB** for 4.16 GB of images: containerd keeps compressed blobs + unpacked snapshots); `~/.minikube` 856 MB → **2.3 GB**: `cache/images/amd64/` holds tar copies (spark 840 MB, hms 719 MB). Total Task 2 disk so far ≈ **+10.9 GB** (kicbase image 1.89 + node volume 6.76 + ~/.minikube 2.3) — already at the top of the 9–10 GB estimate before Airflow/operator/Postgres/MinIO.

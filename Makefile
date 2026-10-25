@@ -10,13 +10,14 @@ DATE                ?= $(shell date +%F)
 SPARK_MASTER        ?= local[2]
 SPARK_DRIVER_MEMORY ?= 2g
 VALIDATE_ARGS       ?=
+K8S_ENV_FILE        ?= infra/k8s/secrets.env
 
 COMPOSE      = docker compose -f infra/compose/docker-compose.yml --env-file $(ENV_FILE)
 SPARK_SUBMIT = $(COMPOSE) exec -T spark /opt/spark/bin/spark-submit --master $(SPARK_MASTER) --driver-memory $(SPARK_DRIVER_MEMORY)
 SPARK_SQL    = $(COMPOSE) exec -T spark /opt/spark/bin/spark-sql --master local[1]
 NOISE        = ^Time taken|^:: loading settings
 
-.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero
+.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets
 
 help:          ## list targets and variables
 	@awk -F':.*## ' '/^[a-zA-Z_-]+:.*## /{printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -60,3 +61,7 @@ acceptance-from-zero: ## DESTRUCTIVE: clean -> up -> acceptance (needs CONFIRM=y
 	$(MAKE) --no-print-directory clean
 	$(MAKE) --no-print-directory up
 	$(MAKE) --no-print-directory acceptance DATE=$(DATE)
+
+# ---- Task 2 (Minikube) ----
+k8s-secrets:   ## Task 2: render K8s secret files from K8S_ENV_FILE into infra/k8s/secrets/ (mode 600)
+	python3 -I infra/k8s/render-secrets.py $(K8S_ENV_FILE)

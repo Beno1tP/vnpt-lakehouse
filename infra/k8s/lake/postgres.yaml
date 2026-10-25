@@ -1,0 +1,57 @@
+# Task 2 step 2.1a: one Postgres 16 for the Hive Metastore DB (metastore) and Airflow's metadata DB (airflow).
+# Same image digest as Task 1 (.env POSTGRES_IMAGE). Credentials: Secret postgres-credentials mounted as files.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: lake
+spec:
+  clusterIP: None                      # headless: postgres.lake.svc.cluster.local -> the pod IP (governing service of the StatefulSet)
+  selector: { app: postgres }
+  ports: [{ name: pg, port: 5432 }]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: lake
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels: { app: postgres }
+  template:
+    metadata:
+      labels: { app: postgres }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16@sha256:1a6ab3f5345eb6dbe04a1349529caabdb0ab09293a09590fad07b2246bfa4b54
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: POSTGRES_USER
+              valueFrom: { secretKeyRef: { name: postgres-credentials, key: PG_USER } }
+            - { name: POSTGRES_PASSWORD_FILE, value: /run/secrets/pg/PG_PASSWORD }   # official image reads the file
+            - { name: POSTGRES_DB, value: metastore }
+            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }               # subdir: initdb needs an empty dir
+          ports: [{ name: pg, containerPort: 5432 }]
+          readinessProbe:
+            exec: { command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d metastore"] }
+            periodSeconds: 5
+          resources:
+            requests: { memory: 256Mi, cpu: 100m }
+            limits:   { memory: 512Mi }
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+            - { name: credentials, mountPath: /run/secrets/pg, readOnly: true }
+            - { name: initdb, mountPath: /docker-entrypoint-initdb.d, readOnly: true }
+      volumes:
+        - name: credentials
+          secret: { secretName: postgres-credentials, defaultMode: 0400 }
+        - name: initdb
+          configMap: { name: postgres-initdb, defaultMode: 0555 }
+  volumeClaimTemplates:                # PVC data-postgres-0, minikube default StorageClass "standard" (hostPath in the node)
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: { requests: { storage: 2Gi } }
