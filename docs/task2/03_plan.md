@@ -45,7 +45,7 @@ Minikube (v1.39.0, K8s v1.37.0, 8 GiB / Allocatable 7268 Mi)
 | **2.8 Docs + tag** | README (RAM, disk, decisions, gaps closed/open), errors from E25, `git tag task2-v1` | `make k8s-up && make k8s-demo` from zero | ⏳ |
 | Could | Write-Audit-Publish with an Iceberg branch (H#7) | — | — |
 
-**Silver is in Task 2 (D6, 10-25).** The lab doc defines a Medallion pipeline (Bronze → Silver → Gold) where *Spark ETL writes Iceberg* and *dbt builds Gold*; Silver therefore sits between Bronze (step 1–2) and Gold (step 4, dbt on StarRocks), produced by Spark under Airflow. Added as step **2.5d** after the Bronze backfill (one new component at a time); Task 3 (Trino) then queries typed Silver tables, Task 4's dbt `staging` models read Silver.
+**Silver is placed in Task 2 (D6, 10-25, inferred — to confirm with the leader).** The lab doc defines a Medallion pipeline (Bronze → Silver → Gold) where *Spark ETL writes Iceberg* and *dbt builds Gold*; Silver therefore sits between Bronze (step 1–2) and Gold (step 4, dbt on StarRocks), produced by Spark under Airflow. Added as step **2.5d** after the Bronze backfill (one new component at a time); Task 3 (Trino) then queries typed Silver tables, Task 4's dbt `staging` models read Silver.
 
 ## G. Image strategy: no image builds on the laptop (D5)
 
@@ -137,7 +137,7 @@ RAM: the additions run briefly (Jobs, CronJob, maintenance = one Spark run) or o
 1. Is the Kubeflow Spark Operator what production uses, or native spark-submit / another platform?
 2. Production Airflow version and executor?
 3. OK to simulate daily landing files split by event day?
-4. ~~Silver inside Task 2?~~ 10-23 "Bronze only for now"; **10-25: Silver is required** (lab doc: Medallion Bronze → Silver → Gold, Spark ETL to Iceberg; D6).
+4. ~~Silver inside Task 2?~~ 10-23 "Bronze only for now"; **10-25: Silver is required** (lab doc: Medallion Bronze → Silver → Gold, Spark ETL to Iceberg). Which step owns it is not written: proposal D6 = Spark job in the Task 2 DAG; alternatives: dbt staging in Task 4, or part of the step-1 Spark job.
 5. **New:** may the 4 lab images be public on GHCR (code + dependencies only), or must they stay private (pull token)?
 
 ## F. Repo paths (new = ➕, changed = ✏️, done = ✅)
