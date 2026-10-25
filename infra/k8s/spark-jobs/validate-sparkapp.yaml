@@ -1,6 +1,6 @@
 # Task 2 step 2.2d: validate ONE day of Bronze against tests/expected/bronze_daily.json (validator baked into the
 # job image). By hand: `make sparkapp APP=validate DATE=YYYY-MM-DD [IDEMPOTENCY=yes]`; Airflow templates it in 2.4.
-# Placeholders filled by make: __NAME__ (validate-YYYY-MM-DD), __DATE__, __IMAGE__, __EXTRA_ARGS__.
+# Placeholders filled by make: __NAME__ (validate-YYYY-MM-DD), __DATE__, __IMAGE__ (spark-job image by digest, infra/k8s/images.env), __EXTRA_ARGS__.
 apiVersion: sparkoperator.k8s.io/v1beta2
 kind: SparkApplication
 metadata:
@@ -12,7 +12,8 @@ spec:
   mode: cluster
   sparkVersion: "3.5.9"
   image: __IMAGE__
-  imagePullPolicy: Never                       # loaded into Minikube by make k8s-job-image
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: [ghcr-pull]                # private GHCR package (2.0c)
   mainApplicationFile: local:///opt/jobs/validate_bronze.py
   arguments: ["--ingest-date", "__DATE__", "--expected", "/opt/tests/expected/bronze_daily.json",
               "--sql", "/opt/tests/sql/bronze_checks.sql"__EXTRA_ARGS__]

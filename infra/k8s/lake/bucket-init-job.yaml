@@ -11,12 +11,13 @@ spec:
   template:
     spec:
       restartPolicy: Never
+      imagePullSecrets: [{ name: ghcr-pull }]
       securityContext:
         fsGroup: 185                       # uid/gid "spark" in the image: secret files readable (lesson E27)
       containers:
         - name: bucket-init
-          image: vnpt-lake-spark:3.5.9-iceberg1.11.0-r1
-          imagePullPolicy: Never           # loaded with `minikube image load`; never look for it on Docker Hub
+          image: ghcr.io/beno1tp/vnpt-lake-spark   # digest set in kustomization.yaml (images:)
+          imagePullPolicy: IfNotPresent
           command: ["python3", "/scripts/bucket_init.py"]
           env:
             - { name: S3_ENDPOINT, value: "minio.lake.svc.cluster.local:9000" }

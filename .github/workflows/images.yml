@@ -61,16 +61,15 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: "0"
-          format: table
-          output: trivy.txt
-      - name: Digest + scan summary
+          format: json
+          output: trivy.json
+      - name: Digest + scan summary (also printed to the log)
         run: |
           ref="$REGISTRY/${{ matrix.name }}:${{ matrix.tag }}"
           digest=$(docker buildx imagetools inspect "$ref" --format '{{json .Manifest}}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["digest"])')
-          echo "| ${{ matrix.name }} | \`${{ matrix.tag }}\` | \`$digest\` | built=${{ steps.exists.outputs.built }} |" >> "$GITHUB_STEP_SUMMARY"
-          if [ -f trivy.txt ]; then
-            echo '```' >> "$GITHUB_STEP_SUMMARY"; grep -E '^(Total|[a-z].*\(.*\))' trivy.txt | head -20 >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"
-          fi
+          line="| ${{ matrix.name }} | \`${{ matrix.tag }}\` | \`$digest\` | built=${{ steps.exists.outputs.built }} |"
+          echo "DIGEST $line"; echo "$line" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f trivy.json ]; then python3 .github/scripts/trivy_counts.py trivy.json | tee -a "$GITHUB_STEP_SUMMARY"; fi
 
   spark-job:
     name: spark-job (code image)
@@ -108,11 +107,12 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: "0"
-          format: table
-          output: trivy.txt
-      - name: Digest + scan summary
+          format: json
+          output: trivy.json
+      - name: Digest + scan summary (also printed to the log)
         run: |
           ref="$REGISTRY/vnpt-lake-spark-job:${{ github.sha }}"
           digest=$(docker buildx imagetools inspect "$ref" --format '{{json .Manifest}}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["digest"])')
-          { echo "| vnpt-lake-spark-job | \`${{ github.sha }}\` | \`$digest\` | base \`${{ steps.base.outputs.ref }}\` |"
-            echo '```'; grep -E '^(Total|[a-z].*\(.*\))' trivy.txt | head -20; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          line="| vnpt-lake-spark-job | \`${{ github.sha }}\` | \`$digest\` | base \`${{ steps.base.outputs.ref }}\` |"
+          echo "DIGEST $line"; echo "$line" >> "$GITHUB_STEP_SUMMARY"
+          python3 .github/scripts/trivy_counts.py trivy.json | tee -a "$GITHUB_STEP_SUMMARY"

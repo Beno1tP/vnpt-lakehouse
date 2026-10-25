@@ -1,6 +1,6 @@
 # Task 2 step 2.2c: Bronze load of ONE day from the landing zone, as a SparkApplication (applied by hand:
 # `make sparkapp DATE=YYYY-MM-DD`; Airflow will template the same object in step 2.4).
-# Placeholders filled by make: __NAME__ (bronze-YYYY-MM-DD), __DATE__, __IMAGE__.
+# Placeholders filled by make: __NAME__ (bronze-YYYY-MM-DD), __DATE__, __IMAGE__ (spark-job image by digest, infra/k8s/images.env).
 apiVersion: sparkoperator.k8s.io/v1beta2
 kind: SparkApplication
 metadata:
@@ -12,7 +12,8 @@ spec:
   mode: cluster
   sparkVersion: "3.5.9"
   image: __IMAGE__
-  imagePullPolicy: Never                       # loaded into Minikube by make k8s-job-image
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: [ghcr-pull]                # private GHCR package (2.0c)
   mainApplicationFile: local:///opt/jobs/bronze_ingest.py
   arguments: ["--ingest-date", "__DATE__", "--source", "s3://landing"]
   restartPolicy: { type: Never }               # one retry layer only: Airflow (01_knowledge.md A4)

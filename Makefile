@@ -14,12 +14,14 @@ K8S_ENV_FILE        ?= infra/k8s/secrets.env
 K8S_RAW_DIR         ?= $(HOME)/data/vnpt-lab
 AIRFLOW_CHART        = $(HOME)/.cache/vnpt-lake/charts/airflow-1.22.0.tgz
 AIRFLOW_CHART_SHA512 = 59a6b157949f37e96acd7351f795fd4347b2c4ac7f21d421542088b019874b202a80740389b71e0e9494fe6827674e596272297b493c419b03b263abb1a71c70
+include infra/k8s/images.env
 JOB_SRC              = jobs/ tests/ docker/spark-job/
 JOB_TAG              = $(shell git log -1 --format=%h -- $(JOB_SRC))
 APP                 ?= bronze
 comma               := ,
 K8S_EXTRA_ARGS       = $(if $(filter yes,$(IDEMPOTENCY)),$(comma) "--check-idempotency",)
-JOB_IMAGE            = vnpt-lake-spark-job:$(JOB_TAG)
+LOCAL_JOB_IMAGE      = vnpt-lake-spark-job:$(JOB_TAG)
+JOB_IMAGE           ?= $(SPARK_JOB_IMAGE_REF)
 
 COMPOSE      = docker compose -f infra/compose/docker-compose.yml --env-file $(ENV_FILE)
 SPARK_SUBMIT = $(COMPOSE) exec -T spark /opt/spark/bin/spark-submit --master $(SPARK_MASTER) --driver-memory $(SPARK_DRIVER_MEMORY)
@@ -29,7 +31,7 @@ NOISE        = ^Time taken|^:: loading settings
 .PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image sparkapp airflow-chart airflow-dags airflow-install airflow-ui
 
 help:          ## list targets and variables
-	@awk -F':.*## ' '/^[a-zA-Z_-]+:.*## /{printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@awk -F':.*## ' '/^[a-zA-Z0-9_-]+:.*## /{printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@echo "  variables: ENV_FILE=$(ENV_FILE) DATE=$(DATE) SPARK_MASTER=$(SPARK_MASTER) SPARK_DRIVER_MEMORY=$(SPARK_DRIVER_MEMORY)"
 
 build:         ## build the 2 thin runtime images (once per version change)
@@ -75,22 +77,22 @@ acceptance-from-zero: ## DESTRUCTIVE: clean -> up -> acceptance (needs CONFIRM=y
 k8s-secrets:   ## Task 2: render K8s secret files from K8S_ENV_FILE into infra/k8s/secrets/ (mode 600)
 	python3 -I infra/k8s/render-secrets.py $(K8S_ENV_FILE)
 landing:       ## Task 2: split the Excel files by day -> s3://landing/<table>/dt=YYYY-MM-DD/ (one-off pod, deleted after)
-	kubectl apply -f infra/k8s/spark-jobs/landing-simulator-pod.yaml
-	kubectl -n spark-jobs wait --for=condition=Ready pod/landing-simulator --timeout=120s
+	sed 's|__IMAGE__|$(JOB_IMAGE)|' infra/k8s/spark-jobs/landing-simulator-pod.yaml | kubectl apply -f -
+	kubectl -n spark-jobs wait --for=condition=Ready pod/landing-simulator --timeout=600s
 	set -e; trap 'kubectl -n spark-jobs delete pod landing-simulator --wait=false' EXIT; \
 	for f in bot_dvc_hcm.xlsx bot_ddvc_hcm_bot_predict.xlsx; do kubectl -n spark-jobs cp $(K8S_RAW_DIR)/$$f landing-simulator:/work/$$f; done; \
-	kubectl -n spark-jobs cp jobs/landing_simulator.py landing-simulator:/work/landing_simulator.py; \
-	kubectl -n spark-jobs cp tests/expected/bronze_daily.json landing-simulator:/work/bronze_daily.json; \
-	kubectl -n spark-jobs exec landing-simulator -- python3 /work/landing_simulator.py --src /work --dest s3://landing --expected /work/bronze_daily.json
-k8s-job-image: ## Task 2: build the job image (base + jobs/*.py + tests/, tag = last commit of those) and load it into Minikube
+	kubectl -n spark-jobs exec landing-simulator -- python3 /opt/jobs/landing_simulator.py --src /work --dest s3://landing \
+	  --expected /opt/tests/expected/bronze_daily.json
+k8s-job-image: ## Task 2 FALLBACK (G6, CI blocked): build locally + load; then make sparkapp JOB_IMAGE=<LOCAL_JOB_IMAGE>
 	@git diff --quiet HEAD -- $(JOB_SRC) || { echo "commit $(JOB_SRC) first: the image tag is their last commit"; exit 1; }
-	docker build -f docker/spark-job/Dockerfile --build-context tests=tests -t $(JOB_IMAGE) jobs/
-	minikube image load $(JOB_IMAGE)
+	docker build -f docker/spark-job/Dockerfile --build-context tests=tests -t $(LOCAL_JOB_IMAGE) jobs/
+	minikube image load $(LOCAL_JOB_IMAGE)
 	rm -rf $(HOME)/.minikube/cache/images
 	minikube image ls | grep vnpt-lake-spark-job
+	@echo "fallback image loaded: run make sparkapp JOB_IMAGE=$(LOCAL_JOB_IMAGE) DATE=..."
 sparkapp:      ## Task 2: run one SparkApplication by hand: make sparkapp [APP=bronze|validate] DATE=2024-07-24 [IDEMPOTENCY=yes]
 	kubectl -n spark-jobs delete sparkapplication $(APP)-$(DATE) --ignore-not-found --wait=true
-	sed -e 's/__NAME__/$(APP)-$(DATE)/' -e 's/__DATE__/$(DATE)/g' -e 's/__IMAGE__/$(JOB_IMAGE)/' -e 's/__EXTRA_ARGS__/$(K8S_EXTRA_ARGS)/' \
+	sed -e 's/__NAME__/$(APP)-$(DATE)/' -e 's/__DATE__/$(DATE)/g' -e 's|__IMAGE__|$(JOB_IMAGE)|' -e 's/__EXTRA_ARGS__/$(K8S_EXTRA_ARGS)/' \
 	    infra/k8s/spark-jobs/$(APP)-sparkapp.yaml | kubectl apply -f -
 	@for i in $$(seq 1 120); do \
 	  s=$$(kubectl -n spark-jobs get sparkapplication $(APP)-$(DATE) -o jsonpath='{.status.applicationState.state}'); \

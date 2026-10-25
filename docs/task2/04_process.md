@@ -14,6 +14,16 @@ Time spent:
 
 ---
 
+### 2026-10-25 — 2.0c-1 pull token + Secrets; 2.0c-2 prepared on branch `task2/ghcr`
+Did (Bee): classic token `minikube-ghcr-pull` with only `read:packages`; `read -rs` + Secret `ghcr-pull` (dockerconfigjson) in lake, spark-jobs, airflow (E30: my check command). Digests from the run summary (E31: not in the log):
+vnpt-lake-spark `3.5.9-iceberg1.11.0-r1` `sha256:aee0deb9…cad5c`; vnpt-lake-hms `3.1.3-hadoopaws3.1.0-r1` `sha256:9446f7d1…b91ff`; vnpt-lake-spark-job `041717a` `sha256:2e5f830e…ca243` (base = spark @aee0deb9…).
+Prepared (Claude): `infra/k8s/images.env` (3 refs by digest, read by make) + kustomize `images:` (same digests for HMS and bucket-init; CI test keeps them equal); HMS, bucket-init, landing pod, SparkApplication templates → GHCR + `imagePullSecrets: ghcr-pull` + `IfNotPresent`; landing pod uses the spark-job image (script and expected file baked, only the Excel files are copied in); `make k8s-job-image` kept as fallback (G6) with `LOCAL_JOB_IMAGE`; `make help` shows the k8s-* targets (regex now allows digits); workflow prints digests to the log and Trivy counts (JSON → `.github/scripts/trivy_counts.py`). Tests: 19 passed, ruff clean.
+
+### 2026-10-25 — 2.0b CI green, PR #1 merged, first image build
+Did (Bee): pushed `task2/ci`, `gh pr create` → PR #1; `gh pr checks` → 3/3 green (lint + unit tests, kustomize render, Dockerfile checks); `gh pr merge --merge --delete-branch` (main `fc93829..041717a`); `gh run watch 40189208252`.
+Observed: images run **success**: base vnpt-lake-hms 3m1s, base vnpt-lake-spark 3m43s (in parallel), spark-job 2m8s → ≈ 9 runner-minutes, ~6 min wall clock. Classic token with `read:packages` created (GHCR does not accept fine-grained tokens).
+Next: 2.0c `ghcr-pull` Secrets, digests from the run summary, switch manifests to GHCR.
+
 ### 2026-10-25 — 2.0b prepared on branch `task2/ci` (Claude)
 Did (Bee): pushed main (`2788fa9..fc93829`, 19 commits — the last direct push to main); `gh auth status` logged in as Beno1tP.
 Prepared (Claude, branch `task2/ci`): `pyproject.toml` (ruff 0.16.10 with an explicit rule set E/F/I/B/SIM/DTZ, line 120; pytest paths); `tests/unit/` (17 tests: check parsing, expected files consistent with Task 1 totals and the 24-day range, `expected_for_day`, `source_path`, `event_day`, renderer refuses change-me / generates keys once / URL-encodes / mode 600 using a temp dir, SparkApplication templates valid after placeholder fill, workflow YAML parses); small lint fixes (tz-aware DAG start_date, import split, `with open`, long lines). `.github/workflows/ci.yml` (PR + main: lint + unit tests on Python 3.10, kustomize render with dummy secrets, `docker build --check` ×3). `.github/workflows/images.yml` (main + manual: base images spark/hms built only when their version tag is missing in GHCR; spark-job tagged with the git SHA, FROM the spark base by digest; Trivy CRITICAL/HIGH report-only; digests in the run summary). Actions pinned by commit SHA (checkout v7.0.1, setup-python v7.1.0, setup-buildx v4.4.1, login v4.7.0, build-push v7.4.0, trivy v0.36.0). Local run in a scratch venv: ruff clean, 17 passed.
