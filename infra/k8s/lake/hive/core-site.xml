@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<!-- S3A config for the Hive Metastore on Minikube (copy of infra/compose/hive/core-site.xml with the cluster DNS name;
+     kustomize cannot load files outside infra/k8s). Credentials come from AWS_* env vars. -->
+<configuration>
+  <property><name>fs.s3a.endpoint</name><value>http://minio.lake.svc.cluster.local:9000</value></property>
+  <property><name>fs.s3a.path.style.access</name><value>true</value></property>
+  <property><name>fs.s3a.connection.ssl.enabled</name><value>false</value></property>
+  <property><name>fs.s3a.aws.credentials.provider</name>
+            <value>com.amazonaws.auth.EnvironmentVariableCredentialsProvider</value></property>
+  <property><name>fs.s3a.impl</name><value>org.apache.hadoop.fs.s3a.S3AFileSystem</value></property>
+</configuration>

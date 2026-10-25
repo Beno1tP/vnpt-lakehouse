@@ -6,6 +6,7 @@ resources:
   - lake/postgres.yaml
   - lake/minio.yaml
   - lake/bucket-init-job.yaml
+  - lake/hive-metastore.yaml
 secretGenerator:                       # from files rendered by `make k8s-secrets` (git-ignored)
   - name: postgres-credentials
     namespace: lake
@@ -13,6 +14,9 @@ secretGenerator:                       # from files rendered by `make k8s-secret
   - name: minio-credentials
     namespace: lake
     envs: [secrets/minio.env]
+  - name: hms-hive-site
+    namespace: lake
+    files: [secrets/hive-site.xml]
 configMapGenerator:
   - name: postgres-initdb
     namespace: lake
@@ -20,3 +24,6 @@ configMapGenerator:
   - name: bucket-init-script
     namespace: lake
     files: [lake/bucket-init/bucket_init.py]
+  - name: hms-core-site
+    namespace: lake
+    files: [lake/hive/core-site.xml]

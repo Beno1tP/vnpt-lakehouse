@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-10-25 — 2.1b MinIO + buckets applied; 2.1c prepared
+Did (Bee): `kubectl apply -k infra/k8s`; rollout + `kubectl wait` job.
+Observed: minio-0 Running in ~20 s; bucket-init: 5× `NETWORK_CONNECTION … curlCode: 7` (connection refused while MinIO started; the retry loop absorbed it), then `bucket lakehouse: created`, `bucket landing: created`; PVC data-minio-0 Bound 5Gi. `statefulset.apps/postgres configured` without a pod restart (no-op apply; `kubectl diff` showed no Postgres change).
+Prepared (Claude): `lake/hive-metastore.yaml` (Service + Deployment, `Recreate`, schema init as **initContainer** with Task 1's check-then-create script + wait for Postgres, fsGroup 1000 = uid/gid hive (checked with `id`), hive-site.xml secret + core-site.xml ConfigMap via subPath, tcp probes 9083, 768Mi/1Gi, `-Xmx768m`), `lake/hive/core-site.xml` (FQDN endpoint). Deviation from plan: initContainer instead of a separate Job (ordering is automatic; idempotent).
+
 ### 2026-10-25 — 2.1a-fix Postgres re-initialised; 2.1b prepared
 Did (Bee): `make k8s-secrets` (new Secret hash: password changed), deleted StatefulSet + PVC, `kubectl apply -k`. Checks (Claude, read-only): log only `airflow role and database created`; secret files `-r--r----- 0 999`; `psql -h postgres.lake.svc.cluster.local -U airflow` → `airflow|airflow`. **E27 fixed.**
 Prepared (Claude): `lake/minio.yaml` (StatefulSet, Task 1 digest, httpGet probes `/minio/health/ready|live`, 256/512 Mi, PVC 5 Gi; minikube PV dirs are 0777 so no chown step); `lake/bucket-init-job.yaml` + `bucket_init.py` (pyarrow S3FileSystem in the already-loaded Spark image instead of amazon/aws-cli: saves ~650 MB; fsGroup 185, `imagePullPolicy: Never`, TTL 600 s). Dry-run + `kubectl diff`: only new MinIO objects.
