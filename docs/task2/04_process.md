@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-10-25 — Plan v2 (operable/standard approach)
+Did (Claude, docs only): merged Claude desktop's plan update into `03_plan.md` v2: Part G (D5: images built by GitHub Actions, stored in GHCR, pulled by Minikube; no laptop builds), Part H (12 production gaps → Task 2 actions: CI/PR, day-generic DQ rules, MinIO service user, backup/restore + register_table drills, maintenance DAG, alerts/remote logs), step table with status, reconciliation §R (desktop plan points already corrected by measurements: webhook on, Allocatable 7268 Mi, containerd, Spark SQL expected counts, initContainer, E25+). D4 (DAG ConfigMap) superseded by D5. Repo is private (GitHub API 404 without login) → GHCR pull token needed.
+Rule reconfirmed by Bee: Bee runs every command incl. checks; Claude only writes files/docs and guides. Step 2.3 (Airflow) was **not** executed; its prepared files are revised in 2.3.
+Next: 2.0b CI + PR habit.
+
 ### 2026-10-25 — 2.2e Big days + 2.3 prepared
 Did (Bee): `make sparkapp` + validate for 2024-07-24 and 2024-07-25.
 Observed: 07-24 12,970 / 6,485 rows in ~21 s, validate 10/10; 07-25 7,552 / 3,892, validate 10/10 incl. `unmatched_to_chat` 116. No OOM with driver 1g + 1g overhead. `kubectl top` in `watch` caught only the node after the runs (2400 Mi): metrics-server samples every ~15–60 s, too slow for 20-s pods → peak pod memory not measured (TODO: measure in 2.5 drills on a longer run).

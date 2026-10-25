@@ -1,110 +1,186 @@
-# Task 2 — Plan: architecture, steps, risks, repo paths
+# Task 2 — Plan v2: architecture, steps, image strategy, production gaps, risks, repo paths
 
-Knowledge: `01_knowledge.md`. Versions, RAM, disk, open decisions D1–D3: `02_config.md`. Corrections from the 2026-10-25 review are marked **[review]**.
+Knowledge: `01_knowledge.md`. Versions, budgets, decisions: `02_config.md`. History: `04_process.md`.
 
-Execution rule (Bee): Claude writes files and docs; **Bee types every command that changes state** (minikube, kubectl apply, helm, make k8s-*) in WSL, with an "Expect:" line per command, and pastes the output. Claude may run read-only checks.
+**v2 (2026-10-25 evening):** merges Claude desktop's plan update (Part G "no image builds on the laptop", Part H "production gaps Task 2 closes") into v1, keeps the review fixes of v1 and the facts measured in steps 2.0–2.2. Reconciliation of the two plans: §R at the end.
+
+**Execution rule (Bee, reconfirmed 2026-10-25):** Bee types **every** command in WSL (install, apply, helm, make, git push, PRs, and the checks). Claude writes files, docs and local commits, gives one stage at a time with "Expect:" lines, and reads the pasted output. Claude does not run cluster, Docker or GitHub commands, not even read-only checks.
 
 ---
 
 ## B. Target architecture
 
 ```
-Namespace lake          : postgres (StatefulSet, DBs metastore + airflow) · minio (StatefulSet + PVC)
-                          hive-metastore (Deployment, thin HMS image) · Jobs: bucket-init, hms-schema-init
-Namespace spark-operator: Kubeflow Spark Operator 2.2.1 (Helm; controller + webhook), watches spark-jobs
-Namespace spark-jobs    : SparkApplication bronze-<date> → driver pod → 1 executor pod
-Namespace airflow       : Airflow 3.3.2 (official Helm chart 1.22.0, D1, LocalExecutor, external Postgres)
-                          DAG chatbot_bronze: check_landing → bronze (SparkKubernetesOperator) → validate → notify
+GitHub (private repo Beno1tP/vnpt-lakehouse)
+  PR  → CI checks (lint, unit tests, Dockerfile check, kustomize render)
+  main→ build 4 images → Trivy scan → push ghcr.io/beno1tp/<image>:<git sha> (+ digests recorded)
+                                                   │ pull (imagePullSecrets: ghcr-pull, read:packages token)
+Minikube (v1.39.0, K8s v1.37.0, 8 GiB / Allocatable 7268 Mi)
+  lake          : postgres (StatefulSet; DBs metastore + airflow) · minio (StatefulSet) · hive-metastore (Deployment,
+                  schema-init initContainer) · Job bucket-init · Job minio-users (service user for Spark) · CronJob pg-backup
+  spark-operator: Kubeflow Spark Operator 2.2.1 (controller + webhook), watches spark-jobs
+  spark-jobs    : SparkApplication bronze-<date> / validate-<date> → driver pod → 1 executor pod
+  airflow       : Airflow 3.3.2 (chart 1.22.0, LocalExecutor, external Postgres), image vnpt-lake-airflow (DAGs baked)
+                  DAG chatbot_bronze: check_landing → bronze → validate → notify ; DAG lake_maintenance (weekly)
 ```
 
-Why our own manifests for MinIO/Postgres/HMS instead of community charts: Bitnami's free images moved in 2025, and the Airflow chart's bundled Postgres is a Bitnami subchart, so we disable it (`postgresql.enabled: false`) and point Airflow at our Postgres. Writing 3 small StatefulSet/Deployment manifests is also the best way to learn the objects in A1.
+## C. Steps and status
 
-## C. Steps (one new component at a time)
+| Step | Do | Done when | Status |
+|---|---|---|---|
+| **2.0 Prep** | minikube v1.39.0, K8s v1.37.0, `kubelet.system-reserved` (E25), metrics-server, namespaces, per-day expected counts (Spark SQL, D3) | node Ready, Allocatable 7268 Mi, expected table saved | ✅ 10-25 |
+| **2.0b CI + PR habit** (G, H#1, H#12) | From now on: work on a branch, open a PR, merge when CI is green. `.github/workflows/ci.yml` on every PR: `ruff`, `pytest` (unit tests of pure functions: `load_checks`, `expected_for_day`, `source_path`, `event_day`), `docker build --check` for every Dockerfile, `kubectl kustomize` render with dummy secrets. `.github/workflows/images.yml` on push to `main` (+ manual): build the 4 images (G2), **Trivy** scan (fail on CRITICAL with a fix), push to GHCR tagged with the git SHA, write digests to the job summary | a PR shows green checks; after merge, 4 packages in GHCR with SHA tags; scan reports in the run | ⏭ next |
+| **2.0c Pull from GHCR** (G3) | Token with `read:packages` only (typed by Bee, never committed); Secret `ghcr-pull` in `lake`, `spark-jobs`, `airflow`; manifests and templates switch from local names to `ghcr.io/beno1tp/…@sha256:…`; `imagePullPolicy: IfNotPresent`; then remove the old locally-loaded images from Minikube (`minikube image rm`) | HMS, bucket-init, SparkApplications run from GHCR images; `minikube image ls` has no `docker.io/library/vnpt-lake-*` | ⏳ |
+| **2.1 Storage + catalog** | Postgres, MinIO, buckets, HMS (schema-init initContainer), Secrets as files | cross-namespace DNS + ports from spark-jobs; schema 3.1.0 | ✅ 10-25 |
+| **2.1b MinIO service user** (H#9) | Job `minio-users`: user `spark-jobs` with a policy *read `landing`, read/write `lakehouse`*; Secret `s3-credentials` switches from root keys to this user; landing simulator keeps a writer user for `landing` | a SparkApplication still COMPLETES; the same keys **cannot** write to `landing` or create a bucket (negative test) | ⏳ |
+| **2.2 Spark Operator + SparkApplication** | operator 2.2.1 (webhook on), landing simulator, `bronze_ingest.py --source s3://landing`, validator per-day mode, `make sparkapp` | COMPLETED; validate 10/10; rerun 16/16 (overwrite, added = deleted); big days OK; Task 1 acceptance still PASSED | ✅ 10-25 |
+| **2.3 Airflow** | Chart 1.22.0 + Airflow 3.3.2 (D1); image `vnpt-lake-airflow` = `FROM apache/airflow:3.3.2-python3.12@sha256:9df9c8…` + `COPY dags/` built by CI (D5, replaces D4); LocalExecutor; external Postgres; fernet/api/jwt Secrets by name; redis/statsd/pgbouncer/flower off; no 100Gi PVCs; migrations without Helm hooks; chart from CDN + SHA-512 (E29); `registry.secretName: ghcr-pull` | UI via port-forward; `hello_lake` runs and prints its data interval | ⏳ |
+| **2.4 DAG** (H#2, H#6) | `chatbot_bronze` (`timedelta(days=1)`, `max_active_runs=1`, `execution_timeout`): `check_landing` (skip if no file, D2) → `bronze` (SparkKubernetesOperator, retries=2) → `validate` (retries=0) → `notify`. RBAC: Role in `spark-jobs` (sparkapplications, pods, pods/log) for Airflow's ServiceAccount. **Validator gets day-generic rules** (H#6) next to the exact per-day reconciliation | one triggered run end to end; logs in the UI; a forced retry does not fail with `AlreadyExists`; rules pass on all 18 days | ⏳ |
+| **2.5 Backfill + drills** | backfill 2024-07-02 → 07-25 (18 load, 6 skip), twice; drills: kill the driver mid-run, delete an executor, restart the scheduler; measure pod memory peaks on a long run (TODO from 2.2e) | backfill ×2 → identical counts per day; each drill recovers without duplicates | ⏳ |
+| **2.5b Backup + restore** (H#5) | CronJob `pg_dump` of `metastore` + `airflow` → `s3://backup/`; drill 1: drop the HMS DB, restore, tables visible; drill 2: `CALL lake.system.register_table(…)` from the last `metadata.json` | both drills restore the tables with the same counts | ⏳ |
+| **2.5c Maintenance DAG** (H#10) | weekly `lake_maintenance`: `expire_snapshots` (keep ≥ 5 and 7 days), `remove_orphan_files`, `rewrite_data_files`; run it **after** the time-travel proof; record snapshots/files before and after | snapshot count and file count drop; counts unchanged | ⏳ |
+| **2.6 Alert + logs** (H#8) | `on_failure_callback` → Telegram (dag/task/date/try only); Airflow remote task logs to MinIO; Spark event logs to MinIO + History Server started only on demand | a forced failure → one message, no data contents; old task logs readable after a scheduler restart | ⏳ |
+| **2.7 Image hygiene** (G) | deploy by digest everywhere; Trivy already in 2.0b; delete old GHCR versions | manifests reference digests only | ⏳ |
+| **2.8 Docs + tag** | README (RAM, disk, decisions, gaps closed/open), errors from E25, `git tag task2-v1` | `make k8s-up && make k8s-demo` from zero | ⏳ |
+| Could | Write-Audit-Publish with an Iceberg branch (H#7) | — | — |
 
-| Step | Do | Done when |
+Silver stays out of Task 2 (leader 10-23: Bronze only for now).
+
+## G. Image strategy: no image builds on the laptop (D5)
+
+The Dockerfiles stay in the repo; **GitHub Actions builds them, GHCR stores them, Minikube pulls them.** Saves laptop CPU, the build cache and the second copy in Docker Desktop, and is the production flow. Task 1 keeps working with its local images (optional later: G5).
+
+### G1. Options re-rated against "no local build"
+
+| Option | No local build? | Verdict |
 |---|---|---|
-| **2.0 Prep** | Stop Task 1 stack (`make down`); install **minikube v1.39.0**; `minikube start --driver=docker --kubernetes-version=v1.37.0 --memory=… --cpus=…` (`02_config.md` §2); metrics-server; namespaces; **[review]** `minikube image load` the 2 thin images (base for `spark-job`, and HMS); D3: per-day expected counts with Spark SQL on Task 1 Bronze (before `make down`) | `kubectl get nodes` Ready; `kubectl describe node minikube` Allocatable ≥ requests sum; `minikube image ls` shows both images; per-day expected table saved |
-| **2.1 Storage + catalog** | Manifests: Postgres StatefulSet + PVC; MinIO StatefulSet + PVC; Job bucket-init (`lakehouse`, `landing`); Job hms-schema-init (check-then-create); HMS Deployment; ConfigMaps for `core-site.xml`, `spark-defaults.conf` (Service DNS names); **[review]** Secret with the rendered `hive-site.xml` (JDBC password) mounted as a file, like Task 1's Compose secret | busybox pod → `nslookup hive-metastore.lake.svc.cluster.local`; HMS log "schema exists"; MinIO console via `kubectl port-forward` |
-| **2.2 Spark Operator + first SparkApplication** | Helm install operator **2.2.1** with `spark.jobNamespaces={spark-jobs}`, **webhook on**; landing simulator uploads daily files; job reads `s3://landing/…/dt=<date>`; `SparkApplication` YAML for one date, applied by hand | Application `COMPLETED`; counts for that day = expected; rerun → `overwrite` snapshot, total unchanged; **[review]** Task 1 `make acceptance` still passes after the `bronze_ingest.py` change (regression) |
-| **2.3 Airflow** | Chart 1.22.0, `airflowVersion/defaultAirflowTag: 3.3.2` (D1), LocalExecutor, external Postgres secret, Redis/statsd/pgbouncer off, resources set; DAGs baked into a thin image `FROM apache/airflow:3.3.2` (same standard as Task 1) | UI reachable via port-forward; example DAG runs |
-| **2.4 DAG** | `chatbot_bronze`: `check_landing` (file for the day exists, else skip: D2) → `bronze` (SparkKubernetesOperator, templated YAML with the interval date) → `validate` (retries=0) → `notify`; RBAC: Role in `spark-jobs` for `sparkapplications` + `pods` + `pods/log` bound to Airflow's ServiceAccount; **[review]** verify SparkApplication naming on retry (`01_knowledge.md` A4) | One scheduled/triggered run succeeds end to end; logs visible in the Airflow UI; a forced retry does not fail with `AlreadyExists` |
-| **2.5 Backfill + drills** | Backfill 2024-07-02 → 07-25 (D2 = A: 18 days load, 6 skipped); run it twice; drills: kill the driver pod mid-run (Airflow retry), delete an executor pod (Spark reschedules), restart the scheduler mid-run | Backfill ×2 → identical counts per day and per table; each drill recovers with no duplicates |
-| **2.6 Alert** (Should) | `on_failure_callback` → Telegram with dag/task/date/try only | A forced failure produces one message with no data contents |
-| **2.7 CI → GHCR** (Could) | GitHub Actions builds the images, pushes to GHCR; Minikube pulls with an `imagePullSecret` | Clean Minikube runs from registry images only |
-| **2.8 Docs + tag** | `docs/task2/01…07`, errors **E25+**, README with RAM/disk, `git tag task2-done` | `make k8s-up && make k8s-demo` works from zero |
+| **A. GitHub Actions → GHCR, pull into Minikube** | ✅ | **Chosen for Task 2** |
+| B. `FROM apache/spark` + pip, built locally | ❌ | Task 1 (`task1-v2…`); its Dockerfiles are A's input |
+| C. `tabulario/spark-iceberg` | ✅ | No: 3.5.5 / 1.8.1, demo image (Jupyter, root), REST catalog |
+| D. Official images + `--packages` at start | ✅ | Dev only (Task 1 v1): runtime downloads, not reproducible |
+| E. Shared base image | — | Used: `spark-job` = `spark` base + code layer |
 
-Silver is **not** in Task 2 by default: Task 2 is about running and orchestrating a job, and adding a new job at the same time breaks "one new component at a time". Add a `silver` task to the DAG after 2.5 if time allows (leader 10-23: Bronze only for now).
+### G2. Images built by CI
+
+| Image | Dockerfile | Rebuilt when | Note |
+|---|---|---|---|
+| `ghcr.io/beno1tp/vnpt-lake-spark` | `docker/spark/` | Spark/Iceberg/pip versions change | base of spark-job |
+| `ghcr.io/beno1tp/vnpt-lake-hms` | `docker/hive/` | HMS/jar versions change | |
+| `ghcr.io/beno1tp/vnpt-lake-spark-job` | `docker/spark-job/` (`BASE_IMAGE` = the spark image above, by digest) | `jobs/`, `tests/expected/`, `tests/sql/` | small code layer |
+| `ghcr.io/beno1tp/vnpt-lake-airflow` | `docker/airflow/` (new): `FROM apache/airflow:3.3.2-python3.12@sha256:9df9c8…` + `COPY dags/` | `dags/` | no pip: provider cncf.kubernetes 10.22.0 already in the image |
+
+Workflow: `push` to `main` with `paths` filters + `workflow_dispatch`; `permissions: contents: read, packages: write`; login with `GITHUB_TOKEN`; actions pinned by commit SHA; `cache-from/to: type=gha`; `spark-job` `needs:` the spark build. GHCR names are lowercase (`beno1tp`).
+
+### G3. Pulling into Minikube
+
+- The repo is **private** (GitHub API returns 404 without login, checked 10-25), so its packages are private: create a **fine-grained or classic token with only `read:packages`**, then per namespace that pulls (`lake`, `spark-jobs`, `airflow`): `kubectl -n <ns> create secret docker-registry ghcr-pull --docker-server=ghcr.io --docker-username=Beno1tP --docker-password=<token>` (typed, never committed).
+- References: Pods/Jobs/Deployments `imagePullSecrets: [{name: ghcr-pull}]`; SparkApplication `spec.imagePullSecrets: [ghcr-pull]`; Airflow chart `registry.secretName: ghcr-pull`.
+- Alternative (ask the leader first): make the 4 packages public; they contain code and dependencies, no data, no secrets.
+
+### G4. Cost and limits
+
+| Item | Fact | Impact |
+|---|---|---|
+| GHCR storage/bandwidth | GitHub docs: container registry storage and bandwidth "currently free", with ≥ 1 month notice before billing (desktop plan sources; re-check before relying on it) | OK for the lab |
+| Actions minutes | private repo on GitHub Free: monthly quota (Settings → Billing → check the number) | base images are rebuilt rarely; code images are minutes |
+| Laptop disk | Minikube must still store each image it runs. Switching from the loaded local images to GHCR images stores **new** layers (CI builds are not byte-identical): ≈ +5.6 GB until the old ones are removed in 2.0c; Airflow image ≈ +2–2.5 GB in 2.3 | measure before/after each pull |
+| Iteration speed | commit → CI (minutes) → pull is slower than a local build | develop job logic on the Task 1 Compose stack (fast loop), then PR |
+
+### G5. Optional: Task 1 without local builds
+Point Task 1 `.env` at the GHCR images, `docker login ghcr.io` with the read-only token, remove the local `vnpt-lake-*` images; `make build` stays for offline work.
+
+### G6. Fallback if CI is blocked
+Build locally, load with `minikube image load`, delete `~/.minikube/cache/images` (what steps 2.0e/2.2c did; measured costs in `04_process.md`).
+
+## H. Production gaps: what Task 2 closes
+
+Source: the 12-gap review of Task 1 (10-22). Rule: take only what is cheap in RAM and time and teaches a production habit; document the rest with the production answer.
+
+| # | Gap | Task 2 action | Priority | Step |
+|---|---|---|---|---|
+| 1 | CI/CD | PR checks + main build/scan/push (G). Dev → staging → prod promotion: not in lab | Must | 2.0b, 2.7 |
+| 2 | Orchestration | the DAG: daily intervals, retries, backfill, `load → validate` dependencies. Airflow 3 removed the old SLA feature → `execution_timeout` + failure alert (check deadline alerts in 3.3 docs) | Must | 2.4, 2.5 |
+| 3 | Runtime / scale | driver + executor pods with requests/limits (done in 2.2). pandas-on-driver stays a **known limit** (one day of Excel is fine); production answer: read the source DB or convert to Parquet at landing | Must / document | 2.2 ✅ |
+| 4 | Availability | not in lab. Talk note: K8s **restarts** failed pods (recovery), one replica is still not high availability | Document | 2.8 |
+| 5 | Backup / recovery | CronJob `pg_dump` + restore drill + `register_table` drill. Caveat: backup on the same MinIO / same disk ≠ disaster recovery | Should | 2.5b |
+| 6 | Data quality | rules valid for any day: rows written = rows read (in job ✅), rows > 0, `ID` not null + unique in the partition, `SOURCE` ∈ {client, bot}, expected column set (schema drift), both tables same `_batch_id` (✅). Exact per-day counts stay as the lab reconciliation | Must | 2.4 |
+| 7 | Publish safety | WAP with an Iceberg branch (verify branch-write syntax for Iceberg 1.11 + Spark 3.5 first) | Could | after 2.5 |
+| 8 | Observability | Telegram on failure (metadata only); remote task logs to MinIO; Spark event logs + History Server on demand. Prometheus/Grafana: not in lab (RAM) | Should | 2.6 |
+| 9 | Security | MinIO service user + policy for Spark; Secrets as files; least-privilege RBAC per namespace (operator's Role ✅, Airflow Role in 2.4); GHCR token `read:packages` only. Not in lab: TLS, HMS auth, rotation, NetworkPolicy (Minikube's kindnet does not enforce it) | Should | 2.1b, 2.4 |
+| 10 | Table maintenance | weekly maintenance DAG, after the time-travel proof | Should | 2.5c |
+| 11 | Ingestion source | daily landing files ≈ one export per day; reprocess a day = rerun its interval. Watermarks, late records, JDBC/CDC: later | Document | A5 |
+| 12 | Change management | branches + PRs from 2.0b, CI must pass; tag per release (`task2-v1`); rollback = redeploy the previous digest. Branch protection on a private repo needs a paid plan → keep the PR habit without enforcement | Should | 2.0b |
+
+RAM: the additions run briefly (Jobs, CronJob, maintenance = one Spark run) or on demand (History Server ~0.5 GiB) → the budget in `02_config.md` §2 holds.
 
 ## D. Risks and first checks
 
 | Symptom | Likely cause | First command |
 |---|---|---|
-| Pod `Pending` | Not enough memory for its request | `kubectl describe pod …` → Events |
-| `OOMKilled` | Limit too low (driver: pandas in overhead) | `kubectl describe pod` → Last State |
-| `ImagePullBackOff` | Image not in Minikube / wrong tag / `imagePullPolicy: Always` | `minikube image ls`; set `IfNotPresent` |
-| `CrashLoopBackOff` | App error at start (config, DNS, secret) | `kubectl logs --previous` |
-| Spark: `pods is forbidden` | Driver ServiceAccount lacks RBAC | `kubectl auth can-i create pods --as=system:serviceaccount:spark-jobs:<sa> -n spark-jobs` |
+| Pod `Pending` | not enough memory for its request | `kubectl describe pod …` → Events |
+| `OOMKilled` / exit 137 | limit too low (driver: pandas in overhead) | `kubectl describe pod` → Last State |
+| `ImagePullBackOff` / `ErrImagePull` | GHCR token missing/wrong, `ghcr-pull` not in that namespace, tag/digest typo | `kubectl describe pod` → Events; `kubectl -n <ns> get secret ghcr-pull` |
+| `ErrImageNeverPull` | `imagePullPolicy: Never` but the image is not in Minikube | `minikube image ls` |
+| `CrashLoopBackOff` | app error at start (config, DNS, secret) | `kubectl logs --previous` |
+| `CreateContainerConfigError` | referenced Secret/ConfigMap missing | `kubectl describe pod` → Events |
+| Spark: `pods is forbidden` | driver ServiceAccount lacks RBAC | `kubectl auth can-i create pods -n spark-jobs --as=system:serviceaccount:spark-jobs:spark-operator-spark` |
 | Airflow: `sparkapplications … forbidden` | Airflow SA has no Role in `spark-jobs` | same `auth can-i` for the Airflow SA |
-| `UnknownHost hive-metastore` | Short name used across namespaces | use `hive-metastore.lake.svc.cluster.local` |
-| **[review]** Driver starts without `spark-defaults.conf` / S3 keys | Operator webhook off or not ready (volumes/env are added by the webhook) | `kubectl get mutatingwebhookconfigurations`; operator webhook pod logs |
-| **[review]** `failed calling webhook` on SparkApplication pods | Webhook pod down, `failurePolicy: Fail` | `kubectl -n spark-operator get pods`; logs of the webhook |
-| DAG not visible | Import error in the DAG file | `airflow dags list-import-errors` in the dag-processor pod |
-| Runs process the wrong day | Zero-length intervals (A3 gotcha) | print `data_interval_start/end` in the first task |
-| **[review]** Airflow chart job fails (migrations, create-user) | Chart 1.22.0 not released with 3.3.2 (D1) | `kubectl -n airflow logs job/…`; fall back to 3.2.2 |
+| S3 `AccessDenied` after 2.1b | policy too narrow for the service user | MinIO console → user → policy |
+| Spark pods without config/keys | webhook down (`failurePolicy: Fail` rejects instead) | `kubectl -n spark-operator get pods` |
+| DAG not visible | import error | `airflow dags list-import-errors` in the dag-processor pod |
+| runs process the wrong day | zero-length intervals (A3 gotcha) | print `data_interval_start/end` in the first task |
+| CI red on `kustomize` | renderer refuses `change-me` values | CI writes dummy values before rendering |
 
 ## E. Questions for the leader
 
-1. Is the Spark Operator (Kubeflow) what production uses, or native spark-submit / another platform?
-2. Production Airflow version and executor (to match the lab)?
-3. OK to simulate daily landing files split by event day, or should each run reload the full export?
-4. ~~Is Silver expected inside Task 2?~~ Answered 10-23: Bronze only for now.
+1. Is the Kubeflow Spark Operator what production uses, or native spark-submit / another platform?
+2. Production Airflow version and executor?
+3. OK to simulate daily landing files split by event day?
+4. ~~Silver inside Task 2?~~ Answered 10-23: Bronze only for now.
+5. **New:** may the 4 lab images be public on GHCR (code + dependencies only), or must they stay private (pull token)?
 
-## F. Repo paths
-
-Rule: **add, don't move.** Task 1 (`infra/compose/`, tags `task1-v*`) must still run unchanged, because each task is a standalone mini-project.
-
-### F1. Tree (new = ➕, changed = ✏️)
+## F. Repo paths (new = ➕, changed = ✏️, done = ✅)
 
 ```
-~/vnpt-lakehouse/
-├── CLAUDE.md                                ✏️ current task = 2, K8s rules, commands
-├── Makefile                                 ✏️ k8s-* targets (F2)
-├── .gitignore                               ✏️ + infra/k8s/secrets/ (secrets.env already covered by *.env)
-├── docker/
-│   ├── spark/  hive/                        Task 1, unchanged
-│   ├── spark-job/    Dockerfile             ➕ FROM vnpt-lake-spark:…-r1 + COPY jobs/ (code baked in)
-│   └── airflow/      Dockerfile, requirements.txt ➕ FROM apache/airflow:3.3.2 + pinned cncf.kubernetes provider + COPY dags/
-├── jobs/
-│   ├── bronze_ingest.py                     ✏️ + --source (local path | s3://landing/...); default = Task 1 behaviour
-│   └── landing_simulator.py                 ➕ split each Excel by event day → s3://landing/<table>/dt=YYYY-MM-DD/
-├── dags/                                    ➕
-│   ├── chatbot_bronze.py
-│   └── templates/ bronze_sparkapp.yaml, validate_sparkapp.yaml
-├── tests/
-│   ├── expected/bronze_daily.json           ➕ per-day expected counts (same format as bronze.json)
-│   └── test_dag_integrity.py                ➕ run inside the Airflow image (Airflow is not installed in WSL)
-├── infra/
-│   ├── compose/ …                           Task 1, unchanged
-│   ├── k8s/                                 ➕ plain manifests, `kubectl apply -k`
-│   │   ├── kustomization.yaml, 00-namespaces.yaml, secrets.env.example
-│   │   ├── lake/ postgres.yaml, minio.yaml, bucket-init-job.yaml, hms-schema-init-job.yaml, hive-metastore.yaml
-│   │   └── spark-jobs/ spark-defaults.conf, rbac-spark.yaml, rbac-airflow.yaml, bronze-manual.yaml
-│   └── helm/                                ➕ spark-operator/values-local.yaml, airflow/values-local.yaml
-├── .github/workflows/images.yml             ➕ step 2.7 (Could)
-└── docs/task2/ 01_knowledge … 07_drills     ➕
+.github/workflows/ci.yml                    ➕ 2.0b PR checks
+.github/workflows/images.yml                ➕ 2.0b build → Trivy → GHCR on main
+pyproject.toml                              ➕ 2.0b ruff + pytest config
+tests/unit/                                 ➕ 2.0b test_validate_bronze.py, test_bronze_ingest.py, test_landing_simulator.py
+tests/expected/bronze_daily.json            ✅
+tests/sql/bronze_daily_counts.sql           ✅
+docker/spark/ docker/hive/                  Task 1, unchanged (CI input)
+docker/spark-job/Dockerfile                 ✅ (BASE_IMAGE becomes the GHCR spark image in CI)
+docker/airflow/Dockerfile                   ➕ 2.3 (D5)
+jobs/bronze_ingest.py                       ✅ --source
+jobs/validate_bronze.py                     ✅ per-day mode; ✏️ 2.4 day-generic rules
+jobs/landing_simulator.py                   ✅
+dags/hello_lake.py                          ✅ (2.3 smoke)
+dags/chatbot_bronze.py, dags/templates/     ➕ 2.4
+dags/lake_maintenance.py                    ➕ 2.5c
+infra/k8s/kustomization.yaml, 00-namespaces ✅
+infra/k8s/lake/{postgres,minio,bucket-init-job,hive-metastore}.yaml   ✅
+infra/k8s/lake/minio-users-job.yaml         ➕ 2.1b
+infra/k8s/lake/pg-backup-cronjob.yaml       ➕ 2.5b
+infra/k8s/spark-jobs/{bronze,validate}-sparkapp.yaml, landing-simulator-pod.yaml   ✅ (✏️ 2.0c image refs)
+infra/k8s/spark-jobs/rbac-airflow.yaml      ➕ 2.4
+infra/helm/spark-operator/values-local.yaml ✅
+infra/helm/airflow/values-local.yaml        ✅ prepared (✏️ 2.3: CI image, registry secret; ConfigMap DAG mount removed)
+docs/task2/01…07                            ✅ living docs
 ```
 
-### F2. New Makefile targets
+## R. Reconciliation: desktop plan v2 vs. what is verified here
 
-| Target | Does |
-|---|---|
-| `make k8s-start` | `minikube start --driver=docker --kubernetes-version=v1.37.0 …` + metrics-server |
-| `make k8s-images` | `minikube image load` the 2 thin images (once), `minikube image build` spark-job and airflow |
-| `make k8s-up` | `kubectl apply -k infra/k8s` + `helm upgrade --install` operator and Airflow with the values files, waits for Ready |
-| `make k8s-status` | `kubectl get pods -A` + `kubectl top pods -A` |
-| `make landing` | port-forward MinIO, run `landing_simulator.py`, list `s3://landing/` |
-| `make sparkapp DATE=…` | apply `bronze-manual.yaml` for one date and follow the driver log |
-| `make airflow-ui` | `kubectl port-forward` to the Airflow API server |
-| `make backfill FROM=… TO=…` | `airflow backfill create` inside the scheduler pod |
-| `make k8s-down` | `helm uninstall` + `kubectl delete -k` (PVCs kept) |
-| `make k8s-clean` | also delete PVCs (needs `CONFIRM=yes`, like `acceptance-from-zero`) |
+| Desktop plan v2 says | Status here | Evidence |
+|---|---|---|
+| Operator "webhook off unless needed" | **Kept on**: the webhook injects volumes/env/secrets; our runs depend on it | operator `sparkpod_defaulter.go`; 2.2c driver pod had `envFrom s3-credentials` |
+| Minikube 8192 MiB, total ≈ 7.5–8 GiB | 8192 MiB with `system-reserved` → **Allocatable 7268 Mi**; requests budget ≈ 6.6 GiB with Airflow + one Spark run | E25; `04_process.md` 2.3 prep |
+| Disk: measure with `minikube ssh -- docker system df` | node runtime is **containerd** → `minikube image ls`, `crictl`, `docker system df` on the host | 2.0d |
+| Expected counts with DuckDB | **Spark SQL** on Task 1 Bronze (D3; Task 2 tech = Minikube + Airflow + Spark) + pandas split agrees | 2.0b, 2.2b |
+| Separate Job hms-schema-init | **initContainer** (automatic ordering, same check-then-create script) | 2.1c |
+| core-site.xml reused from infra/compose | kustomize cannot load files outside `infra/k8s` → copy with FQDN | 2.1c |
+| `make landing` = port-forward + local script | one-off pod + `kubectl cp` (no Python deps on the laptop) | 2.2b |
+| Errors "E24 onward" | E24 already used → Task 2 from **E25** (now E25–E29) | `05_errors_and_fixes.md` |
+| `make k8s-images` = `minikube image pull` at git SHA | ✅ adopted (2.0c); replaces `make k8s-job-image` (local build) | — |
+| Airflow image baked with pinned provider | ✅ adopted as **D5** (built by CI, replaces D4 ConfigMap); provider = bundled **10.22.0** (constraints of 3.3.2), no pip | `constraints-3.3.2` |
+| Chart via `helm repo add apache-airflow` | download from the Apache CDN + SHA-512 (E29) | 2.3 prep |
+| Silver question open | answered 10-23 | progress.md |
