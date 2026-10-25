@@ -55,7 +55,8 @@ Minikube (docker driver) stores its node and its own image store **inside Docker
 | Airflow 3.3.2 image + thin layer | ~1.5–2 GB | estimate |
 | Spark Operator image | ~1 GB | estimate (Spark 3.5.5 inside) |
 | Postgres + MinIO | ~0.9 GB | same digests |
-| **Total** | **≈ +9–10 GB** | measure: `docker system df` (node image + volume) and `minikube ssh -- sudo crictl imagefsinfo` (node runtime is **containerd**, not Docker) |
+| **Total (estimate)** | **≈ +9–10 GB** |
+| **Measured after 2.0e** (only node + 2 thin images) | **+10.9 GB**: kicbase 1.89 + node volume 6.76 (containerd ≈ 1.35× image size) + `~/.minikube` 2.3 (1.5 GB image-load tar cache, deletable) | revised total ≈ **+13–14 GB** with Airflow, operator, Postgres, MinIO; C: had 87.2 GB free | measure: `docker system df` (node image + volume) and `minikube ssh -- sudo crictl imagefsinfo` (node runtime is **containerd**, not Docker) |
 
 `minikube image build` puts *new* images straight into Minikube (no copy in Docker Desktop). `minikube delete` frees all of it **and deletes PVC data**. After Task 2: `minikube delete`, `docker builder prune -af`, compact the vhdx again (Task 1 `04_process.md` 1.15).
 

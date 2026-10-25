@@ -14,6 +14,12 @@ Time spent:
 
 ---
 
+### 2026-10-25 — 2.0e Namespaces + thin images in Minikube (step 2.0 done)
+Did: `kubectl top node` (191m CPU, 537 Mi); `kubectl apply -f infra/k8s/00-namespaces.yaml` (lake, spark-operator, spark-jobs, airflow Active); `minikube image load` both thin images.
+Observed: `minikube image ls` → `docker.io/library/vnpt-lake-spark:3.5.9-iceberg1.11.0-r1`, `docker.io/library/vnpt-lake-hms:3.1.3-hadoopaws3.1.0-r1`. Disk: node volume 1.209 → **6.833 GB (+5.62 GB** for 4.16 GB of images: containerd keeps compressed blobs + unpacked snapshots); `~/.minikube` 856 MB → **2.3 GB**: `cache/images/amd64/` holds tar copies (spark 840 MB, hms 719 MB). Total Task 2 disk so far ≈ **+10.9 GB** (kicbase image 1.89 + node volume 6.76 + ~/.minikube 2.3) — already at the top of the 9–10 GB estimate before Airflow/operator/Postgres/MinIO.
+Learned: `minikube image load` from the Docker daemon caches a tar in `~/.minikube/cache/images` (a third copy, on the Ubuntu disk); safe to delete once the image is in the node (re-created on the next load).
+Next: delete the image cache; 2.1a secrets + Postgres.
+
 ### 2026-10-25 — 2.0d-fix Recreate with kubelet.system-reserved (E25)
 Did: `minikube delete`; `minikube start … --extra-config=kubelet.system-reserved=memory=3686Mi`; metrics-server.
 Observed: no re-download (kicbase + preload cached); Allocatable 11217116Ki → **7442652Ki (7268 Mi)**, `kubepods.slice/memory.max` = 7621275648; 9 kube-system pods Running within 60 s; metrics-server not ready until its first scrapes ("no metrics to serve"). Disk unchanged vs 2.0d.
