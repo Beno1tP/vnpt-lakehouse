@@ -1,8 +1,9 @@
 """Task 2 step 2.4: daily Bronze load of the chatbot logs, orchestrated on Kubernetes.
 
 check_landing -> bronze (SparkApplication) -> validate (SparkApplication) -> notify
-- One run = one day = `ds` (logical date). Airflow 3 manual runs carry [now, now) as data interval, so the day
-  comes from ds, never from the interval (docs/task2/01_knowledge.md A3, observed 2026-10-25).
+- One run = one day = `ds` (logical date). Schedule = CronDataIntervalTimetable at midnight UTC, so scheduled and
+  backfill runs cover [D 00:00, D+1 00:00) with logical date D. Airflow 3 turns a bare timedelta into a
+  DeltaTriggerTimetable (zero-length intervals, logical date = run time): E38. Manual runs: ds = --logical-date.
 - A day without landing files is SKIPPED (decision D2): 6 of the 24 days 2024-07-02..25 have no data.
 - One retry layer (A4): Airflow retries the load (transient failures); SparkApplications use restartPolicy Never;
   validation never retries (a wrong number is deterministic).
@@ -14,14 +15,14 @@ from datetime import datetime, timedelta, timezone
 
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.providers.cncf.kubernetes.operators.spark_kubernetes import SparkKubernetesOperator
-from airflow.sdk import dag, task
+from airflow.sdk import CronDataIntervalTimetable, dag, task
 from airflow.sdk.exceptions import AirflowSkipException  # Airflow 3 location (core alias is deprecated)
 
 LANDING = {"chatlog": "bot_dvc_hcm.xlsx", "bot_predict": "bot_ddvc_hcm_bot_predict.xlsx"}
 
 
 @dag(
-    schedule=timedelta(days=1),                       # real one-day intervals (not a bare cron string, A3)
+    schedule=CronDataIntervalTimetable("0 0 * * *", timezone="UTC"),   # real [D, D+1) intervals (E38)
     start_date=datetime(2024, 7, 2, tzinfo=timezone.utc),
     catchup=False,                                    # history only through an explicit backfill
     max_active_runs=1,                                # all runs write the same two tables

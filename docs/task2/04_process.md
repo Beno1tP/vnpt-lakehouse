@@ -14,6 +14,9 @@ Time spent:
 
 ---
 
+### 2026-10-25 — 2.4b first DAG runs OK; E38 schedule fix prepared
+Observed (Bee): 3 runs `success`. 2024-07-02: check_landing → bronze (24 s, `12 rows read, 12 rows in partition`, `6 / 6`) → validate (`23/23 checks passed`) → notify, driver log lines streamed into Airflow (`[spark-kubernetes-driver] …`). 2024-07-07: `chatlog=no, bot_predict=no` → check_landing **skipped** → all downstream skipped (D2). Scheduled run: `ds=2026-10-25 data_interval=[16:29:09, 16:29:09)` → **E38** (timedelta = DeltaTriggerTimetable in Airflow 3). Fix on this branch: CronDataIntervalTimetable at midnight + CI rule.
+
 ### 2026-10-25 — 2.4b deployed; first chatbot_bronze runs (in progress)
 Did (Bee): `make k8s-secrets` (MINIO_AIRFLOW_LANDING_SECRET + airflow-connections.env), deleted + re-applied the minio-users Job, `kubectl apply -k`, `make airflow-install` (revision 4), unpause + trigger 2024-07-02 and 2024-07-07; PR #10 merged (main `1e652df`).
 Observed: Role + RoleBinding created; Job: `user airflow-landing: policy lake-landing-reader`; `auth can-i create sparkapplications` → **yes**, `can-i list secrets` → **no**; `chatbot_bronze` and `hello_lake` listed; Variable `spark_job_image` = spark-job `f56c2321…`. Scheduled run created on unpause: `scheduled__2026-10-25T16:29:09…`, **logical_date = run_after = 2026-10-25T16:29:09** (not midnight, not the interval start) → success (skipped: no export). Manual runs: logical_date 2024-07-02 / 07-07, data interval = [trigger time, trigger time).
