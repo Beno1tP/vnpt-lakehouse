@@ -40,7 +40,7 @@ Minikube runs as a container in Docker Desktop. Docker Desktop and Ubuntu share 
 | Airflow api-server / scheduler / dag-processor / triggerer | 512 / 512 / 256 / 256 Mi | 1 Gi / 1 Gi / 512 Mi / 512 Mi | statsd, redis, pgbouncer, flower **off** |
 | Spark driver | 2 Gi | 2 Gi | 1 Gi heap + 1 Gi overhead (pandas) |
 | Spark executor ×1 | 1 Gi | 1 Gi | |
-| **Sum (without control plane)** | **6,080 Mi ≈ 5.9 GiB requests** | **8,960 Mi ≈ 8.75 GiB limits** | Requests must fit **Allocatable** (`kubectl describe node minikube`); limits may overcommit, but real use near limits → OOM |
+| **Sum (without control plane)** | **6,080 Mi ≈ 5.9 GiB requests** | **8,960 Mi ≈ 8.75 GiB limits** | Requests must fit **Allocatable** (`kubectl describe node minikube`) — only meaningful after the E25 fix (`kubelet.system-reserved`, Allocatable 7168 Mi); limits may overcommit, but real use near limits → OOM |
 
 Rules: stop the Task 1 Compose stack while Task 2 runs; `minikube addons enable metrics-server`; watch `kubectl top pods -A` during the first Spark run. Start with `--memory=8192 --cpus=6` only if `docker info` shows ≥ 9.5 GiB total and nothing else heavy runs.
 
@@ -55,7 +55,7 @@ Minikube (docker driver) stores its node and its own image store **inside Docker
 | Airflow 3.3.2 image + thin layer | ~1.5–2 GB | estimate |
 | Spark Operator image | ~1 GB | estimate (Spark 3.5.5 inside) |
 | Postgres + MinIO | ~0.9 GB | same digests |
-| **Total** | **≈ +9–10 GB** | measure: `minikube ssh -- docker system df` |
+| **Total** | **≈ +9–10 GB** | measure: `docker system df` (node image + volume) and `minikube ssh -- sudo crictl imagefsinfo` (node runtime is **containerd**, not Docker) |
 
 `minikube image build` puts *new* images straight into Minikube (no copy in Docker Desktop). `minikube delete` frees all of it **and deletes PVC data**. After Task 2: `minikube delete`, `docker builder prune -af`, compact the vhdx again (Task 1 `04_process.md` 1.15).
 

@@ -14,6 +14,12 @@ Time spent:
 
 ---
 
+### 2026-10-25 — 2.0d minikube start
+Did: `minikube start --driver=docker --kubernetes-version=v1.37.0 --memory=8192 --cpus=6`; metrics-server addon.
+Observed: kicbase v0.0.51 (507.6 MiB download) + K8s v1.37.0 preload (347.6 MiB); runtime **containerd 2.3.4** (not Docker inside the node); node Ready after ~80 s, 9 kube-system pods Running. Minikube container 538 MiB idle. Disk: `~/.minikube` 856 MB (Ubuntu disk); Docker images 5.685 → 7.576 GB (+1.89 GB kicbase), volumes 74 MB → 1.209 GB (+1.135 GB node volume) → **≈ +3.9 GB** so far. **E25**: Allocatable reports 10.7 GiB / 8 CPU while the container cap is 8 GiB.
+Learned: containerd runtime → inspect images with `minikube image ls` / `minikube ssh -- sudo crictl images`, not `docker` inside the node; `minikube image load/build` still work.
+Next: recreate with `kubelet.system-reserved` (E25), then 2.0e namespaces + image load.
+
 ### 2026-10-25 — 2.0c Task 1 down, minikube v1.39.0 installed
 Did: `make down` (volumes kept); resource check; downloaded `minikube-linux-amd64` v1.39.0 + `.sha256`, `sha256sum --check` OK, `sudo install` to `/usr/local/bin`, temp dir removed.
 Observed: Docker `CPUs=8 Mem=11486326784` (10.70 GiB); Ubuntu `free -m` total 10,954 MiB, used 2,132; `/` 6.2 GB used; `minikube version: v1.39.0` (commit 7a9f6a84). Binary 136 MiB.
