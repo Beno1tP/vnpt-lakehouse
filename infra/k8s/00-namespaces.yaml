@@ -1,0 +1,24 @@
+# Task 2 namespaces (docs/task2/03_plan.md §B). Apply: kubectl apply -f infra/k8s/00-namespaces.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lake                # postgres, minio, hive-metastore (storage + catalog)
+  labels: { app.kubernetes.io/part-of: vnpt-lakehouse }
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: spark-operator      # Kubeflow Spark Operator 2.2.1 (controller + webhook)
+  labels: { app.kubernetes.io/part-of: vnpt-lakehouse }
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: spark-jobs          # SparkApplications: driver + executor pods
+  labels: { app.kubernetes.io/part-of: vnpt-lakehouse }
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: airflow             # Airflow 3.3.2 (chart 1.22.0, LocalExecutor)
+  labels: { app.kubernetes.io/part-of: vnpt-lakehouse }

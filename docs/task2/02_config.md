@@ -40,7 +40,7 @@ Minikube runs as a container in Docker Desktop. Docker Desktop and Ubuntu share 
 | Airflow api-server / scheduler / dag-processor / triggerer | 512 / 512 / 256 / 256 Mi | 1 Gi / 1 Gi / 512 Mi / 512 Mi | statsd, redis, pgbouncer, flower **off** |
 | Spark driver | 2 Gi | 2 Gi | 1 Gi heap + 1 Gi overhead (pandas) |
 | Spark executor ×1 | 1 Gi | 1 Gi | |
-| **Sum (without control plane)** | **6,080 Mi ≈ 5.9 GiB requests** | **8,960 Mi ≈ 8.75 GiB limits** | Requests must fit **Allocatable** (`kubectl describe node minikube`) — only meaningful after the E25 fix (`kubelet.system-reserved`, Allocatable 7168 Mi); limits may overcommit, but real use near limits → OOM |
+| **Sum (without control plane)** | **6,080 Mi ≈ 5.9 GiB requests** | **8,960 Mi ≈ 8.75 GiB limits** | Requests must fit **Allocatable** (`kubectl describe node minikube`) — only meaningful after the E25 fix (`kubelet.system-reserved`, Allocatable 7268 Mi); limits may overcommit, but real use near limits → OOM |
 
 Rules: stop the Task 1 Compose stack while Task 2 runs; `minikube addons enable metrics-server`; watch `kubectl top pods -A` during the first Spark run. Start with `--memory=8192 --cpus=6` only if `docker info` shows ≥ 9.5 GiB total and nothing else heavy runs.
 

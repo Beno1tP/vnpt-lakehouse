@@ -14,6 +14,12 @@ Time spent:
 
 ---
 
+### 2026-10-25 — 2.0d-fix Recreate with kubelet.system-reserved (E25)
+Did: `minikube delete`; `minikube start … --extra-config=kubelet.system-reserved=memory=3686Mi`; metrics-server.
+Observed: no re-download (kicbase + preload cached); Allocatable 11217116Ki → **7442652Ki (7268 Mi)**, `kubepods.slice/memory.max` = 7621275648; 9 kube-system pods Running within 60 s; metrics-server not ready until its first scrapes ("no metrics to serve"). Disk unchanged vs 2.0d.
+Learned: Allocatable = Capacity − reserved − eviction threshold; minikube's kubelet config has `evictionHard: 0%`, so my expected 7168 Mi was 100 Mi low.
+Next: 2.0e namespaces + load thin images.
+
 ### 2026-10-25 — 2.0d minikube start
 Did: `minikube start --driver=docker --kubernetes-version=v1.37.0 --memory=8192 --cpus=6`; metrics-server addon.
 Observed: kicbase v0.0.51 (507.6 MiB download) + K8s v1.37.0 preload (347.6 MiB); runtime **containerd 2.3.4** (not Docker inside the node); node Ready after ~80 s, 9 kube-system pods Running. Minikube container 538 MiB idle. Disk: `~/.minikube` 856 MB (Ubuntu disk); Docker images 5.685 → 7.576 GB (+1.89 GB kicbase), volumes 74 MB → 1.209 GB (+1.135 GB node volume) → **≈ +3.9 GB** so far. **E25**: Allocatable reports 10.7 GiB / 8 CPU while the container cap is 8 GiB.
