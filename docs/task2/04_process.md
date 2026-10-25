@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-10-26 — 2.5 first backfill 2024-07-02 → 07-25 (old DAG version)
+Did (Bee): `make backfill DRY=yes` (22 dates: `REPROCESS=none` leaves out 07-02 and 07-07, which had manual runs), `make backfill REPROCESS=completed` (backfill_id=1: 22 new `backfill__…` runs + the 2 manual runs re-queued), `make dag-runs`, `make dag-report`.
+Observed: 25 runs `success` (24 days + old scheduled run); about **50 s per data day**, ~20 min total; landing `yes,yes` on 18 days, `no,no` on exactly 07-07/12/13/14/20/21 (skipped, D2); bronze rows read = rows in partition for 18 days × 2 tables, all equal to `bronze_daily.json` (e.g. 07-24 12,970 / 6,485; 07-25 7,552 / 3,892); `[validate] 23/23` on all 18 days. Some single-table bronze lines and three validate lines appear twice (07-04/05/22 bot_predict; validate 07-05/15/17): suspected duplicated log lines when the operator re-streams the driver log, not retries (check pending: attempt=2 files).
+Note: deployed was still helm revision 4 = image `20b2929d…` (timedelta schedule): `run_after = logical_date` in the backfill log. Backfill days are explicit, so the partitions are right either way; the E38 fix (PR #12, revision 5) is deployed before the second backfill. Helm's `APP VERSION 3.2.2` column is the chart's default appVersion metadata; the pods run the 3.3.2 image.
+
 ### 2026-10-26 — PR #11 merged (E38 + D6); Airflow digest promoted, backfill targets (PR #12)
 Did (Bee): PR #11 merged (main `1ec904c`); images run 40214717360: airflow `1ec904c` → `sha256:fb7bf910…0976` (CronDataIntervalTimetable).
 Prepared (Claude, branch `task2/backfill`): images.env bump; `make backfill FROM= TO= REPROCESS= DRY=` (Airflow 3.3.2 CLI checked: `airflow backfill create --dag-id --from-date --to-date` both **inclusive**, `--reprocess-behavior none|completed|failed` (default none = keep days that already have a run), `--max-active-runs`, `--dry-run`); `make dag-runs`; `make dag-report` (per-day landing/bronze/validate lines from the task logs).
