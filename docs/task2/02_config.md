@@ -13,7 +13,8 @@
 | Hive Metastore | 3.1.3 (thin image `vnpt-lake-hms:3.1.3-hadoopaws3.1.0-r1`) | Task 1 | unchanged |
 | Airflow | **3.3.2** | PyPI `apache-airflow` latest = 3.3.2 | |
 | Airflow Helm chart | **1.22.0** (2026-06-01, appVersion **3.2.2**) | `https://airflow.apache.org/index.yaml`, highest version | **No chart release ships 3.3.x yet.** Decision D1 below |
-| Provider `apache-airflow-providers-cncf-kubernetes` | **10.25.0** (PyPI latest, requires `apache-airflow>=2.11.0`) | PyPI JSON | Pin exactly in `docker/airflow/requirements.txt`; check the provider's constraints for 3.3.2 |
+| Provider `apache-airflow-providers-cncf-kubernetes` | **10.22.0** (in the official image; PyPI latest is 10.25.0) | `constraints-3.3.2/constraints-3.12.txt`: cncf-kubernetes 10.22.0, fab 3.9.0, postgres 7.0.2, standard 1.19.0 | The image ships the constraint-tested set; upgrading would be a second version change → keep 10.22.0 |
+| Airflow image | `apache/airflow:3.3.2-python3.12@sha256:9df9c8be…a10bd1` (670 MB compressed amd64) | Docker Hub tags API (`3.3.2` = python3.13) | Pulled by digest straight into Minikube; **no custom build** (D4) |
 | Postgres / MinIO | same digests as Task 1 `.env` | Task 1 | |
 
 Re-check before installing: `helm search repo spark-operator/spark-operator --versions | head`, `helm search repo apache-airflow/airflow --versions | head`.
@@ -24,6 +25,7 @@ Re-check before installing: `helm search repo spark-operator/spark-operator --ve
 |---|---|---|---|
 | D1 | Chart 1.22.0 defaults to Airflow 3.2.2; we want 3.3.2 | (a) chart 1.22.0 + `airflowVersion/defaultAirflowTag: 3.3.2`; (b) Airflow 3.2.2 | **Decided 10-25: (a).** Chart 1.22.0 templates branch on the Airflow version only at `>=3.0.0` (26×), `<3.0.0` (13×), `<2.11.0` (1×) (`grep semverCompare chart/templates`, tag `helm-chart/1.22.0`), so 3.3.2 renders exactly the same objects as 3.2.2. Remaining risk: config keys deprecated in 3.3 → read warnings at install; fallback (b) |
 | D2 | Which days to run / backfill (data: 18 days with rows inside 2024-07-02 → 07-25) | see `03_plan.md` §C 2.5 | **Decided 10-25: option A** — daily runs over the calendar span 2024-07-02 → 07-25 (24 runs): 18 days load their landing file, 6 days without a file are **skipped** (`check_landing` → `AirflowSkipException`). 30 days is UC7 (Task 5, leader: 18 days OK), not a Task 2 requirement. Rejected: B (18 manual triggers), C (one full-file run, no meaningful backfill) |
+| D4 | How DAG files reach Airflow | (a) bake into `FROM apache/airflow` image (plan); (b) ConfigMap `airflow-dags` mounted on all Airflow pods | **Decided 10-25: (b)** — CLAUDE.md prefers pulled images + mounted config; saves a build and a ~2 GB copy in Docker Desktop + tar load; DAG change = `make airflow-dags`, no rebuild. Limit 1 MiB per ConfigMap (DAGs are KB). Production would bake or git-sync |
 | D3 | Where to compute per-day expected counts | **Decided 10-25: Spark only, no new tool.** Spark SQL on the Task 1 Bronze tables (Compose stack, already validated: 21,224 / 10,729), grouped by the date in `CREATED_TIME`. Independent of the landing simulator (pandas split). Task 2 stack = Minikube + Airflow + Spark; query engine (Trino) belongs to Task 3 | |
 
 ## 2. RAM budget

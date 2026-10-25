@@ -3,13 +3,23 @@
 kustomize (secretGenerator in infra/k8s/kustomization.yaml) turns these files into Kubernetes Secrets,
 one Secret per consumer, so each pod only gets the keys it needs. Run: make k8s-secrets [K8S_ENV_FILE=...]
 """
+import base64
 import os
+import secrets
 import sys
+import urllib.parse
 import xml.sax.saxutils as xs
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "secrets")
-REQUIRED = ("PG_USER", "PG_PASSWORD", "AIRFLOW_DB_PASSWORD", "MINIO_ROOT_USER", "MINIO_ROOT_PASSWORD")
+REQUIRED = ("PG_USER", "PG_PASSWORD", "AIRFLOW_DB_PASSWORD", "MINIO_ROOT_USER", "MINIO_ROOT_PASSWORD", "AIRFLOW_ADMIN_PASSWORD")
+# generated once and appended to secrets.env, so they stay stable across renders (a new fernet key would make
+# stored Airflow connections unreadable; a new JWT secret breaks running tasks)
+GENERATED = {
+    "AIRFLOW_FERNET_KEY": lambda: base64.urlsafe_b64encode(os.urandom(32)).decode(),
+    "AIRFLOW_API_SECRET_KEY": lambda: secrets.token_hex(32),
+    "AIRFLOW_JWT_SECRET": lambda: secrets.token_hex(32),
+}
 
 
 def read_env(path):
@@ -32,12 +42,19 @@ def write_private(name, text):
 
 
 def main():
-    env = read_env(sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "secrets.env"))
+    env_path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "secrets.env")
+    env = read_env(env_path)
     missing = [k for k in REQUIRED if not env.get(k)]
     if missing:
         sys.exit(f"missing keys in secrets.env: {', '.join(missing)}")
     if any(v.startswith("change-me") for v in env.values()):
         sys.exit("secrets.env still has change-me passwords: edit it first")
+    new = {k: make() for k, make in GENERATED.items() if not env.get(k)}
+    if new:
+        with open(env_path, "a") as f:
+            f.write("".join(f"{k}={v}\n" for k, v in new.items()))
+        env.update(new)
+        print("generated and appended to secrets.env:", ", ".join(new))
     os.makedirs(OUT, mode=0o700, exist_ok=True)
     # Postgres: superuser for the metastore DB + password of the airflow DB role (created by the init script)
     write_private("postgres.env", "".join(f"{k}={env[k]}\n" for k in ("PG_USER", "PG_PASSWORD", "AIRFLOW_DB_PASSWORD")))
@@ -45,6 +62,14 @@ def main():
     write_private("minio.env", "".join(f"{k}={env[k]}\n" for k in ("MINIO_ROOT_USER", "MINIO_ROOT_PASSWORD")))
     # S3 client keys for Spark jobs / landing simulator in spark-jobs (AWS SDK env names; MinIO root until phase 2)
     write_private("s3.env", f"AWS_ACCESS_KEY_ID={env['MINIO_ROOT_USER']}\nAWS_SECRET_ACCESS_KEY={env['MINIO_ROOT_PASSWORD']}\n")
+    # Airflow (namespace airflow): metadata DB connection + keys, one file per Secret the Helm chart expects
+    pw = urllib.parse.quote(env["AIRFLOW_DB_PASSWORD"], safe="")
+    write_private("airflow-metadata.env",
+                  f"connection=postgresql+psycopg2://airflow:{pw}@postgres.lake.svc.cluster.local:5432/airflow\n")
+    write_private("airflow-fernet.env", f"fernet-key={env['AIRFLOW_FERNET_KEY']}\n")
+    write_private("airflow-api.env", f"api-secret-key={env['AIRFLOW_API_SECRET_KEY']}\n")
+    write_private("airflow-jwt.env", f"jwt-secret={env['AIRFLOW_JWT_SECRET']}\n")
+    write_private("airflow-admin-password", env["AIRFLOW_ADMIN_PASSWORD"])
     # HMS JDBC settings as a file (never in SERVICE_OPTS: the entrypoint prints it with set -x)
     props = {
         "javax.jdo.option.ConnectionDriverName": "org.postgresql.Driver",

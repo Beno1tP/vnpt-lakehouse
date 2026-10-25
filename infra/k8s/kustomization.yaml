@@ -21,6 +21,11 @@ secretGenerator:                       # from files rendered by `make k8s-secret
     namespace: spark-jobs               # so the name must stay stable (no hash suffix)
     envs: [secrets/s3.env]
     options: { disableNameSuffixHash: true }
+  # Airflow chart (step 2.3) reads these by fixed name (values-local.yaml), so no hash suffix
+  - { name: airflow-metadata, namespace: airflow, envs: [secrets/airflow-metadata.env], options: { disableNameSuffixHash: true } }
+  - { name: airflow-fernet-key, namespace: airflow, envs: [secrets/airflow-fernet.env], options: { disableNameSuffixHash: true } }
+  - { name: airflow-api-secret-key, namespace: airflow, envs: [secrets/airflow-api.env], options: { disableNameSuffixHash: true } }
+  - { name: airflow-jwt-secret, namespace: airflow, envs: [secrets/airflow-jwt.env], options: { disableNameSuffixHash: true } }
 configMapGenerator:
   - name: postgres-initdb
     namespace: lake

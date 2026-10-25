@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-10-25 — 2.2e Big days + 2.3 prepared
+Did (Bee): `make sparkapp` + validate for 2024-07-24 and 2024-07-25.
+Observed: 07-24 12,970 / 6,485 rows in ~21 s, validate 10/10; 07-25 7,552 / 3,892, validate 10/10 incl. `unmatched_to_chat` 116. No OOM with driver 1g + 1g overhead. `kubectl top` in `watch` caught only the node after the runs (2400 Mi): metrics-server samples every ~15–60 s, too slow for 20-s pods → peak pod memory not measured (TODO: measure in 2.5 drills on a longer run).
+Prepared (Claude): Airflow per D4 (DAGs as ConfigMap, official image by digest, no build): `infra/helm/airflow/values-local.yaml` (LocalExecutor, external Postgres secret, fernet/api/jwt secrets by name, redis/statsd/pgbouncer/flower off, worker + triggerer persistence off so the scheduler stays a Deployment without a 100Gi PVC, migration/create-user Jobs without Helm hooks for `--wait`, parallelism 4, resources on all containers); renderer generates fernet/api/jwt keys once (appended to secrets.env) and writes the Airflow secret files; 4 fixed-name Secrets in kustomize; `dags/hello_lake.py`; make `airflow-chart` (CDN + SHA-512, E29), `airflow-dags`, `airflow-install`, `airflow-ui`. `helm template` with these values: 4 Deployments (api-server, scheduler, dag-processor, triggerer) + 2 Jobs, 13 containers all on `apache/airflow@sha256:9df9c8…`, dags volume mounted; Airflow requests 1,632 Mi → node ≈ 3.5 Gi, + one Spark run 3.1 Gi = 6.6 of 7.27 Gi.
+
 ### 2026-10-25 — 2.2d Validate on K8s + rerun idempotency (step 2.2 done for one day)
 Did (Bee): `make k8s-job-image` (tag 74c5a42), `make sparkapp APP=validate DATE=2024-07-02`, `make sparkapp DATE=2024-07-02` (reload), `make sparkapp APP=validate DATE=2024-07-02 IDEMPOTENCY=yes`; Task 1 `make validate DATE=2026-10-16` (regression for the validator change).
 Observed: validate **10/10** (8 checks + 2 column counts, 7 SKIP); reload 12/12, 6/6 (no duplicates); with idempotency **16/16** (last snapshot `overwrite`, added = deleted = 12 / 6); each app ~21 s. Task 1 validate **17/17** (full mode unchanged).

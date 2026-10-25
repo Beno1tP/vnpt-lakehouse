@@ -12,6 +12,8 @@ SPARK_DRIVER_MEMORY ?= 2g
 VALIDATE_ARGS       ?=
 K8S_ENV_FILE        ?= infra/k8s/secrets.env
 K8S_RAW_DIR         ?= $(HOME)/data/vnpt-lab
+AIRFLOW_CHART        = $(HOME)/.cache/vnpt-lake/charts/airflow-1.22.0.tgz
+AIRFLOW_CHART_SHA512 = 59a6b157949f37e96acd7351f795fd4347b2c4ac7f21d421542088b019874b202a80740389b71e0e9494fe6827674e596272297b493c419b03b263abb1a71c70
 JOB_SRC              = jobs/ tests/ docker/spark-job/
 JOB_TAG              = $(shell git log -1 --format=%h -- $(JOB_SRC))
 APP                 ?= bronze
@@ -24,7 +26,7 @@ SPARK_SUBMIT = $(COMPOSE) exec -T spark /opt/spark/bin/spark-submit --master $(S
 SPARK_SQL    = $(COMPOSE) exec -T spark /opt/spark/bin/spark-sql --master local[1]
 NOISE        = ^Time taken|^:: loading settings
 
-.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image sparkapp
+.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image sparkapp airflow-chart airflow-dags airflow-install airflow-ui
 
 help:          ## list targets and variables
 	@awk -F':.*## ' '/^[a-zA-Z_-]+:.*## /{printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -96,3 +98,16 @@ sparkapp:      ## Task 2: run one SparkApplication by hand: make sparkapp [APP=b
 	  case "$$s" in COMPLETED) break;; FAILED|SUBMISSION_FAILED) break;; esac; sleep 5; done
 	kubectl -n spark-jobs logs $(APP)-$(DATE)-driver | grep -E "^\[(bronze|validate)\]|Error|Exception|Caused by" || true
 	@test "$$(kubectl -n spark-jobs get sparkapplication $(APP)-$(DATE) -o jsonpath='{.status.applicationState.state}')" = COMPLETED
+airflow-dags:  ## Task 2: (re)load dags/*.py into ConfigMap airflow-dags (pods see changes within ~1 min)
+	kubectl -n airflow create configmap airflow-dags --from-file=dags/ --dry-run=client -o yaml | kubectl apply -f -
+airflow-chart: ## Task 2: download Airflow chart 1.22.0 from the Apache CDN and check its SHA-512 (E29: helm repo index -> slow archive)
+	mkdir -p $(dir $(AIRFLOW_CHART))
+	test -f $(AIRFLOW_CHART) || curl -fL --retry 3 -o $(AIRFLOW_CHART) https://dlcdn.apache.org/airflow/helm-chart/1.22.0/airflow-1.22.0.tgz
+	echo "$(AIRFLOW_CHART_SHA512)  $(AIRFLOW_CHART)" | sha512sum --check
+airflow-install: airflow-chart ## Task 2: helm upgrade --install Airflow 3.3.2 (chart 1.22.0) with infra/helm/airflow/values-local.yaml
+	helm upgrade --install airflow $(AIRFLOW_CHART) -n airflow \
+	  -f infra/helm/airflow/values-local.yaml \
+	  --set-file createUserJob.defaultUser.password=infra/k8s/secrets/airflow-admin-password \
+	  --wait --timeout 15m
+airflow-ui:    ## Task 2: open the Airflow UI on http://localhost:8080 (Ctrl+C to stop)
+	kubectl -n airflow port-forward svc/airflow-api-server 8080:8080
