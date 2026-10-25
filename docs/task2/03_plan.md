@@ -38,13 +38,14 @@ Minikube (v1.39.0, K8s v1.37.0, 8 GiB / Allocatable 7268 Mi)
 | **2.4 DAG** (H#2, H#6) | `chatbot_bronze` (`timedelta(days=1)`, `max_active_runs=1`, `execution_timeout`): `check_landing` (skip if no file, D2) → `bronze` (SparkKubernetesOperator, retries=2) → `validate` (retries=0) → `notify`. RBAC: Role in `spark-jobs` (sparkapplications, pods, pods/log) for Airflow's ServiceAccount. **Validator gets day-generic rules** (H#6) next to the exact per-day reconciliation | one triggered run end to end; logs in the UI; a forced retry does not fail with `AlreadyExists`; rules pass on all 18 days | ⏭ 2.4a ✅ (rules), 2.4b DAG in PR |
 | **2.5 Backfill + drills** | backfill 2024-07-02 → 07-25 (18 load, 6 skip), twice; drills: kill the driver mid-run, delete an executor, restart the scheduler; measure pod memory peaks on a long run (TODO from 2.2e) | backfill ×2 → identical counts per day; each drill recovers without duplicates | ⏳ |
 | **2.5b Backup + restore** (H#5) | CronJob `pg_dump` of `metastore` + `airflow` → `s3://backup/`; drill 1: drop the HMS DB, restore, tables visible; drill 2: `CALL lake.system.register_table(…)` from the last `metadata.json` | both drills restore the tables with the same counts | ⏳ |
+| **2.5d Silver** (D6) | Spark job `silver_transform.py` (pure, pytest-tested helpers: Oracle timestamp parse, final_intent rule, flags): `silver.chat_message` (typed `created_at`, dedup by ID, `is_internal_sender`, `is_home_command`) and `silver.bot_prediction` (typed, `confidence` as double, `final_intent` = fallback stays fallback / confidence < NLU_THRESHOLD → `bot_khong_hieu` / else INTENT_NAME, `has_chat_message`); partitioned by event day, `overwritePartitions`; Silver rules + reconciliation vs Bronze (rows, 116 unmatched, final_intent counts xin_chao 10,588 · fallback 107 · bot_khong_hieu 34); DAG: `bronze → validate → silver → validate_silver → notify` | backfill ×2 identical; Silver totals = Task 1 facts | ⏳ |
 | **2.5c Maintenance DAG** (H#10) | weekly `lake_maintenance`: `expire_snapshots` (keep ≥ 5 and 7 days), `remove_orphan_files`, `rewrite_data_files`; run it **after** the time-travel proof; record snapshots/files before and after | snapshot count and file count drop; counts unchanged | ⏳ |
 | **2.6 Alert + logs** (H#8) | `on_failure_callback` → Telegram (dag/task/date/try only); Airflow remote task logs to MinIO; Spark event logs to MinIO + History Server started only on demand | a forced failure → one message, no data contents; old task logs readable after a scheduler restart | ⏳ |
 | **2.7 Image hygiene** (G) | deploy by digest everywhere; Trivy already in 2.0b; delete old GHCR versions | manifests reference digests only | ⏳ |
 | **2.8 Docs + tag** | README (RAM, disk, decisions, gaps closed/open), errors from E25, `git tag task2-v1` | `make k8s-up && make k8s-demo` from zero | ⏳ |
 | Could | Write-Audit-Publish with an Iceberg branch (H#7) | — | — |
 
-Silver stays out of Task 2 (leader 10-23: Bronze only for now).
+**Silver is in Task 2 (D6, 10-25).** The lab doc defines a Medallion pipeline (Bronze → Silver → Gold) where *Spark ETL writes Iceberg* and *dbt builds Gold*; Silver therefore sits between Bronze (step 1–2) and Gold (step 4, dbt on StarRocks), produced by Spark under Airflow. Added as step **2.5d** after the Bronze backfill (one new component at a time); Task 3 (Trino) then queries typed Silver tables, Task 4's dbt `staging` models read Silver.
 
 ## G. Image strategy: no image builds on the laptop (D5)
 
@@ -136,7 +137,7 @@ RAM: the additions run briefly (Jobs, CronJob, maintenance = one Spark run) or o
 1. Is the Kubeflow Spark Operator what production uses, or native spark-submit / another platform?
 2. Production Airflow version and executor?
 3. OK to simulate daily landing files split by event day?
-4. ~~Silver inside Task 2?~~ Answered 10-23: Bronze only for now.
+4. ~~Silver inside Task 2?~~ 10-23 "Bronze only for now"; **10-25: Silver is required** (lab doc: Medallion Bronze → Silver → Gold, Spark ETL to Iceberg; D6).
 5. **New:** may the 4 lab images be public on GHCR (code + dependencies only), or must they stay private (pull token)?
 
 ## F. Repo paths (new = ➕, changed = ✏️, done = ✅)
