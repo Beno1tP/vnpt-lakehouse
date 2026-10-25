@@ -51,7 +51,10 @@ def main() -> None:
     args = ap.parse_args()
 
     fs, base = filesystem(args.dest)
-    expected = json.load(open(args.expected))["days"] if args.expected else None
+    expected = None
+    if args.expected:
+        with open(args.expected) as f:
+            expected = json.load(f)["days"]
     failed = False
 
     for table, (fname, sheet) in SOURCES.items():

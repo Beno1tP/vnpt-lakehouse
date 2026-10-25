@@ -103,7 +103,8 @@ def main() -> None:
 
     spark.stop()
     failed = results.count(False)
-    print(f"[validate] {len(results) - failed}/{len(results)} checks passed for _ingest_date={args.ingest_date}", flush=True)
+    passed = len(results) - failed
+    print(f"[validate] {passed}/{len(results)} checks passed for _ingest_date={args.ingest_date}", flush=True)
     sys.exit(1 if failed else 0)
 
 
