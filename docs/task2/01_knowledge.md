@@ -65,6 +65,8 @@ Version note (verified 2026-10-25 from each tag's `Dockerfile`): Kubeflow Spark 
 
 **Airflow 3 gotcha (verify in your version's docs):** with a cron string like `"@daily"`, Airflow 3 uses `CronTriggerTimetable` by default (`[scheduler] create_cron_data_intervals = False`), so `data_interval_start == data_interval_end`. For a real one-day interval, use `schedule=timedelta(days=1)` or `CronDataIntervalTimetable("@daily", timezone="UTC")`. Manual runs may also have no logical date: give the DAG a `date` param as a fallback.
 
+**Observed 2026-10-25 (Airflow 3.3.2, `schedule=timedelta(days=1)`):** a **manual** trigger with `--logical-date 2024-07-03` gives `ds=2024-07-03` but `data_interval = [trigger time, trigger time)` (zero length, "now", not the logical date). So the day must come from `ds` (logical date), not from the data interval, at least for manual runs; scheduled/backfill runs are checked in 2.5 (print both, assert they agree).
+
 **[review] Which "day":** `CREATED_TIME` is Oracle text without a time zone. The data day = the date **as written** in `CREATED_TIME` (no conversion). The DAG passes `ds` (YYYY-MM-DD of the interval start) as a label for that day, so the DAG time zone and the landing `dt=` must use the same convention. Data covers 2024-07-02 → 2024-07-25 with **18 distinct days** (`docs/task1/06_validation.md`): 6 days in that range have no file (A5).
 
 ## A4. How Airflow starts Spark: options
