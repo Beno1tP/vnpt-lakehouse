@@ -12,7 +12,8 @@ import xml.sax.saxutils as xs
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "secrets")
-REQUIRED = ("PG_USER", "PG_PASSWORD", "AIRFLOW_DB_PASSWORD", "MINIO_ROOT_USER", "MINIO_ROOT_PASSWORD", "AIRFLOW_ADMIN_PASSWORD")
+REQUIRED = ("PG_USER", "PG_PASSWORD", "AIRFLOW_DB_PASSWORD", "MINIO_ROOT_USER", "MINIO_ROOT_PASSWORD",
+            "AIRFLOW_ADMIN_PASSWORD")
 # generated once and appended to secrets.env, so they stay stable across renders (a new fernet key would make
 # stored Airflow connections unreadable; a new JWT secret breaks running tasks)
 GENERATED = {
@@ -61,7 +62,8 @@ def main():
     # MinIO root credentials (server, bucket-init, and S3 clients until per-service keys exist)
     write_private("minio.env", "".join(f"{k}={env[k]}\n" for k in ("MINIO_ROOT_USER", "MINIO_ROOT_PASSWORD")))
     # S3 client keys for Spark jobs / landing simulator in spark-jobs (AWS SDK env names; MinIO root until phase 2)
-    write_private("s3.env", f"AWS_ACCESS_KEY_ID={env['MINIO_ROOT_USER']}\nAWS_SECRET_ACCESS_KEY={env['MINIO_ROOT_PASSWORD']}\n")
+    write_private("s3.env", f"AWS_ACCESS_KEY_ID={env['MINIO_ROOT_USER']}\n"
+                            f"AWS_SECRET_ACCESS_KEY={env['MINIO_ROOT_PASSWORD']}\n")
     # Airflow (namespace airflow): metadata DB connection + keys, one file per Secret the Helm chart expects
     pw = urllib.parse.quote(env["AIRFLOW_DB_PASSWORD"], safe="")
     write_private("airflow-metadata.env",

@@ -1,0 +1,51 @@
+# Task 2 step 2.0b: checks on every PR (and on main). Fast, no images pushed. Actions pinned by commit SHA.
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: lint + unit tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.10"            # = Python of the Spark image (3.10.12)
+      - name: Install pinned tools + the job's pure-Python deps (no Spark)
+        run: pip install ruff==0.16.10 pytest==9.1.1 pyyaml==6.0.2 -r docker/spark/requirements.txt
+      - run: ruff check .
+      - run: pytest
+
+  manifests:
+    name: kustomize render (dummy secrets)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Render secrets from the example with dummy values, then kustomize
+        run: |
+          sed 's/change-me-[a-z-]*/ci-dummy-value-1/' infra/k8s/secrets.env.example > "$RUNNER_TEMP/secrets.env"
+          python3 infra/k8s/render-secrets.py "$RUNNER_TEMP/secrets.env"
+          kubectl version --client
+          kubectl kustomize infra/k8s > "$RUNNER_TEMP/rendered.yaml"
+          grep '^kind:' "$RUNNER_TEMP/rendered.yaml" | sort | uniq -c
+
+  dockerfiles:
+    name: Dockerfile checks
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: docker build --check (BuildKit lint rules, no build)
+        run: |
+          docker build --check docker/spark
+          docker build --check docker/hive
+          docker build --check -f docker/spark-job/Dockerfile --build-context tests=tests \
+            --build-arg BASE_IMAGE=apache/spark:3.5.9-scala2.12-java17-python3-ubuntu@sha256:f3d6eaa8bab8ec2e38f3c3918a5b2f8b253c95bcb19f9e87ad0e0cdacf9df2d5 jobs/

@@ -2,12 +2,12 @@
 task logs work, and shows the run's data interval (Airflow 3 gotcha, 01_knowledge.md A3). No Spark here."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from airflow.sdk import dag, task
 
 
-@dag(schedule=timedelta(days=1), start_date=datetime(2024, 7, 2), catchup=False, max_active_runs=1,
+@dag(schedule=timedelta(days=1), start_date=datetime(2024, 7, 2, tzinfo=timezone.utc), catchup=False, max_active_runs=1,
      tags=["task2", "smoke"])
 def hello_lake():
     @task
