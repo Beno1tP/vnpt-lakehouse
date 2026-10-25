@@ -12,7 +12,11 @@ SPARK_DRIVER_MEMORY ?= 2g
 VALIDATE_ARGS       ?=
 K8S_ENV_FILE        ?= infra/k8s/secrets.env
 K8S_RAW_DIR         ?= $(HOME)/data/vnpt-lab
-JOB_TAG              = $(shell git log -1 --format=%h -- jobs/)
+JOB_SRC              = jobs/ tests/ docker/spark-job/
+JOB_TAG              = $(shell git log -1 --format=%h -- $(JOB_SRC))
+APP                 ?= bronze
+comma               := ,
+K8S_EXTRA_ARGS       = $(if $(filter yes,$(IDEMPOTENCY)),$(comma) "--check-idempotency",)
 JOB_IMAGE            = vnpt-lake-spark-job:$(JOB_TAG)
 
 COMPOSE      = docker compose -f infra/compose/docker-compose.yml --env-file $(ENV_FILE)
@@ -76,19 +80,19 @@ landing:       ## Task 2: split the Excel files by day -> s3://landing/<table>/d
 	kubectl -n spark-jobs cp jobs/landing_simulator.py landing-simulator:/work/landing_simulator.py; \
 	kubectl -n spark-jobs cp tests/expected/bronze_daily.json landing-simulator:/work/bronze_daily.json; \
 	kubectl -n spark-jobs exec landing-simulator -- python3 /work/landing_simulator.py --src /work --dest s3://landing --expected /work/bronze_daily.json
-k8s-job-image: ## Task 2: build the job image (base + jobs/*.py, tag = last commit of jobs/) and load it into Minikube
-	@git diff --quiet HEAD -- jobs/ || { echo "commit jobs/ first: the image tag is the last commit that changed jobs/"; exit 1; }
-	docker build -f docker/spark-job/Dockerfile -t $(JOB_IMAGE) jobs/
+k8s-job-image: ## Task 2: build the job image (base + jobs/*.py + tests/, tag = last commit of those) and load it into Minikube
+	@git diff --quiet HEAD -- $(JOB_SRC) || { echo "commit $(JOB_SRC) first: the image tag is their last commit"; exit 1; }
+	docker build -f docker/spark-job/Dockerfile --build-context tests=tests -t $(JOB_IMAGE) jobs/
 	minikube image load $(JOB_IMAGE)
 	rm -rf $(HOME)/.minikube/cache/images
 	minikube image ls | grep vnpt-lake-spark-job
-sparkapp:      ## Task 2: run the Bronze SparkApplication for one day by hand: make sparkapp DATE=2024-07-24
-	kubectl -n spark-jobs delete sparkapplication bronze-$(DATE) --ignore-not-found --wait=true
-	sed -e 's/__NAME__/bronze-$(DATE)/' -e 's/__DATE__/$(DATE)/g' -e 's/__IMAGE__/$(JOB_IMAGE)/' \
-	    infra/k8s/spark-jobs/bronze-sparkapp.yaml | kubectl apply -f -
+sparkapp:      ## Task 2: run one SparkApplication by hand: make sparkapp [APP=bronze|validate] DATE=2024-07-24 [IDEMPOTENCY=yes]
+	kubectl -n spark-jobs delete sparkapplication $(APP)-$(DATE) --ignore-not-found --wait=true
+	sed -e 's/__NAME__/$(APP)-$(DATE)/' -e 's/__DATE__/$(DATE)/g' -e 's/__IMAGE__/$(JOB_IMAGE)/' -e 's/__EXTRA_ARGS__/$(K8S_EXTRA_ARGS)/' \
+	    infra/k8s/spark-jobs/$(APP)-sparkapp.yaml | kubectl apply -f -
 	@for i in $$(seq 1 120); do \
-	  s=$$(kubectl -n spark-jobs get sparkapplication bronze-$(DATE) -o jsonpath='{.status.applicationState.state}'); \
+	  s=$$(kubectl -n spark-jobs get sparkapplication $(APP)-$(DATE) -o jsonpath='{.status.applicationState.state}'); \
 	  echo "[sparkapp] $$(date +%T) state=$${s:-PENDING}"; \
 	  case "$$s" in COMPLETED) break;; FAILED|SUBMISSION_FAILED) break;; esac; sleep 5; done
-	kubectl -n spark-jobs logs bronze-$(DATE)-driver | grep -E "^\[bronze\]|Error|Exception|Caused by" || true
-	@test "$$(kubectl -n spark-jobs get sparkapplication bronze-$(DATE) -o jsonpath='{.status.applicationState.state}')" = COMPLETED
+	kubectl -n spark-jobs logs $(APP)-$(DATE)-driver | grep -E "^\[(bronze|validate)\]|Error|Exception|Caused by" || true
+	@test "$$(kubectl -n spark-jobs get sparkapplication $(APP)-$(DATE) -o jsonpath='{.status.applicationState.state}')" = COMPLETED

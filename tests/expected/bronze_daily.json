@@ -12,6 +12,10 @@
     "2024-07-20",
     "2024-07-21"
   ],
+  "columns": {
+    "chatlog": 19,
+    "bot_predict": 21
+  },
   "totals": {
     "chatlog_rows": 21224,
     "bot_predict_rows": 10729,

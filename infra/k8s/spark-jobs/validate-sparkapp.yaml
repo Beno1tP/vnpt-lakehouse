@@ -1,0 +1,52 @@
+# Task 2 step 2.2d: validate ONE day of Bronze against tests/expected/bronze_daily.json (validator baked into the
+# job image). By hand: `make sparkapp APP=validate DATE=YYYY-MM-DD [IDEMPOTENCY=yes]`; Airflow templates it in 2.4.
+# Placeholders filled by make: __NAME__ (validate-YYYY-MM-DD), __DATE__, __IMAGE__, __EXTRA_ARGS__.
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: __NAME__
+  namespace: spark-jobs
+spec:
+  type: Python
+  pythonVersion: "3"
+  mode: cluster
+  sparkVersion: "3.5.9"
+  image: __IMAGE__
+  imagePullPolicy: Never                       # loaded into Minikube by make k8s-job-image
+  mainApplicationFile: local:///opt/jobs/validate_bronze.py
+  arguments: ["--ingest-date", "__DATE__", "--expected", "/opt/tests/expected/bronze_daily.json",
+              "--sql", "/opt/tests/sql/bronze_checks.sql"__EXTRA_ARGS__]
+  restartPolicy: { type: Never }               # a wrong number is deterministic: no retry anywhere
+  timeToLiveSeconds: 86400                     # the operator deletes the app (and its driver pod) after 1 day
+  sparkConf:                                   # = infra/compose/spark/spark-defaults.conf with cluster DNS names
+    spark.sql.extensions: org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions
+    spark.sql.catalog.lake: org.apache.iceberg.spark.SparkCatalog
+    spark.sql.catalog.lake.type: hive
+    spark.sql.catalog.lake.uri: thrift://hive-metastore.lake.svc.cluster.local:9083
+    spark.sql.catalog.lake.warehouse: s3a://lakehouse/warehouse
+    spark.sql.catalog.lake.io-impl: org.apache.iceberg.aws.s3.S3FileIO
+    spark.sql.catalog.lake.s3.endpoint: http://minio.lake.svc.cluster.local:9000
+    spark.sql.catalog.lake.s3.path-style-access: "true"
+    spark.sql.catalog.lake.client.region: us-east-1
+    spark.sql.defaultCatalog: lake
+    spark.sql.session.timeZone: Asia/Ho_Chi_Minh
+    spark.sql.execution.arrow.pyspark.enabled: "true"
+    spark.sql.shuffle.partitions: "4"
+  driver:
+    cores: 1
+    memory: 1g                                 # JVM heap
+    memoryOverhead: 512m                       # no pandas here (pod = 1.5 GiB)
+    serviceAccount: spark-operator-spark       # created by the operator chart; may create executor pods
+    labels: { app: validate, ingest-date: "__DATE__" }
+    env: &env
+      - { name: AWS_REGION, value: us-east-1 }
+    envFrom: &envFrom
+      - secretRef: { name: s3-credentials }    # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (webhook injects it)
+  executor:
+    instances: 1
+    cores: 1
+    memory: 768m
+    memoryOverhead: 384m                       # pod = 1.1 GiB
+    labels: { app: validate, ingest-date: "__DATE__" }
+    env: *env
+    envFrom: *envFrom

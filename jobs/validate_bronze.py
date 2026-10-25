@@ -7,6 +7,9 @@ fails loudly instead of relying on someone reading numbers.
 
     spark-submit validate_bronze.py --ingest-date 2026-10-16 \
         --expected /opt/tests/expected/bronze.json --sql /opt/tests/sql/bronze_checks.sql [--check-idempotency]
+
+Task 2: with --expected tests/expected/bronze_daily.json (one entry per event day) the expected values are taken for
+--ingest-date; checks without a per-day value (e.g. distinct senders) print SKIP instead of failing.
 """
 from __future__ import annotations
 
@@ -36,6 +39,21 @@ def load_checks(path: str) -> dict[str, str]:
     return checks
 
 
+def expected_for_day(doc: dict, day: str) -> dict:
+    """Per-day expected values in the same shape as bronze.json (Task 2, tests/expected/bronze_daily.json)."""
+    d = doc["days"].get(day)
+    if d is None:
+        sys.exit(f"[validate] no expected values for {day}: not a data day (empty days: {doc['empty_days']})")
+    return {
+        "chatlog": {"rows": d["chatlog_rows"], "distinct_id": d["chatlog_rows"],   # IDs are unique overall
+                    "non_null_in_empty_cols": 0, "columns": doc["columns"]["chatlog"]},
+        "bot_predict": {"rows": d["bot_predict_rows"], "distinct_id": d["bot_predict_rows"],
+                        "non_null_in_empty_cols": 0, "unmatched_to_chat": d["unmatched_to_chat"],
+                        "columns": doc["columns"]["bot_predict"]},
+        "both": {"distinct_batch_ids": 1},
+    }
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--ingest-date", required=True, help="YYYY-MM-DD; the partition to check")
@@ -47,6 +65,9 @@ def main() -> None:
 
     with open(args.expected) as f:
         expected = json.load(f)
+    daily = "days" in expected
+    if daily:
+        expected = expected_for_day(expected, args.ingest_date)
 
     from pyspark.sql import SparkSession  # imported here so load_checks can be tested without Spark
 
@@ -61,6 +82,9 @@ def main() -> None:
 
     for name, sql in load_checks(args.sql).items():
         table, key = name.split(".", 1)
+        if daily and key not in expected[table]:
+            print(f"[validate] SKIP  {name:<36} (no per-day expected value)", flush=True)
+            continue
         actual = spark.sql(sql.replace("${ingest_date}", args.ingest_date)).collect()[0][0]
         check(name, actual, expected[table][key])
 

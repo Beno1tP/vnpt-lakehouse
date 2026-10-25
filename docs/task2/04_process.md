@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-10-25 — 2.2c-B First SparkApplication COMPLETED; 2.2d prepared
+Did (Bee): `make k8s-job-image` (9.1 s build, one `COPY *.py` layer; `~/.minikube` back to 856 MB); `make sparkapp DATE=2024-07-02`.
+Observed: PENDING → RUNNING → COMPLETED in **21 s** (04:18:19 → 04:18:40), 1 attempt; executor `…-exec-1` COMPLETED and removed; driver `Completed` (pod limits/requests 2Gi = 1g + 1g overhead); webhook injected `S3_ENDPOINT`, `AWS_REGION` and envFrom `s3-credentials`; `[bronze] bronze.chatlog: 12 rows read, 12 rows in partition 2024-07-02`, `bot_predict: 6 / 6` = `bronze_daily.json`. Only WARNs: native-hadoop library, k8s client closed at shutdown (both benign). Operator 2.2.1 (Spark 3.5.5 submit) → our 3.5.9 driver: no skew problem.
+Prepared (Claude): validator per-day mode (`--expected bronze_daily.json` → expected values of that day; checks without a per-day value print SKIP; full mode unchanged), `columns` added to `bronze_daily.json`; job image now also bakes `tests/` (named build context, tag = last commit of jobs/ tests/ docker/spark-job/); `validate-sparkapp.yaml`; `make sparkapp APP=bronze|validate DATE= [IDEMPOTENCY=yes]`.
+
 ### 2026-10-25 — 2.2c-A Task 1 regression after the bronze_ingest.py change
 Did (Bee): `make up && make acceptance DATE=2026-10-16`; `make down` (Minikube kept running alongside).
 Observed: `[smoke] OK`; bronze 21,224 / 10,729; validate **17/17**, then **23/23** with idempotency; `[acceptance] PASSED`, exit=0. Task 1 behaviour unchanged by `--source` (default path).
