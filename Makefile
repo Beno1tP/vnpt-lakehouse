@@ -18,6 +18,9 @@ include infra/k8s/images.env
 JOB_SRC              = jobs/ tests/ docker/spark-job/
 JOB_TAG              = $(shell git log -1 --format=%h -- $(JOB_SRC))
 APP                 ?= bronze
+FROM                ?= 2024-07-02
+TO                  ?= 2024-07-25
+REPROCESS           ?= none
 IDEMPOTENCY_SED      = -e 's|"/opt/tests/sql/bronze_rules.sql"]|"/opt/tests/sql/bronze_rules.sql", "--check-idempotency"]|'
 LOCAL_JOB_IMAGE      = vnpt-lake-spark-job:$(JOB_TAG)
 JOB_IMAGE           ?= $(SPARK_JOB_IMAGE_REF)
@@ -27,7 +30,7 @@ SPARK_SUBMIT = $(COMPOSE) exec -T spark /opt/spark/bin/spark-submit --master $(S
 SPARK_SQL    = $(COMPOSE) exec -T spark /opt/spark/bin/spark-sql --master local[1]
 NOISE        = ^Time taken|^:: loading settings
 
-.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart airflow-install airflow-admin airflow-ui
+.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report
 
 help:          ## list targets and variables
 	@awk -F':.*## ' '/^[a-zA-Z0-9_-]+:.*## /{printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -113,13 +116,19 @@ airflow-chart: ## Task 2: download Airflow chart 1.22.0 from the Apache CDN and 
 	mkdir -p $(dir $(AIRFLOW_CHART))
 	test -f $(AIRFLOW_CHART) || curl -fL --retry 3 -o $(AIRFLOW_CHART) https://dlcdn.apache.org/airflow/helm-chart/1.22.0/airflow-1.22.0.tgz
 	echo "$(AIRFLOW_CHART_SHA512)  $(AIRFLOW_CHART)" | sha512sum --check
-airflow-install: airflow-chart ## Task 2: helm upgrade --install Airflow 3.3.2 (chart 1.22.0); image = AIRFLOW_IMAGE_REF in images.env
+airflow-install: airflow-chart deploy-guard ## Task 2: helm upgrade --install Airflow 3.3.2 (chart 1.22.0); image = AIRFLOW_IMAGE_REF in images.env
 	@test -n "$(AIRFLOW_IMAGE_REF)" || { echo "AIRFLOW_IMAGE_REF missing in infra/k8s/images.env (bump it after the images run)"; exit 1; }
 	helm upgrade --install airflow $(AIRFLOW_CHART) -n airflow \
 	  -f infra/helm/airflow/values-local.yaml \
 	  --set images.airflow.digest=$(lastword $(subst @, ,$(AIRFLOW_IMAGE_REF))) \
 	  --set env[0].name=AIRFLOW_VAR_SPARK_JOB_IMAGE --set env[0].value=$(SPARK_JOB_IMAGE_REF) \
+	  --description "git $$(git rev-parse --short HEAD)" \
 	  --wait --timeout 15m
+deploy-guard:  ## Task 2: refuse to deploy unless on main with a clean tree (deployed = reviewed + merged, E39); ALLOW_BRANCH=yes overrides
+	@test "$(ALLOW_BRANCH)" = yes || { b=$$(git rev-parse --abbrev-ref HEAD); \
+	  test "$$b" = main || { echo "refusing: on branch '$$b'. Merge the PR, then: git switch main && git pull"; exit 1; }; \
+	  git diff --quiet HEAD || { echo "refusing: uncommitted changes"; exit 1; }; }
+	@echo "deploying git $$(git rev-parse --short HEAD) from $$(git rev-parse --abbrev-ref HEAD)"
 airflow-admin: ## Task 2: (re)create the Airflow UI user admin with the password from infra/k8s/secrets/airflow-admin-password
 	@test -s infra/k8s/secrets/airflow-admin-password || { echo "run make k8s-secrets first"; exit 1; }
 	-@kubectl -n airflow exec deploy/airflow-scheduler -c scheduler -- airflow users delete --username admin >/dev/null 2>&1
@@ -128,3 +137,10 @@ airflow-admin: ## Task 2: (re)create the Airflow UI user admin with the password
 	  | grep -v -i password
 airflow-ui:    ## Task 2: open the Airflow UI on http://localhost:8080 (Ctrl+C to stop)
 	kubectl -n airflow port-forward svc/airflow-api-server 8080:8080
+backfill:      ## Task 2: backfill chatbot_bronze: make backfill [FROM=2024-07-02] [TO=2024-07-25] [REPROCESS=none|completed|failed] [DRY=yes]
+	kubectl -n airflow exec deploy/airflow-scheduler -c scheduler -- airflow backfill create --dag-id chatbot_bronze --from-date $(FROM) --to-date $(TO) \
+	  --reprocess-behavior $(REPROCESS) --max-active-runs 1 $(if $(filter yes,$(DRY)),--dry-run)
+dag-runs:      ## Task 2: runs of chatbot_bronze with state, logical date (= the day) and run type
+	@kubectl -n airflow exec deploy/airflow-scheduler -c scheduler -- airflow dags list-runs chatbot_bronze -o plain | awk 'NR==1 || /chatbot_bronze/' | cut -c1-160
+dag-report:    ## Task 2: per day from the task logs in the scheduler pod: landing found?, rows loaded, validation result
+	@kubectl -n airflow exec deploy/airflow-scheduler -c scheduler -- sh -c 'grep -rhoE "\[landing\] [0-9-]+: chatlog=[a-z]+, bot_predict=[a-z]+|\[bronze\] bronze\.[a-z_]+: [0-9]+ rows read, [0-9]+ rows in partition [0-9-]+|\[validate\] [0-9]+/[0-9]+ checks passed for _ingest_date=[0-9-]+" /opt/airflow/logs/dag_id=chatbot_bronze/ | sort | uniq -c'

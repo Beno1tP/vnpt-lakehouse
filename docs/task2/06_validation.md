@@ -36,5 +36,5 @@ Observed 2026-10-25: 0 parse failures (no NULL day); `unmatched_same_day` = `unm
 | Big days 2024-07-24 / 07-25 (2.2e) | 12,970 / 6,485 · 7,552 / 3,892 (116 unmatched) | equal, validate 10/10 each | 2026-10-25 |
 | Rerun same day → `overwrite`, total unchanged | added = deleted = 12 / 6 | 16/16 with `--check-idempotency` | 2026-10-25 |
 | Task 1 `make acceptance` after `bronze_ingest.py` change | PASSED | 17/17, 23/23, PASSED, exit 0 | 2026-10-25 |
-| Backfill 07-02 → 07-25 (18 loaded, 6 skipped) | sums = totals above | | |
+| Backfill 07-02 → 07-25 (18 loaded, 6 skipped) | sums = totals above | 18 days rows = expected, 23/23 each; 6 days skipped; 25 runs success | 2026-10-26 |
 | Backfill ×2 → identical counts per day | | | |
