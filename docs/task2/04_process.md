@@ -14,6 +14,9 @@ Time spent:
 
 ---
 
+### 2026-10-26 — Drill 2 (executor deleted) passed
+Did (Bee): `make drill-executor`. Observed: bronze attempt 5 log `Executor lost: 1 (epoch 0)` / `Lost executor 1 … deleted by a user`; the same attempt completed (02:44:41 → 02:45:01, 12,970 / 6,485); only attempt 5 exists → Airflow did not need to retry; validate + notify success. Executor loss is handled inside Spark (driver re-requests the executor, recomputes lost tasks).
+
 ### 2026-10-26 — Drill 1 (driver killed) passed
 Did (Bee): PR #13 merged; `make drill-driver` (2024-07-24).
 Observed: run re-queued 02:35:30; bronze attempt 3 lost its driver → `Task failed`, no `[bronze] … rows in partition` line (nothing committed); Airflow retry started 02:40:44 (retry_delay 5 min), attempt 4 loaded 12,970 / 6,485 in 22 s; validate success (exact per-day counts → no duplicates); notify success. One retry layer works: SparkApplication restartPolicy Never, Airflow retries; the new attempt got a new app name (random suffix), no `AlreadyExists`.
