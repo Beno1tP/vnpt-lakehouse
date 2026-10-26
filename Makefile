@@ -31,7 +31,7 @@ SPARK_SUBMIT = $(COMPOSE) exec -T spark /opt/spark/bin/spark-submit --master $(S
 SPARK_SQL    = $(COMPOSE) exec -T spark /opt/spark/bin/spark-sql --master local[1]
 NOISE        = ^Time taken|^:: loading settings
 
-.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks ghcr-prune
+.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks ghcr-prune k8s-up k8s-demo
 
 help:          ## list targets and variables
 	@awk -F':.*## ' '/^[a-zA-Z0-9_-]+:.*## /{printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -216,3 +216,38 @@ hooks:         ## dev: install the pre-commit hooks (.pre-commit-config.yaml) in
 	.venv/bin/pre-commit install
 ghcr-prune:    ## Task 2 2.7: list old GHCR versions (keeps images.env digests + newest KEEP=3); CONFIRM=yes deletes
 	python3 .github/scripts/ghcr_prune.py --keep $(or $(KEEP),3) $(if $(filter yes,$(CONFIRM)),--confirm,)
+
+# ---- Task 2 from zero (2.8) ----
+MINIKUBE_START = minikube start --driver=docker --kubernetes-version=v1.37.0 --memory=8192 --cpus=6 \
+                 --extra-config=kubelet.system-reserved=memory=3686Mi
+DEMO_DAYS      = $$(( ($$(date -ud $(TO) +%s) - $$(date -ud $(FROM) +%s)) / 86400 + 1 ))
+AF             = kubectl -n airflow exec deploy/airflow-scheduler -c scheduler --
+k8s-up: deploy-guard ## Task 2: whole stack, idempotent (also from zero after minikube delete): cluster, secrets, lake, operator, Airflow
+	minikube status >/dev/null 2>&1 || $(MINIKUBE_START)
+	minikube addons enable metrics-server
+	$(MAKE) --no-print-directory k8s-secrets
+	kubectl apply -k infra/k8s
+	kubectl -n lake rollout status statefulset/postgres --timeout=600s
+	kubectl -n lake rollout status statefulset/minio --timeout=600s
+	kubectl -n lake wait --for=condition=complete job/bucket-init job/minio-users --timeout=600s
+	kubectl -n lake rollout status deploy/hive-metastore --timeout=900s
+	helm repo add spark-operator https://kubeflow.github.io/spark-operator --force-update >/dev/null
+	helm upgrade --install spark-operator spark-operator/spark-operator --version 2.2.1 -n spark-operator \
+	  -f infra/helm/spark-operator/values-local.yaml --wait --timeout 10m
+	$(MAKE) --no-print-directory airflow-install
+	$(MAKE) --no-print-directory airflow-admin
+	kubectl get pods -A --no-headers | awk '{print $$1, $$2, $$4}' | column -t
+k8s-demo:      ## Task 2: landing -> unpause -> backfill FROM..TO -> wait -> per-day report -> unpause maintenance (~40 min)
+	$(MAKE) --no-print-directory landing
+	$(AF) airflow dags unpause chatbot_bronze >/dev/null
+	$(MAKE) --no-print-directory backfill
+	@days=$(DEMO_DAYS); for i in $$(seq 1 120); do \
+	  runs=$$($(AF) airflow dags list-runs chatbot_bronze -o plain | grep backfill__ || true); \
+	  done_n=$$(echo "$$runs" | grep -cE " (success|failed) " || true); active=$$(echo "$$runs" | grep -cE " (queued|running) " || true); \
+	  echo "[demo] $$(date +%T) finished $$done_n/$$days, active $$active"; \
+	  [ "$$done_n" -ge "$$days" ] && [ "$$active" -eq 0 ] && break; sleep 60; done
+	$(MAKE) --no-print-directory dag-report
+	@failed=$$($(AF) airflow dags list-runs chatbot_bronze -o plain | grep backfill__ | grep -c " failed " || true); \
+	  test "$$failed" -eq 0 || { echo "[demo] $$failed backfill runs failed"; exit 1; }
+	$(AF) airflow dags unpause lake_maintenance >/dev/null
+	@echo "[demo] PASSED: $(FROM)..$(TO) backfilled, no failed run; lake_maintenance unpaused"
