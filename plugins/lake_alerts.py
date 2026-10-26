@@ -34,15 +34,20 @@ def failure_text(context: dict) -> str:
     tries = _get(ti, "try_number", "?")
     max_tries = _get(ti, "max_tries")
     attempt = f"{tries}/{max_tries + 1}" if isinstance(max_tries, int) else f"{tries}"
-    return (f"❌ {dag_id}.{task_id} FAILED for day {context.get('ds', '?')} (attempt {attempt}, final)\n"
+    day = context.get("ds") or "none (run without a logical date)"
+    return (f"❌ {dag_id}.{task_id} FAILED for day {day} (attempt {attempt}, final)\n"
             f"run: {context.get('run_id', '?')}")
 
 
 def deadline_text(context: dict) -> str:
+    # 3.3.2 passes dag_run as the REST DAGRunResponse dump: the id is "dag_run_id"; logical_date is None for manual
+    # runs triggered without one (E44)
     run = context.get("dag_run") or {}
     deadline = context.get("deadline") or {}
-    return (f"⏰ {_get(run, 'dag_id', '?')} run for {_get(run, 'logical_date', '?')} is still not finished: "
-            f"deadline {_get(deadline, 'deadline_time', '?')} passed\nrun: {_get(run, 'run_id', '?')}")
+    day = _get(run, "logical_date") or f"none ({_get(run, 'run_type', '?')} run without a logical date)"
+    run_id = _get(run, "dag_run_id") or _get(run, "run_id", "?")
+    return (f"⏰ {_get(run, 'dag_id', '?')} run for {day} is still not finished: "
+            f"deadline {_get(deadline, 'deadline_time', '?')} passed\nrun: {run_id}")
 
 
 def send_telegram(text: str) -> bool:
