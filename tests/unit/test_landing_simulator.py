@@ -14,4 +14,5 @@ def test_event_day_unparseable_is_nan():
 
 def test_sources_match_bronze_job_files():
     import bronze_ingest as bi
+
     assert {f for f, _ in ls.SOURCES.values()} == {f for f, _ in bi.SOURCES.values()}

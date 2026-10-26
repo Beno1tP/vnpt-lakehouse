@@ -1,5 +1,6 @@
 """Lab-doc pytest topics for the Bronze job: pandas -> Spark types (everything text, empty -> None),
 S3 reads (s3:// landing path through pyarrow), table_exists (create vs. idempotent overwrite)."""
+
 import io
 
 import pandas as pd
@@ -20,9 +21,9 @@ def test_read_excel_keeps_everything_as_text_and_empty_as_none(tmp_path):
     path = tmp_path / "x.xlsx"
     path.write_bytes(_xlsx_bytes(SAMPLE))
     pdf = bi.read_excel_as_strings(str(path), "Export Worksheet")
-    assert pdf["ID"].tolist() == ["1", "2"]                          # numbers stay text in Bronze
+    assert pdf["ID"].tolist() == ["1", "2"]  # numbers stay text in Bronze
     assert pdf["SCORE"].tolist()[0] == "0.9" and pdf["SCORE"].tolist()[1] is None
-    assert pdf["CREATED_TIME"].tolist()[1] is None                   # NaN -> None = Spark null
+    assert pdf["CREATED_TIME"].tolist()[1] is None  # NaN -> None = Spark null
 
 
 def test_read_excel_from_s3_landing(monkeypatch):
@@ -42,10 +43,11 @@ def test_read_excel_from_s3_landing(monkeypatch):
             return FakeFile(data)
 
     import pyarrow.fs as pafs
+
     monkeypatch.setattr(pafs, "S3FileSystem", FakeS3)
     monkeypatch.setenv("S3_ENDPOINT", "minio.lake.svc.cluster.local:9000")
     pdf = bi.read_excel_as_strings("s3://landing/chatlog/dt=2024-07-24/bot_dvc_hcm.xlsx", "Export Worksheet")
-    assert opened == ["landing/chatlog/dt=2024-07-24/bot_dvc_hcm.xlsx"]    # bucket/key without the scheme
+    assert opened == ["landing/chatlog/dt=2024-07-24/bot_dvc_hcm.xlsx"]  # bucket/key without the scheme
     assert len(pdf) == 2
 
 
@@ -95,5 +97,10 @@ def test_table_exists_means_idempotent_partition_overwrite():
 def test_first_load_creates_iceberg_v2_partitioned_by_ingest_date():
     log = []
     bi.write_bronze(_Spark(exists=False), "bronze.chatlog", _DF(log))
-    assert log == ["writeTo lake.bronze.chatlog", "using iceberg", "partitionedBy col(_ingest_date)",
-                   "format-version=2", "create"]
+    assert log == [
+        "writeTo lake.bronze.chatlog",
+        "using iceberg",
+        "partitionedBy col(_ingest_date)",
+        "format-version=2",
+        "create",
+    ]

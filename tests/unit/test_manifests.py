@@ -1,11 +1,12 @@
 """SparkApplication templates stay valid after `make sparkapp` fills the placeholders."""
+
 from pathlib import Path
 
 import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
-FILL = {"{{ ds }}": "2024-07-02", "{{ var.value.spark_job_image }}": "img@sha256:x"}   # what make/Airflow render
+FILL = {"{{ ds }}": "2024-07-02", "{{ var.value.spark_job_image }}": "img@sha256:x"}  # what make/Airflow render
 
 
 @pytest.mark.parametrize("app", ["bronze", "validate"])
@@ -13,12 +14,12 @@ def test_sparkapp_template(app):
     text = (ROOT / f"dags/templates/{app}_sparkapp.yaml").read_text()
     for key, value in FILL.items():
         text = text.replace(key, value)
-    assert "{{" not in text and "__" not in text                       # only the two documented expressions
+    assert "{{" not in text and "__" not in text  # only the two documented expressions
     doc = yaml.safe_load(text)
     spec = doc["spec"]
     assert doc["kind"] == "SparkApplication" and doc["metadata"]["namespace"] == "spark-jobs"
     assert doc["metadata"]["name"] == f"{app}-2024-07-02" and spec["imagePullSecrets"] == ["ghcr-pull"]
-    assert spec["restartPolicy"]["type"] == "Never"                    # one retry layer: Airflow
+    assert spec["restartPolicy"]["type"] == "Never"  # one retry layer: Airflow
     assert spec["driver"]["serviceAccount"] == "spark-operator-spark"
     for role in ("driver", "executor"):
         assert spec[role]["envFrom"] == [{"secretRef": {"name": "s3-credentials"}}]
@@ -31,8 +32,11 @@ def test_workflow_files_parse():
 
 
 def _images_env():
-    pairs = (line.split("=", 1) for line in (ROOT / "infra/k8s/images.env").read_text().splitlines()
-             if line and not line.startswith("#"))
+    pairs = (
+        line.split("=", 1)
+        for line in (ROOT / "infra/k8s/images.env").read_text().splitlines()
+        if line and not line.startswith("#")
+    )
     return dict(pairs)
 
 
@@ -56,7 +60,7 @@ def test_no_local_only_images_left():
 
 def test_validate_template_runs_rules_and_make_can_add_idempotency():
     text = (ROOT / "dags/templates/validate_sparkapp.yaml").read_text()
-    assert '"/opt/tests/sql/bronze_rules.sql"]' in text          # the exact string the Makefile IDEMPOTENCY_SED edits
+    assert '"/opt/tests/sql/bronze_rules.sql"]' in text  # the exact string the Makefile IDEMPOTENCY_SED edits
     assert "IDEMPOTENCY_SED" in (ROOT / "Makefile").read_text()
 
 
@@ -64,7 +68,7 @@ def test_airflow_may_only_manage_spark_jobs():
     docs = list(yaml.safe_load_all((ROOT / "infra/k8s/spark-jobs/rbac-airflow.yaml").read_text()))
     role = next(d for d in docs if d["kind"] == "Role")
     binding = next(d for d in docs if d["kind"] == "RoleBinding")
-    assert role["metadata"]["namespace"] == "spark-jobs"                # a Role, not a ClusterRole
+    assert role["metadata"]["namespace"] == "spark-jobs"  # a Role, not a ClusterRole
     assert binding["subjects"] == [{"kind": "ServiceAccount", "name": "airflow-scheduler", "namespace": "airflow"}]
     for rule in role["rules"]:
         assert "*" not in rule["verbs"] and "*" not in rule["resources"]
@@ -76,6 +80,6 @@ def test_backup_cronjob_dumps_both_databases_with_server_major_version():
     pod = cj["spec"]["jobTemplate"]["spec"]["template"]["spec"]
     dump = pod["initContainers"][0]
     server = yaml.safe_load((ROOT / "infra/k8s/lake/postgres.yaml").read_text().split("---")[1])
-    assert dump["image"] == server["spec"]["template"]["spec"]["containers"][0]["image"]   # pg_dump == server major
+    assert dump["image"] == server["spec"]["template"]["spec"]["containers"][0]["image"]  # pg_dump == server major
     assert "for db in metastore airflow" in dump["args"][0]
     assert cj["spec"]["concurrencyPolicy"] == "Forbid"

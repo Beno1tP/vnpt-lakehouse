@@ -11,6 +11,7 @@ Per table, in this order (each step logged with before/after numbers):
   5. assert: row count unchanged
 --dry-run: only the counts and the orphan files that WOULD be removed (expire/rewrite skipped).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -39,7 +40,8 @@ def stats(spark, t: str) -> dict:
         f" (SELECT count(DISTINCT file_path) FROM {t}.all_data_files) AS all_files,"
         f" (SELECT coalesce(sum(file_size_in_bytes), 0) FROM {t}.files) AS live_bytes,"
         f" (SELECT count(*) FROM {t}.metadata_log_entries) AS metadata_files,"
-        f" (SELECT count(*) FROM {t}) AS row_count").collect()[0]
+        f" (SELECT count(*) FROM {t}) AS row_count"
+    ).collect()[0]
     return row.asDict()
 
 
@@ -61,23 +63,31 @@ def main() -> None:
         t = f"lake.{check_table(table)}"
         before = stats(spark, t)
         print(f"[maint] {table} before: {before}", flush=True)
-        oldest = spark.sql(f"SELECT snapshot_id, committed_at FROM {t}.snapshots "
-                           f"ORDER BY committed_at LIMIT 1").collect()[0]
+        oldest = spark.sql(
+            f"SELECT snapshot_id, committed_at FROM {t}.snapshots ORDER BY committed_at LIMIT 1"
+        ).collect()[0]
         if not dry:
-            spark.sql(f"ALTER TABLE {t} SET TBLPROPERTIES ('write.metadata.delete-after-commit.enabled'='true',"
-                      f" 'write.metadata.previous-versions-max'='10')")
+            spark.sql(
+                f"ALTER TABLE {t} SET TBLPROPERTIES ('write.metadata.delete-after-commit.enabled'='true',"
+                f" 'write.metadata.previous-versions-max'='10')"
+            )
             older = ts_literal(args.snapshot_hours)
-            r = spark.sql(f"CALL lake.system.expire_snapshots(table => '{table}', "
-                          f"older_than => {older}, retain_last => {args.retain_last})").collect()[0]
+            r = spark.sql(
+                f"CALL lake.system.expire_snapshots(table => '{table}', "
+                f"older_than => {older}, retain_last => {args.retain_last})"
+            ).collect()[0]
             print(f"[maint] {table} expire_snapshots: {r.asDict()}", flush=True)
-            r = spark.sql(f"CALL lake.system.rewrite_data_files(table => '{table}', "
-                          f"options => map('min-input-files', '2'))").collect()[0]
+            r = spark.sql(
+                f"CALL lake.system.rewrite_data_files(table => '{table}', options => map('min-input-files', '2'))"
+            ).collect()[0]
             print(f"[maint] {table} rewrite_data_files: {r.asDict()}", flush=True)
             r = spark.sql(f"CALL lake.system.rewrite_manifests('{table}')").collect()[0]
             print(f"[maint] {table} rewrite_manifests: {r.asDict()}", flush=True)
-        orphans = spark.sql(f"CALL lake.system.remove_orphan_files(table => '{table}', "
-                            f"older_than => {ts_literal(args.orphan_hours)}, prefix_listing => true, "
-                            f"dry_run => {str(dry).lower()})").count()
+        orphans = spark.sql(
+            f"CALL lake.system.remove_orphan_files(table => '{table}', "
+            f"older_than => {ts_literal(args.orphan_hours)}, prefix_listing => true, "
+            f"dry_run => {str(dry).lower()})"
+        ).count()
         print(f"[maint] {table} remove_orphan_files: {orphans} files {'would be ' if dry else ''}removed", flush=True)
         after = stats(spark, t)
         print(f"[maint] {table} after: {after}", flush=True)
@@ -86,11 +96,16 @@ def main() -> None:
         if not dry:
             try:
                 spark.sql(f"SELECT count(*) FROM {t} VERSION AS OF {oldest['snapshot_id']}").collect()
-                print(f"[maint] {table} time travel to oldest snapshot {oldest['committed_at']}: still possible",
-                      flush=True)
+                print(
+                    f"[maint] {table} time travel to oldest snapshot {oldest['committed_at']}: still possible",
+                    flush=True,
+                )
             except Exception as e:  # noqa: BLE001 - expected after expiry
-                print(f"[maint] {table} time travel to oldest snapshot {oldest['committed_at']}: gone "
-                      f"({type(e).__name__}) = expected trade-off of expire_snapshots", flush=True)
+                print(
+                    f"[maint] {table} time travel to oldest snapshot {oldest['committed_at']}: gone "
+                    f"({type(e).__name__}) = expected trade-off of expire_snapshots",
+                    flush=True,
+                )
     spark.stop()
 
 

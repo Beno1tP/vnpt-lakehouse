@@ -58,4 +58,4 @@ def test_rules_file_parses_and_targets_one_partition():
     assert len(rules) == 13
     assert {n.split(".", 1)[0] for n in rules} == {"chatlog", "bot_predict", "both"}
     assert all("${ingest_date}" in sql for sql in rules.values())
-    assert not vb.load_checks(str(ROOT / "tests/sql/bronze_rules.sql"))        # no '-- check:' blocks mixed in
+    assert not vb.load_checks(str(ROOT / "tests/sql/bronze_rules.sql"))  # no '-- check:' blocks mixed in

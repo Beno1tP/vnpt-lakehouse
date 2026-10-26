@@ -21,9 +21,14 @@ def test_only_bronze_tables():
 
 def test_template_renders_for_make_and_keeps_safe_defaults():
     text = (ROOT / "dags/templates/maintenance_sparkapp.yaml").read_text()
-    assert "{{ ds }}" not in text          # manual runs may have no logical date: strict Jinja would fail (E47)
-    fill = {"{{ var.value.spark_job_image }}": "img", "{{ params.snapshot_hours }}": "168",
-            "{{ params.retain_last }}": "5", "{{ params.orphan_hours }}": "72", "{{ params.dry_run }}": "false"}
+    assert "{{ ds }}" not in text  # manual runs may have no logical date: strict Jinja would fail (E47)
+    fill = {
+        "{{ var.value.spark_job_image }}": "img",
+        "{{ params.snapshot_hours }}": "168",
+        "{{ params.retain_last }}": "5",
+        "{{ params.orphan_hours }}": "72",
+        "{{ params.dry_run }}": "false",
+    }
     for k, v in fill.items():
         text = text.replace(k, v)
     assert "{{" not in text

@@ -1,4 +1,5 @@
 """Summarise a Trivy JSON report: one line per scanned target with counts by severity (no CVE details)."""
+
 import json
 import sys
 from collections import Counter

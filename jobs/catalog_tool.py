@@ -8,6 +8,7 @@
                                                  (CALL lake.system.register_table)
 Inputs are validated before they reach SQL (identifiers and paths only from a strict pattern).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -15,7 +16,9 @@ import re
 import sys
 
 TABLE_RE = re.compile(r"^bronze\.(chatlog|bot_predict)$")
-METADATA_RE = re.compile(r"^s3a://lakehouse/warehouse/bronze\.db/(chatlog|bot_predict)/metadata/[0-9A-Za-z._-]+\.metadata\.json$")
+METADATA_RE = re.compile(
+    r"^s3a://lakehouse/warehouse/bronze\.db/(chatlog|bot_predict)/metadata/[0-9A-Za-z._-]+\.metadata\.json$"
+)
 
 
 def check_table(table: str) -> str:
@@ -56,7 +59,7 @@ def main() -> None:
     spark.sparkContext.setLogLevel("ERROR")
     if args.command == "forget":
         for table in args.table:
-            spark.sql(f"DROP TABLE lake.{check_table(table)}")        # no PURGE: files stay
+            spark.sql(f"DROP TABLE lake.{check_table(table)}")  # no PURGE: files stay
             print(f"[catalog] {table}: removed from the catalog (files kept)", flush=True)
     for sql in sqls:
         spark.sql(sql).collect()
