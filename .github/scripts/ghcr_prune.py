@@ -43,7 +43,7 @@ def gh_versions(pkg: str) -> list[dict]:
 
 
 def delete_version(pkg: str, version_id: str) -> None:
-    """DELETE with an empty body via urllib: old gh sends a JSON body on DELETE and GitHub answers
+    """DELETE with an empty body via urllib: the old gh call was rejected with
     422 "For 'links/0/schema', {} is not a null" (E50). Token from `gh auth token` (gh >= 2.17), never printed."""
     token = subprocess.run(["gh", "auth", "token"], check=True, capture_output=True, text=True).stdout.strip()
     req = urllib.request.Request(
