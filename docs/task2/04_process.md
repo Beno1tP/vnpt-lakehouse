@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-10-26 — 2.6 deployed (revision 7); both alert paths proven
+Did (Bee): PR #17 merged (main `2d47dca`); re-ran bucket-init + minio-users (bucket `airflow-logs` created, user `airflow-logs` → `lake-airflow-logs`); `make airflow-install` → revision 7; `alert_smoke` + `chatbot_bronze` listed, `remote_base_log_folder = s3://airflow-logs`, triggerer has the token and `plugins/lake_alerts.py`; triggered `alert_smoke`; restarted the scheduler.
+Observed in Telegram (Alert group): `⏰ alert_smoke run for None is still not finished: deadline 2026-10-26 07:05:45.690106+00:00 passed` (= queued 07:05:15 + 30 s) and `❌ alert_smoke.fail_on_purpose FAILED for day ? (attempt 1/1, final)` with the run id. Both paths work (triggerer async deadline callback; task failure callback after the last try); metadata only. Text gaps → E44 (fix on branch `task2/alert-text`).
+
 ### 2026-10-26 — 2.6 PR #16 merged; Airflow digest promoted (PR #17)
 Did (Bee): `make k8s-secrets` (E42 repaired: 0 files with dummy values; MINIO_AIRFLOW_LOGS_SECRET generated; airflow-alerts.env written); PR #16 4/4 green (DAG integrity imported both DAGs + `lake_alerts` from plugins inside the image), merged (main `43f1b46`); images run 40282284105: airflow `43f1b46` → `sha256:048b18ba…ee0f`.
 
