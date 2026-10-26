@@ -11,6 +11,7 @@ fails loudly instead of relying on someone reading numbers.
 Task 2: with --expected tests/expected/bronze_daily.json (one entry per event day) the expected values are taken for
 --ingest-date; checks without a per-day value (e.g. distinct senders) print SKIP instead of failing.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -45,11 +46,19 @@ def expected_for_day(doc: dict, day: str) -> dict:
     if d is None:
         sys.exit(f"[validate] no expected values for {day}: not a data day (empty days: {doc['empty_days']})")
     return {
-        "chatlog": {"rows": d["chatlog_rows"], "distinct_id": d["chatlog_rows"],   # IDs are unique overall
-                    "non_null_in_empty_cols": 0, "columns": doc["columns"]["chatlog"]},
-        "bot_predict": {"rows": d["bot_predict_rows"], "distinct_id": d["bot_predict_rows"],
-                        "non_null_in_empty_cols": 0, "unmatched_to_chat": d["unmatched_to_chat"],
-                        "columns": doc["columns"]["bot_predict"]},
+        "chatlog": {
+            "rows": d["chatlog_rows"],
+            "distinct_id": d["chatlog_rows"],  # IDs are unique overall
+            "non_null_in_empty_cols": 0,
+            "columns": doc["columns"]["chatlog"],
+        },
+        "bot_predict": {
+            "rows": d["bot_predict_rows"],
+            "distinct_id": d["bot_predict_rows"],
+            "non_null_in_empty_cols": 0,
+            "unmatched_to_chat": d["unmatched_to_chat"],
+            "columns": doc["columns"]["bot_predict"],
+        },
         "both": {"distinct_batch_ids": 1},
     }
 
@@ -60,8 +69,11 @@ def main() -> None:
     ap.add_argument("--expected", required=True)
     ap.add_argument("--sql", required=True)
     ap.add_argument("--rules", help="SQL file of '-- rule:' blocks returning violation counts (each must be 0)")
-    ap.add_argument("--check-idempotency", action="store_true",
-                    help="also assert the latest snapshot replaced exactly one batch (run after a reload)")
+    ap.add_argument(
+        "--check-idempotency",
+        action="store_true",
+        help="also assert the latest snapshot replaced exactly one batch (run after a reload)",
+    )
     args = ap.parse_args()
 
     with open(args.expected) as f:
@@ -89,7 +101,7 @@ def main() -> None:
         actual = spark.sql(sql.replace("${ingest_date}", args.ingest_date)).collect()[0][0]
         check(name, actual, expected[table][key])
 
-    if args.rules:                                   # day-generic data-quality rules (gap #6): violations must be 0
+    if args.rules:  # day-generic data-quality rules (gap #6): violations must be 0
         for name, sql in load_checks(args.rules, marker="rule").items():
             violations = spark.sql(sql.replace("${ingest_date}", args.ingest_date)).collect()[0][0]
             check(f"rule {name}", violations, 0)
@@ -101,7 +113,8 @@ def main() -> None:
         for table in TABLES:
             last = spark.sql(
                 f"SELECT operation, summary['added-records'] AS added, summary['deleted-records'] AS deleted "
-                f"FROM lake.bronze.{table}.snapshots ORDER BY committed_at DESC LIMIT 1").collect()[0]
+                f"FROM lake.bronze.{table}.snapshots ORDER BY committed_at DESC LIMIT 1"
+            ).collect()[0]
             rows = expected[table]["rows"]
             check(f"{table}.last_snapshot_operation", last["operation"], "overwrite")
             check(f"{table}.last_snapshot_added", int(last["added"] or 0), rows)

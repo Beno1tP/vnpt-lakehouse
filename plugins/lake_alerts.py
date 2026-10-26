@@ -5,6 +5,7 @@ Rules: metadata only (DAG, task, day, try, times) — never row contents, never 
 an alert must never break or slow the pipeline, so sending errors are logged and swallowed.
 Credentials: TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID env vars from the Secret airflow-alerts (make k8s-secrets).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -35,8 +36,7 @@ def failure_text(context: dict) -> str:
     max_tries = _get(ti, "max_tries")
     attempt = f"{tries}/{max_tries + 1}" if isinstance(max_tries, int) else f"{tries}"
     day = context.get("ds") or "none (run without a logical date)"
-    return (f"❌ {dag_id}.{task_id} FAILED for day {day} (attempt {attempt}, final)\n"
-            f"run: {context.get('run_id', '?')}")
+    return f"❌ {dag_id}.{task_id} FAILED for day {day} (attempt {attempt}, final)\nrun: {context.get('run_id', '?')}"
 
 
 def deadline_text(context: dict) -> str:
@@ -46,8 +46,10 @@ def deadline_text(context: dict) -> str:
     deadline = context.get("deadline") or {}
     day = _get(run, "logical_date") or f"none ({_get(run, 'run_type', '?')} run without a logical date)"
     run_id = _get(run, "dag_run_id") or _get(run, "run_id", "?")
-    return (f"⏰ {_get(run, 'dag_id', '?')} run for {day} is still not finished: "
-            f"deadline {_get(deadline, 'deadline_time', '?')} passed\nrun: {run_id}")
+    return (
+        f"⏰ {_get(run, 'dag_id', '?')} run for {day} is still not finished: "
+        f"deadline {_get(deadline, 'deadline_time', '?')} passed\nrun: {run_id}"
+    )
 
 
 def send_telegram(text: str) -> bool:
@@ -57,8 +59,9 @@ def send_telegram(text: str) -> bool:
         return False
     data = urllib.parse.urlencode({"chat_id": chat, "text": text}).encode()
     try:
-        with urllib.request.urlopen(f"https://api.telegram.org/bot{token}/sendMessage", data=data,
-                                    timeout=TIMEOUT_S) as resp:
+        with urllib.request.urlopen(
+            f"https://api.telegram.org/bot{token}/sendMessage", data=data, timeout=TIMEOUT_S
+        ) as resp:
             ok = json.load(resp).get("ok", False)
     except Exception as e:  # noqa: BLE001 - alerting must never fail the task
         log.warning("lake_alerts: Telegram send failed: %s", type(e).__name__)  # no URL: it contains the token

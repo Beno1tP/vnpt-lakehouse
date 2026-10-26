@@ -3,6 +3,7 @@
 kustomize (secretGenerator in infra/k8s/kustomization.yaml) turns these files into Kubernetes Secrets,
 one Secret per consumer, so each pod only gets the keys it needs. Run: make k8s-secrets [K8S_ENV_FILE=...]
 """
+
 import base64
 import json
 import os
@@ -13,8 +14,16 @@ import xml.sax.saxutils as xs
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "secrets")
-REQUIRED = ("PG_USER", "PG_PASSWORD", "AIRFLOW_DB_PASSWORD", "MINIO_ROOT_USER", "MINIO_ROOT_PASSWORD",
-            "AIRFLOW_ADMIN_PASSWORD", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID")
+REQUIRED = (
+    "PG_USER",
+    "PG_PASSWORD",
+    "AIRFLOW_DB_PASSWORD",
+    "MINIO_ROOT_USER",
+    "MINIO_ROOT_PASSWORD",
+    "AIRFLOW_ADMIN_PASSWORD",
+    "TELEGRAM_BOT_TOKEN",
+    "TELEGRAM_CHAT_ID",
+)
 # generated once and appended to secrets.env, so they stay stable across renders (a new fernet key would make
 # stored Airflow connections unreadable; a new JWT secret breaks running tasks)
 GENERATED = {
@@ -25,9 +34,9 @@ GENERATED = {
     "MINIO_SPARK_JOBS_SECRET": lambda: secrets.token_hex(24),
     "MINIO_LANDING_WRITER_SECRET": lambda: secrets.token_hex(24),
     "MINIO_HMS_SECRET": lambda: secrets.token_hex(24),
-    "MINIO_AIRFLOW_LANDING_SECRET": lambda: secrets.token_hex(24),          # step 2.4: DAG check_landing
-    "MINIO_AIRFLOW_LOGS_SECRET": lambda: secrets.token_hex(24),             # step 2.6: Airflow remote task logs
-    "MINIO_BACKUP_SECRET": lambda: secrets.token_hex(24),                   # step 2.5b: pg-backup (hex: URL-safe)
+    "MINIO_AIRFLOW_LANDING_SECRET": lambda: secrets.token_hex(24),  # step 2.4: DAG check_landing
+    "MINIO_AIRFLOW_LOGS_SECRET": lambda: secrets.token_hex(24),  # step 2.6: Airflow remote task logs
+    "MINIO_BACKUP_SECRET": lambda: secrets.token_hex(24),  # step 2.5b: pg-backup (hex: URL-safe)
 }
 
 
@@ -70,32 +79,52 @@ def main():
     # MinIO root credentials (server, bucket-init, and S3 clients until per-service keys exist)
     write_private("minio.env", "".join(f"{k}={env[k]}\n" for k in ("MINIO_ROOT_USER", "MINIO_ROOT_PASSWORD")))
     # MinIO service users (step 2.1b): passwords for the minio-users Job, and per-consumer S3 keys (AWS SDK env names)
-    users = ("MINIO_SPARK_JOBS_SECRET", "MINIO_LANDING_WRITER_SECRET", "MINIO_HMS_SECRET",
-             "MINIO_AIRFLOW_LANDING_SECRET", "MINIO_AIRFLOW_LOGS_SECRET", "MINIO_BACKUP_SECRET")
+    users = (
+        "MINIO_SPARK_JOBS_SECRET",
+        "MINIO_LANDING_WRITER_SECRET",
+        "MINIO_HMS_SECRET",
+        "MINIO_AIRFLOW_LANDING_SECRET",
+        "MINIO_AIRFLOW_LOGS_SECRET",
+        "MINIO_BACKUP_SECRET",
+    )
     write_private("minio-service-users.env", "".join(f"{k}={env[k]}\n" for k in users))
 
     def s3_keys(user, secret_key):
         return f"AWS_ACCESS_KEY_ID={user}\nAWS_SECRET_ACCESS_KEY={env[secret_key]}\n"
-    write_private("s3.env", s3_keys("spark-jobs", "MINIO_SPARK_JOBS_SECRET"))           # r landing, rw lakehouse
+
+    write_private("s3.env", s3_keys("spark-jobs", "MINIO_SPARK_JOBS_SECRET"))  # r landing, rw lakehouse
     write_private("landing-writer.env", s3_keys("landing-writer", "MINIO_LANDING_WRITER_SECRET"))  # rw landing
-    write_private("hms-s3.env", s3_keys("hive-metastore", "MINIO_HMS_SECRET"))         # rw lakehouse
+    write_private("hms-s3.env", s3_keys("hive-metastore", "MINIO_HMS_SECRET"))  # rw lakehouse
     # Airflow (namespace airflow): metadata DB connection + keys, one file per Secret the Helm chart expects
     pw = urllib.parse.quote(env["AIRFLOW_DB_PASSWORD"], safe="")
-    write_private("airflow-metadata.env",
-                  f"connection=postgresql+psycopg2://airflow:{pw}@postgres.lake.svc.cluster.local:5432/airflow\n")
+    write_private(
+        "airflow-metadata.env",
+        f"connection=postgresql+psycopg2://airflow:{pw}@postgres.lake.svc.cluster.local:5432/airflow\n",
+    )
     write_private("airflow-fernet.env", f"fernet-key={env['AIRFLOW_FERNET_KEY']}\n")
     write_private("airflow-api.env", f"api-secret-key={env['AIRFLOW_API_SECRET_KEY']}\n")
     write_private("airflow-jwt.env", f"jwt-secret={env['AIRFLOW_JWT_SECRET']}\n")
     write_private("airflow-admin-password", env["AIRFLOW_ADMIN_PASSWORD"])
     # Airflow connections as env vars (AIRFLOW_CONN_<ID>, JSON form) -> Secret airflow-connections (step 2.4)
-    minio = {"conn_type": "aws", "login": "airflow-landing", "password": env["MINIO_AIRFLOW_LANDING_SECRET"],
-             "extra": {"endpoint_url": "http://minio.lake.svc.cluster.local:9000", "region_name": "us-east-1"}}
-    logs = {"conn_type": "aws", "login": "airflow-logs", "password": env["MINIO_AIRFLOW_LOGS_SECRET"],
-            "extra": {"endpoint_url": "http://minio.lake.svc.cluster.local:9000", "region_name": "us-east-1"}}
+    minio = {
+        "conn_type": "aws",
+        "login": "airflow-landing",
+        "password": env["MINIO_AIRFLOW_LANDING_SECRET"],
+        "extra": {"endpoint_url": "http://minio.lake.svc.cluster.local:9000", "region_name": "us-east-1"},
+    }
+    logs = {
+        "conn_type": "aws",
+        "login": "airflow-logs",
+        "password": env["MINIO_AIRFLOW_LOGS_SECRET"],
+        "extra": {"endpoint_url": "http://minio.lake.svc.cluster.local:9000", "region_name": "us-east-1"},
+    }
     kube = {"conn_type": "kubernetes", "extra": {"in_cluster": True}}
-    write_private("airflow-connections.env", f"AIRFLOW_CONN_MINIO_LANDING={json.dumps(minio)}\n"
-                                             f"AIRFLOW_CONN_MINIO_LOGS={json.dumps(logs)}\n"
-                                             f"AIRFLOW_CONN_KUBERNETES_IN_CLUSTER={json.dumps(kube)}\n")
+    write_private(
+        "airflow-connections.env",
+        f"AIRFLOW_CONN_MINIO_LANDING={json.dumps(minio)}\n"
+        f"AIRFLOW_CONN_MINIO_LOGS={json.dumps(logs)}\n"
+        f"AIRFLOW_CONN_KUBERNETES_IN_CLUSTER={json.dumps(kube)}\n",
+    )
     # Telegram (step 2.6) for plugins/lake_alerts.py, in its own Secret
     write_private("airflow-alerts.env", "".join(f"{k}={env[k]}\n" for k in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID")))
     # HMS JDBC settings as a file (never in SERVICE_OPTS: the entrypoint prints it with set -x)
@@ -105,12 +134,12 @@ def main():
         "javax.jdo.option.ConnectionUserName": env["PG_USER"],
         "javax.jdo.option.ConnectionPassword": env["PG_PASSWORD"],
     }
-    body = "".join(
-        f"  <property><name>{k}</name><value>{xs.escape(v)}</value></property>\n" for k, v in props.items()
+    body = "".join(f"  <property><name>{k}</name><value>{xs.escape(v)}</value></property>\n" for k, v in props.items())
+    write_private(
+        "hive-site.xml",
+        '<?xml version="1.0"?>\n<!-- generated by render-secrets.py from secrets.env: do not commit -->\n'
+        f"<configuration>\n{body}</configuration>\n",
     )
-    write_private("hive-site.xml",
-                  '<?xml version="1.0"?>\n<!-- generated by render-secrets.py from secrets.env: do not commit -->\n'
-                  f"<configuration>\n{body}</configuration>\n")
     print("k8s secrets rendered (mode 600):", ", ".join(sorted(os.listdir(OUT))))
 
 

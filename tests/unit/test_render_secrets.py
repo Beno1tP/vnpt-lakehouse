@@ -11,17 +11,25 @@ def load_renderer(tmp_path, monkeypatch):
     spec = importlib.util.spec_from_file_location("render_secrets", ROOT / "infra/k8s/render-secrets.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    monkeypatch.setattr(mod, "OUT", str(tmp_path / "out"))      # never touch the real infra/k8s/secrets/
+    monkeypatch.setattr(mod, "OUT", str(tmp_path / "out"))  # never touch the real infra/k8s/secrets/
     return mod
 
 
 def env_file(tmp_path, password="Pw1@x"):
     text = (ROOT / "infra/k8s/secrets.env.example").read_text()
     path = tmp_path / "secrets.env"
-    path.write_text("\n".join(line.replace("change-me-pg", password).replace("change-me-airflow-db", password)
-                              .replace("change-me-minio", password).replace("change-me-airflow-admin", password)
-                              .replace("change-me-telegram-token", "tg-token").replace("change-me-telegram-chat", "-1")
-                              for line in text.splitlines()) + "\n")
+    path.write_text(
+        "\n".join(
+            line.replace("change-me-pg", password)
+            .replace("change-me-airflow-db", password)
+            .replace("change-me-minio", password)
+            .replace("change-me-airflow-admin", password)
+            .replace("change-me-telegram-token", "tg-token")
+            .replace("change-me-telegram-chat", "-1")
+            for line in text.splitlines()
+        )
+        + "\n"
+    )
     return path
 
 
@@ -41,12 +49,12 @@ def test_generates_keys_once_and_escapes(tmp_path, monkeypatch):
     mod.main()
     first = path.read_text()
     mod.main()
-    assert path.read_text() == first                                  # keys appended once, then stable
+    assert path.read_text() == first  # keys appended once, then stable
     out = tmp_path / "out"
-    assert (out / "airflow-metadata.env").read_text().count("Pw1%40x") == 1   # password URL-encoded
+    assert (out / "airflow-metadata.env").read_text().count("Pw1%40x") == 1  # password URL-encoded
     assert "Pw1@x" in (out / "hive-site.xml").read_text()
     assert oct((out / "s3.env").stat().st_mode & 0o777) == "0o600"
-    assert (out / "s3.env").read_text().startswith("AWS_ACCESS_KEY_ID=spark-jobs\n")     # not the root user (2.1b)
+    assert (out / "s3.env").read_text().startswith("AWS_ACCESS_KEY_ID=spark-jobs\n")  # not the root user (2.1b)
     assert (out / "landing-writer.env").read_text().startswith("AWS_ACCESS_KEY_ID=landing-writer\n")
     assert (out / "hms-s3.env").read_text().startswith("AWS_ACCESS_KEY_ID=hive-metastore\n")
     assert first.count("MINIO_SPARK_JOBS_SECRET=") == 1

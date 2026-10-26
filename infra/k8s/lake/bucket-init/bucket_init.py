@@ -1,5 +1,6 @@
 """Create the S3 buckets on MinIO if missing (idempotent). Runs in the thin Spark image (pyarrow already inside),
 so no extra image (Task 1 used amazon/aws-cli, ~650 MB). Credentials from mounted secret files; prints names only."""
+
 import os
 import sys
 import time
@@ -16,11 +17,16 @@ def read(name):
         return f.read().strip()
 
 
-fs = pafs.S3FileSystem(access_key=read("MINIO_ROOT_USER"), secret_key=read("MINIO_ROOT_PASSWORD"),
-                       endpoint_override=ENDPOINT, scheme="http", region="us-east-1",
-                       allow_bucket_creation=True)
+fs = pafs.S3FileSystem(
+    access_key=read("MINIO_ROOT_USER"),
+    secret_key=read("MINIO_ROOT_PASSWORD"),
+    endpoint_override=ENDPOINT,
+    scheme="http",
+    region="us-east-1",
+    allow_bucket_creation=True,
+)
 
-for attempt in range(60):                       # wait up to ~2 min for MinIO to answer
+for attempt in range(60):  # wait up to ~2 min for MinIO to answer
     try:
         fs.get_file_info(BUCKETS[0])
         break

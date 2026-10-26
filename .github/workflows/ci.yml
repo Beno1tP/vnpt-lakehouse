@@ -19,9 +19,10 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.10"            # = Python of the Spark image (3.10.12)
-      - name: Install pinned tools + the job's pure-Python deps (no Spark)
-        run: pip install ruff==0.16.10 pytest==9.1.1 pyyaml==6.0.2 -r docker/spark/requirements.txt
+      - name: Install pinned tools + the job's pure-Python deps (no Spark), same file as make venv
+        run: pip install -r requirements-dev.txt
       - run: ruff check .
+      - run: ruff format --check .
       - run: pytest
 
   manifests:

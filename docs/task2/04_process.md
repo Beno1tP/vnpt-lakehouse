@@ -14,6 +14,16 @@ Time spent:
 
 ---
 
+### 2026-10-26 — lab-doc tooling: make lint/test/all, pre-commit, Bronze I/O tests, CI template rendering
+Decided (Bee): no trigger-form `day` field (explicit logical dates); format the repo once with `ruff format` and enforce `ruff format --check` in CI.
+Did (Claude, branch `task2/lab-doc-items`): `requirements-dev.txt` (ruff 0.16.10, pytest 9.1.1, pyyaml 6.0.2, pre-commit 4.6.2 + job deps (E48); CI installs the same file); `make venv/lint/fmt/test/all/hooks`; `.pre-commit-config.yaml` (ruff-pre-commit v0.16.10 check+format, pre-commit-hooks v6.0.0: check-yaml, end-of-file, trailing whitespace, large files > 500 KB, detect-private-key, merge conflicts); `tests/unit/test_bronze_io.py` (pandas → strings / empty → None, S3 landing read via pyarrow with a fake filesystem, `table_exists` → overwritePartitions vs create v2 partitioned by `_ingest_date`) → 49 tests; DAG integrity now renders every `application_file` in strict Jinja with and without a logical date (E47 prevention); one `ruff format` commit (cosmetic).
+Lab-doc pytest topics: constants ✅, Oracle timestamp → event day ✅ (`event_day`, full parsing comes with Silver), table_exists ✅, pandas → Spark types ✅, S3 read ✅, watermark → **mapped, not coded**: Airflow data intervals + idempotent per-day `overwritePartitions` replace a stored watermark.
+
+### 2026-10-26 — E47 verified (revision 11) → step 2.5c done
+Did (Bee): PR #28 merged, `make airflow-install` (revision 11, `git 4f5060d`); triggered `lake_maintenance` (dry run) and `chatbot_bronze`, both **without** a logical date.
+Observed: lake_maintenance manual run **success** in 40 s (no UndefinedError); chatbot_bronze failed immediately in check_landing (AirflowFailException, no retry wait) → exactly one Telegram `❌ chatbot_bronze.check_landing FAILED for day none (run without a logical date) (attempt 1/1, final)`. **Step 2.5c done.**
+Decision (open, Bee): optional `day` field in the Airflow trigger form; current rule = loading a day must be explicit (logical date / backfill), runs without one fail fast.
+
 ### 2026-10-26 — PR #27 merged (E46 results + E47 fix, #26 closed into it); Airflow digest promoted (PR #28)
 Did (Bee): PR #26 closed, PR #27 4/4 green (DAG integrity 2m18s), merged (main `87804e7`); images run 40303175320: airflow → `sha256:0c7cc70c…c988`.
 

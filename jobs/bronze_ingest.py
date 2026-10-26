@@ -7,6 +7,7 @@ Rerunning with the same --ingest-date replaces that partition (no duplicates).
 Task 2: --source s3://landing reads that day's files from the landing zone instead of the local folder
 (<source>/<table>/dt=<ingest-date>/<file>); endpoint from S3_ENDPOINT, keys from AWS_* env. Default = Task 1.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -22,8 +23,8 @@ from pyspark.sql.types import StringType, StructField, StructType
 
 SOURCES = {
     # table name        : (file name,                          sheet)
-    "bronze.chatlog":     ("bot_dvc_hcm.xlsx",                 "Export Worksheet"),
-    "bronze.bot_predict": ("bot_ddvc_hcm_bot_predict.xlsx",    "Export Worksheet"),
+    "bronze.chatlog": ("bot_dvc_hcm.xlsx", "Export Worksheet"),
+    "bronze.bot_predict": ("bot_ddvc_hcm_bot_predict.xlsx", "Export Worksheet"),
 }
 RAW_DIR = "/data/raw"
 
@@ -38,8 +39,9 @@ def read_excel_as_strings(path: str, sheet: str) -> pd.DataFrame:
     """Bronze keeps everything as raw text; typing happens in Silver."""
     if path.startswith("s3://"):
         import pyarrow.fs as pafs
+
         fs = pafs.S3FileSystem(endpoint_override=os.environ["S3_ENDPOINT"], scheme="http", region="us-east-1")
-        with fs.open_input_file(path[len("s3://"):]) as f:  # missing file -> FileNotFoundError -> job fails
+        with fs.open_input_file(path[len("s3://") :]) as f:  # missing file -> FileNotFoundError -> job fails
             path = io.BytesIO(f.read())
     pdf = pd.read_excel(path, sheet_name=sheet, dtype=str, engine="openpyxl")
     return pdf.astype(object).where(pdf.notna(), None)  # NaN -> None (Spark null)
@@ -53,18 +55,23 @@ def to_spark(spark: SparkSession, pdf: pd.DataFrame):
 def write_bronze(spark: SparkSession, table: str, df) -> None:
     full = f"lake.{table}"
     if spark.catalog.tableExists(full):
-        df.writeTo(full).overwritePartitions()          # idempotent rerun
+        df.writeTo(full).overwritePartitions()  # idempotent rerun
     else:
-        (df.writeTo(full).using("iceberg")
-           .partitionedBy(F.col("_ingest_date"))
-           .tableProperty("format-version", "2")
-           .create())
+        (
+            df.writeTo(full)
+            .using("iceberg")
+            .partitionedBy(F.col("_ingest_date"))
+            .tableProperty("format-version", "2")
+            .create()
+        )
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--ingest-date", required=True, help="YYYY-MM-DD; the partition to (re)write")
-    ap.add_argument("--source", default=RAW_DIR, help=f"folder with the Excel files (default {RAW_DIR}) or s3://landing")
+    ap.add_argument(
+        "--source", default=RAW_DIR, help=f"folder with the Excel files (default {RAW_DIR}) or s3://landing"
+    )
     args = ap.parse_args()
 
     spark = SparkSession.builder.appName("bronze_ingest").getOrCreate()
@@ -75,11 +82,13 @@ def main() -> None:
     for table, (fname, sheet) in SOURCES.items():
         path = source_path(args.source, table, fname, args.ingest_date)
         pdf = read_excel_as_strings(path, sheet)
-        df = (to_spark(spark, pdf)
-              .withColumn("_ingest_date", F.to_date(F.lit(args.ingest_date)))
-              .withColumn("_ingested_at", F.lit(ingested_at))
-              .withColumn("_source_file", F.lit(path if path.startswith("s3://") else fname))
-              .withColumn("_batch_id", F.lit(batch_id)))
+        df = (
+            to_spark(spark, pdf)
+            .withColumn("_ingest_date", F.to_date(F.lit(args.ingest_date)))
+            .withColumn("_ingested_at", F.lit(ingested_at))
+            .withColumn("_source_file", F.lit(path if path.startswith("s3://") else fname))
+            .withColumn("_batch_id", F.lit(batch_id))
+        )
         write_bronze(spark, table, df)
         n = spark.table(f"lake.{table}").where(F.col("_ingest_date") == args.ingest_date).count()
         print(f"[bronze] {table}: {len(pdf)} rows read, {n} rows in partition {args.ingest_date}")

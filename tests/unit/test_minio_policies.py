@@ -1,4 +1,5 @@
 """Least privilege of the MinIO service users (step 2.1b, gap #9): what each policy may and may not touch."""
+
 import json
 from pathlib import Path
 
@@ -7,8 +8,13 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def grants(policy: str) -> set[tuple[str, str]]:
     doc = json.loads((ROOT / f"infra/k8s/lake/minio-users/{policy}.json").read_text())
-    return {(action, res) for st in doc["Statement"] if st["Effect"] == "Allow"
-            for action in st["Action"] for res in st["Resource"]}
+    return {
+        (action, res)
+        for st in doc["Statement"]
+        if st["Effect"] == "Allow"
+        for action in st["Action"]
+        for res in st["Resource"]
+    }
 
 
 def test_spark_jobs_reads_landing_writes_lakehouse_only():
@@ -27,7 +33,7 @@ def test_hms_cannot_touch_landing():
 
 
 def test_no_wildcards_or_admin():
-    for policy in sorted(p.stem for p in (ROOT / "infra/k8s/lake/minio-users").glob("*.json")):   # every policy file
+    for policy in sorted(p.stem for p in (ROOT / "infra/k8s/lake/minio-users").glob("*.json")):  # every policy file
         for action, res in grants(policy):
             assert action != "s3:*" and not action.startswith("admin:") and res != "arn:aws:s3:::*", policy
             assert "CreateBucket" not in action and "DeleteBucket" not in action, policy
@@ -47,4 +53,4 @@ def test_backup_writer_cannot_delete_backups():
     g = grants("lake-backup")
     assert {r for _, r in g} <= {"arn:aws:s3:::backup", "arn:aws:s3:::backup/*"}
     assert ("s3:PutObject", "arn:aws:s3:::backup/*") in g
-    assert not any(a == "s3:DeleteObject" for a, _ in g)          # a compromised job cannot wipe the backups
+    assert not any(a == "s3:DeleteObject" for a, _ in g)  # a compromised job cannot wipe the backups

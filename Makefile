@@ -31,7 +31,7 @@ SPARK_SUBMIT = $(COMPOSE) exec -T spark /opt/spark/bin/spark-submit --master $(S
 SPARK_SQL    = $(COMPOSE) exec -T spark /opt/spark/bin/spark-sql --master local[1]
 NOISE        = ^Time taken|^:: loading settings
 
-.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance
+.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks
 
 help:          ## list targets and variables
 	@awk -F':.*## ' '/^[a-zA-Z0-9_-]+:.*## /{printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -200,3 +200,17 @@ maintenance:   ## Task 2 2.5c: Iceberg maintenance now (same template as DAG lak
 	@for i in $$(seq 1 180); do s=$$(kubectl -n spark-jobs get sparkapplication maintenance-manual -o jsonpath='{.status.applicationState.state}'); \
 	  case "$$s" in COMPLETED|FAILED|SUBMISSION_FAILED) break;; esac; sleep 5; done; echo "[maint] state=$$s"; \
 	  kubectl -n spark-jobs logs maintenance-manual-driver | grep -E "^\[maint\]|Error|Exception" || true; test "$$s" = COMPLETED
+venv:          ## dev: local .venv with the pinned tools + job deps (requirements-dev.txt, ~330 MB, git-ignored)
+	test -x .venv/bin/python || python3 -m venv .venv
+	.venv/bin/pip install -q -r requirements-dev.txt
+lint:          ## dev: ruff check + ruff format --check (same as CI)
+	.venv/bin/ruff check .
+	.venv/bin/ruff format --check .
+fmt:           ## dev: apply ruff format + safe ruff fixes
+	.venv/bin/ruff format .
+	.venv/bin/ruff check --fix .
+test:          ## dev: unit tests (no Spark needed; DAG tests run in CI inside the Airflow image)
+	.venv/bin/pytest
+all: lint test ## dev: lint + test
+hooks:         ## dev: install the pre-commit hooks (.pre-commit-config.yaml) into .git/hooks
+	.venv/bin/pre-commit install

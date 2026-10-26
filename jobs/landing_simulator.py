@@ -10,6 +10,7 @@ Rerunning replaces the whole landing prefix of each table (idempotent). Prints c
     python3 landing_simulator.py --src /data/raw --dest /tmp/landing      (local test, no S3)
 S3 credentials: AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY env; endpoint: S3_ENDPOINT env (host:port, http).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -23,8 +24,8 @@ import pyarrow.fs as pafs
 
 SOURCES = {
     # table        : (file name,                       sheet)
-    "chatlog":     ("bot_dvc_hcm.xlsx",                "Export Worksheet"),
-    "bot_predict": ("bot_ddvc_hcm_bot_predict.xlsx",   "Export Worksheet"),
+    "chatlog": ("bot_dvc_hcm.xlsx", "Export Worksheet"),
+    "bot_predict": ("bot_ddvc_hcm_bot_predict.xlsx", "Export Worksheet"),
 }
 EXPECTED_KEY = {"chatlog": "chatlog_rows", "bot_predict": "bot_predict_rows"}
 
@@ -33,7 +34,7 @@ def filesystem(dest: str):
     """(filesystem, base path) for an s3:// URI or a local directory."""
     if dest.startswith("s3://"):
         fs = pafs.S3FileSystem(endpoint_override=os.environ["S3_ENDPOINT"], scheme="http", region="us-east-1")
-        return fs, dest[len("s3://"):].rstrip("/")
+        return fs, dest[len("s3://") :].rstrip("/")
     os.makedirs(dest, exist_ok=True)
     return pafs.LocalFileSystem(), os.path.abspath(dest)
 
@@ -64,7 +65,7 @@ def main() -> None:
             sys.exit(f"ERROR: {table}: {int(days.isna().sum())} rows with unparseable CREATED_TIME")
 
         prefix = f"{base}/{table}"
-        fs.delete_dir_contents(prefix, missing_dir_ok=True)          # idempotent: replace the table's landing data
+        fs.delete_dir_contents(prefix, missing_dir_ok=True)  # idempotent: replace the table's landing data
         written = 0
         for day, part in pdf.groupby(days, sort=True):
             buf = io.BytesIO()
