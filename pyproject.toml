@@ -9,9 +9,9 @@ extend-exclude = ["infra/compose/__pycache__"]
 select = ["E", "F", "I", "B", "SIM", "DTZ"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["bronze_ingest", "validate_bronze", "landing_simulator"]
+known-first-party = ["bronze_ingest", "validate_bronze", "landing_simulator", "lake_alerts"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit"]
-pythonpath = ["jobs", "infra/k8s"]
+pythonpath = ["jobs", "infra/k8s", "plugins"]
 addopts = "-q"

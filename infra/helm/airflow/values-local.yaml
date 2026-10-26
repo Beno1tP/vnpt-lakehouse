@@ -20,7 +20,9 @@ imagePullSecrets: [ghcr-pull]
 # rendered by make k8s-secrets); AIRFLOW_VAR_SPARK_JOB_IMAGE is set by make airflow-install from images.env
 extraEnvFrom: |
   - secretRef:
-      name: airflow-connections       # private GHCR package, token read:packages only (2.0c); `registry:` is deprecated
+      name: airflow-connections
+  - secretRef:
+      name: airflow-alerts       # private GHCR package, token read:packages only (2.0c); `registry:` is deprecated
 
 executor: LocalExecutor             # tasks run inside the scheduler pod; heavy work runs in Spark pods
 
@@ -55,6 +57,12 @@ createUserJob:
                                     # the admin user is created by `make airflow-admin` from the secret file instead
 
 config:
+  logging:
+    # step 2.6 (gap #8): task logs are uploaded to MinIO when a task ends and read back from there by the API
+    # server, so they survive scheduler restarts (E41 lost them three times). MinIO user airflow-logs, bucket only.
+    remote_logging: "True"
+    remote_base_log_folder: s3://airflow-logs
+    remote_log_conn_id: minio_logs
   core:
     load_examples: "False"
     parallelism: 4                  # max concurrent task processes in the scheduler pod (RAM)

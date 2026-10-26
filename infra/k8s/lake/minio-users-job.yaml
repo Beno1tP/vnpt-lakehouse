@@ -48,3 +48,4 @@ spec:
               - { key: lake-landing-writer.json, path: lake-landing-writer.json }
               - { key: lake-hms.json, path: lake-hms.json }
               - { key: lake-landing-reader.json, path: lake-landing-reader.json }
+              - { key: lake-airflow-logs.json, path: lake-airflow-logs.json }

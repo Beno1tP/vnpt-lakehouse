@@ -38,6 +38,10 @@ for dag_id, dag in sorted(bag.dags.items()):
         problems.append(f"schedule must be a data-interval timetable, got {type(dag.timetable).__name__} (E38)")
     if "lake" in dag.tags:                       # production DAGs: every task bounded in time, validation retried <= 1
         problems += [f"{t.task_id}: needs execution_timeout" for t in dag.tasks if t.execution_timeout is None]
+        problems += [f"{t.task_id}: needs on_failure_callback (alert, 2.6)" for t in dag.tasks
+                     if not t.on_failure_callback]
+        if not dag.deadline:
+            problems.append("needs a DeadlineAlert (2.6)")
         problems += [f"{t.task_id}: validation retries at most once (deterministic failures, E41)" for t in dag.tasks
                      if "validate" in t.task_id and t.retries > 1]
     for p in problems:

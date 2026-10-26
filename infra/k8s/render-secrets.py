@@ -14,7 +14,7 @@ import xml.sax.saxutils as xs
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "secrets")
 REQUIRED = ("PG_USER", "PG_PASSWORD", "AIRFLOW_DB_PASSWORD", "MINIO_ROOT_USER", "MINIO_ROOT_PASSWORD",
-            "AIRFLOW_ADMIN_PASSWORD")
+            "AIRFLOW_ADMIN_PASSWORD", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID")
 # generated once and appended to secrets.env, so they stay stable across renders (a new fernet key would make
 # stored Airflow connections unreadable; a new JWT secret breaks running tasks)
 GENERATED = {
@@ -26,6 +26,7 @@ GENERATED = {
     "MINIO_LANDING_WRITER_SECRET": lambda: secrets.token_hex(24),
     "MINIO_HMS_SECRET": lambda: secrets.token_hex(24),
     "MINIO_AIRFLOW_LANDING_SECRET": lambda: secrets.token_hex(24),          # step 2.4: DAG check_landing
+    "MINIO_AIRFLOW_LOGS_SECRET": lambda: secrets.token_hex(24),             # step 2.6: Airflow remote task logs
 }
 
 
@@ -69,7 +70,7 @@ def main():
     write_private("minio.env", "".join(f"{k}={env[k]}\n" for k in ("MINIO_ROOT_USER", "MINIO_ROOT_PASSWORD")))
     # MinIO service users (step 2.1b): passwords for the minio-users Job, and per-consumer S3 keys (AWS SDK env names)
     users = ("MINIO_SPARK_JOBS_SECRET", "MINIO_LANDING_WRITER_SECRET", "MINIO_HMS_SECRET",
-             "MINIO_AIRFLOW_LANDING_SECRET")
+             "MINIO_AIRFLOW_LANDING_SECRET", "MINIO_AIRFLOW_LOGS_SECRET")
     write_private("minio-service-users.env", "".join(f"{k}={env[k]}\n" for k in users))
 
     def s3_keys(user, secret_key):
@@ -88,9 +89,14 @@ def main():
     # Airflow connections as env vars (AIRFLOW_CONN_<ID>, JSON form) -> Secret airflow-connections (step 2.4)
     minio = {"conn_type": "aws", "login": "airflow-landing", "password": env["MINIO_AIRFLOW_LANDING_SECRET"],
              "extra": {"endpoint_url": "http://minio.lake.svc.cluster.local:9000", "region_name": "us-east-1"}}
+    logs = {"conn_type": "aws", "login": "airflow-logs", "password": env["MINIO_AIRFLOW_LOGS_SECRET"],
+            "extra": {"endpoint_url": "http://minio.lake.svc.cluster.local:9000", "region_name": "us-east-1"}}
     kube = {"conn_type": "kubernetes", "extra": {"in_cluster": True}}
     write_private("airflow-connections.env", f"AIRFLOW_CONN_MINIO_LANDING={json.dumps(minio)}\n"
+                                             f"AIRFLOW_CONN_MINIO_LOGS={json.dumps(logs)}\n"
                                              f"AIRFLOW_CONN_KUBERNETES_IN_CLUSTER={json.dumps(kube)}\n")
+    # Telegram (step 2.6) for plugins/lake_alerts.py, in its own Secret
+    write_private("airflow-alerts.env", "".join(f"{k}={env[k]}\n" for k in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID")))
     # HMS JDBC settings as a file (never in SERVICE_OPTS: the entrypoint prints it with set -x)
     props = {
         "javax.jdo.option.ConnectionDriverName": "org.postgresql.Driver",

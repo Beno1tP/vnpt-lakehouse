@@ -14,7 +14,7 @@ Update this file at the end of each work block (status, decisions, blockers).
 | Code hosting | Personal GitHub (Bee will say if this changes) |
 | Data | Trial chatbot data, allowed on the laptop, **must not leave the laptop** (no cloud VM, no uploads, no data contents in alerts) |
 | Required tools (from lab doc) | Docker Desktop, Minikube (`--memory=7168 --cpus=4`, needs 6 GB+ RAM), Helm v3, kubectl, Python 3.10+, DBeaver or a MySQL client for StarRocks |
-| Alerts | Telegram group for the fresher team |
+| Alerts | Telegram group **"Alert group"** (dedicated, created 10-26 with the bot `bee_lake_alerts_bot`; leader agreed; teammates can be added later) |
 | Coding assistant | Claude Code, with `CLAUDE.md` in the repo as the hand-over context |
 
 ---

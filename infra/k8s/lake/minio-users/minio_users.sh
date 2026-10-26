@@ -30,4 +30,5 @@ ensure_user spark-jobs      MINIO_SPARK_JOBS_SECRET      lake-spark-jobs
 ensure_user landing-writer  MINIO_LANDING_WRITER_SECRET  lake-landing-writer
 ensure_user hive-metastore  MINIO_HMS_SECRET             lake-hms
 ensure_user airflow-landing MINIO_AIRFLOW_LANDING_SECRET lake-landing-reader
+ensure_user airflow-logs    MINIO_AIRFLOW_LOGS_SECRET    lake-airflow-logs
 echo "minio users ok"
