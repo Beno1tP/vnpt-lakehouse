@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-10-26 — Doubled log lines and the midnight run explained; drills prepared
+Observed (Bee): `grep -c "23/23"` in one attempt's log (07-19 validate attempt=2) → **2**: the line is repeated inside a single log (the operator re-streams the driver log), not a second validation. `airflow dags details`: `timetable_summary 0 0 * * *`, `is_paused False`, next run **logical 2026-10-26, interval [10-26, 10-27), run_after 2026-10-27 00:00 UTC**. The 10-25 day was not scheduled because the last automated run (old timetable, ended 10-25 16:29) is the reference; the next midnight-aligned interval after it starts 10-26 (transition artifact, one-time).
+Prepared (Claude): `make drill-driver` / `drill-executor` / `drill-scheduler` (DRILL_DATE=2024-07-24: re-queue the day, wait until the bronze driver/executor pod is Running, then delete it / restart the scheduler); `07_drills.md` with expectations and theory.
+
 ### 2026-10-26 — 2.5 E38 proof on a fresh day; attempt numbers explained
 Did (Bee): `make backfill FROM=2024-07-26 TO=2024-07-26` (a day with no run and no data); grep of its check_landing log; listing of `attempt=*` log files.
 Observed: **`logical_date=2024-07-26 … run_after=2024-07-27`** and **`ds=2024-07-26 data_interval=[2024-07-26 00:00:00+00:00, 2024-07-27 00:00:00+00:00)`** → real one-day intervals at midnight, logical date = interval start: **E38 fix proven** on revision 5. Log files are `attempt=2` for every task of every backfill run and `attempt=3` for the two manual runs; no `attempt=1` files in the new pod. Reason: `REPROCESS=completed` **clears** the existing task instances, and each clear increments `try_number`; the attempt=1 logs lived in the scheduler pod replaced by revision 5. So the numbers count clears, not failures (no task failed: every run `success`).
