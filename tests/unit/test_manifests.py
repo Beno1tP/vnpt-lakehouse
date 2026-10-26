@@ -83,3 +83,8 @@ def test_backup_cronjob_dumps_both_databases_with_server_major_version():
     assert dump["image"] == server["spec"]["template"]["spec"]["containers"][0]["image"]  # pg_dump == server major
     assert "for db in metastore airflow" in dump["args"][0]
     assert cj["spec"]["concurrencyPolicy"] == "Forbid"
+
+
+def test_spark_operator_image_pinned_by_digest():
+    values = yaml.safe_load((ROOT / "infra/helm/spark-operator/values-local.yaml").read_text())
+    assert values["image"]["tag"].startswith("2.2.1@sha256:")  # chart 2.2.1 = app 2.2.1, Spark 3.5

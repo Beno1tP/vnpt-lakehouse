@@ -31,7 +31,7 @@ SPARK_SUBMIT = $(COMPOSE) exec -T spark /opt/spark/bin/spark-submit --master $(S
 SPARK_SQL    = $(COMPOSE) exec -T spark /opt/spark/bin/spark-sql --master local[1]
 NOISE        = ^Time taken|^:: loading settings
 
-.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks
+.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks ghcr-prune
 
 help:          ## list targets and variables
 	@awk -F':.*## ' '/^[a-zA-Z0-9_-]+:.*## /{printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -214,3 +214,5 @@ test:          ## dev: unit tests (no Spark needed; DAG tests run in CI inside t
 all: lint test ## dev: lint + test
 hooks:         ## dev: install the pre-commit hooks (.pre-commit-config.yaml) into .git/hooks
 	.venv/bin/pre-commit install
+ghcr-prune:    ## Task 2 2.7: list old GHCR versions (keeps images.env digests + newest KEEP=3); CONFIRM=yes deletes
+	python3 .github/scripts/ghcr_prune.py --keep $(or $(KEEP),3) $(if $(filter yes,$(CONFIRM)),--confirm,)

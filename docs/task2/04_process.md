@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-10-26 — 2.7 image hygiene prepared (branch `task2/close-docs`)
+Audit (Claude, `grep image:` over infra/, dags/, Makefile): every K8s manifest already pins a digest (postgres, minio, mc directly; spark/hms via kustomize `images:`; Airflow + spark-job via images.env), **except the Spark Operator** (`controller:2.2.1`, tag only). Chart 2.2.1 builds `registry/repository:tag` (`_helpers.tpl`), so `image.tag: "2.2.1@sha256:865ff4da…948a"` pins it (index digest of tag 2.2.1 from the ghcr.io registry API; Bee checks it equals the running pod's imageID before upgrading).
+Added: CI kustomize job fails on any rendered `image:` without `@sha256:`; unit test for the operator pin; `make ghcr-prune [KEEP=3] [CONFIRM=yes]` (`.github/scripts/ghcr_prune.py`: keeps images.env digests + newest 3 per package, dry run by default; safe because images are pushed with `provenance: false` = no child manifests) + unit tests.
+
 ### 2026-10-26 — PR #30 deployed (revision 12): reformatted images rerun a real day
 Did (Bee): PR #30 merged, `make airflow-install` (`git c1c61d3`, revision 12), `spark_job_image` = `…@sha256:05ff7b97…9eb2`; trigger with `--logical-date 2024-07-24` refused (E49); `airflow tasks clear chatbot_bronze --start-date 2024-07-24 --end-date 2024-07-24 --yes`.
 Observed: `backfill__2024-07-24T00:00:00+00:00` rerun **success** 16:49:22 → 16:50:38 (76 s) on the new images. **Lab-doc tooling items done.**
