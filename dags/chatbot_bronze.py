@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.providers.cncf.kubernetes.operators.spark_kubernetes import SparkKubernetesOperator
 from airflow.sdk import AsyncCallback, CronDataIntervalTimetable, DeadlineAlert, DeadlineReference, dag, task
-from airflow.sdk.exceptions import AirflowSkipException  # Airflow 3 location (core alias is deprecated)
+from airflow.sdk.exceptions import AirflowFailException, AirflowSkipException  # Airflow 3 location
 
 from lake_alerts import deadline_alert, task_failure_alert
 
@@ -40,6 +40,8 @@ LANDING = {"chatlog": "bot_dvc_hcm.xlsx", "bot_predict": "bot_ddvc_hcm_bot_predi
 def chatbot_bronze():
     @task(retries=0)
     def check_landing(ds=None, data_interval_start=None, data_interval_end=None):
+        if not ds:   # Airflow 3 allows manual runs without a logical date: then there is no day to load (E47)
+            raise AirflowFailException("chatbot_bronze needs a day: trigger with --logical-date YYYY-MM-DDT00:00:00Z")
         print(f"[landing] ds={ds} data_interval=[{data_interval_start}, {data_interval_end})")
         s3 = S3Hook(aws_conn_id="minio_landing")      # MinIO user airflow-landing: read landing only (2.1b)
         found = {t: s3.check_for_key(f"{t}/dt={ds}/{f}", bucket_name="landing") for t, f in LANDING.items()}

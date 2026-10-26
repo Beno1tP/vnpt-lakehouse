@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-10-26 — lake_maintenance through Airflow: scheduled run OK, manual run without logical date failed (E47)
+Did (Bee): unpause + trigger `lake_maintenance` with `--conf '{"dry_run": "true"}'` (no logical date).
+Observed: unpause created `scheduled__2026-10-25T02:00` (logical 2026-10-18, real defaults 168 h / 5 / 72 h) → **success** in 41 s: already clean (6 snapshots, 22 files, 0 expired, 0 orphans; time travel to today's oldest kept snapshot still possible); its log also printed `log read interrupted … might get duplicated` = the doubled-lines cause, now confirmed. Manual run → `UndefinedError: 'ds' is undefined` ×2 attempts (retry 10 min) → ❌ alert received (`attempt 2/2, final`) → E47; fix: maintenance name without a date variable, bronze fails fast without a logical date.
+
 ### 2026-10-26 — 2.5c maintenance runs (E46)
 Did (Bee): PR #25 merged, `make airflow-install` (revision 10, `lake_maintenance` listed); `make maintenance DRY=yes ORPHAN_HOURS=1` → refused by Iceberg (E46); dry run with 24 h; real run `SNAP_HOURS=1 ORPHAN_HOURS=24`; validate 2024-07-24.
 Observed:

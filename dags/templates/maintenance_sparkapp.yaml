@@ -3,7 +3,7 @@
 apiVersion: sparkoperator.k8s.io/v1beta2
 kind: SparkApplication
 metadata:
-  name: maintenance-{{ ds }}
+  name: maintenance                        # no date variable here: manual runs may have none (E47); operator adds a suffix
   namespace: spark-jobs
 spec:
   type: Python
