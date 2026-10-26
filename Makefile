@@ -21,6 +21,7 @@ APP                 ?= bronze
 FROM                ?= 2024-07-02
 TO                  ?= 2024-07-25
 REPROCESS           ?= none
+DRILL_DATE          ?= 2024-07-24
 IDEMPOTENCY_SED      = -e 's|"/opt/tests/sql/bronze_rules.sql"]|"/opt/tests/sql/bronze_rules.sql", "--check-idempotency"]|'
 LOCAL_JOB_IMAGE      = vnpt-lake-spark-job:$(JOB_TAG)
 JOB_IMAGE           ?= $(SPARK_JOB_IMAGE_REF)
@@ -30,7 +31,7 @@ SPARK_SUBMIT = $(COMPOSE) exec -T spark /opt/spark/bin/spark-submit --master $(S
 SPARK_SQL    = $(COMPOSE) exec -T spark /opt/spark/bin/spark-sql --master local[1]
 NOISE        = ^Time taken|^:: loading settings
 
-.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report
+.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler
 
 help:          ## list targets and variables
 	@awk -F':.*## ' '/^[a-zA-Z0-9_-]+:.*## /{printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -144,3 +145,21 @@ dag-runs:      ## Task 2: runs of chatbot_bronze with state, logical date (= the
 	@kubectl -n airflow exec deploy/airflow-scheduler -c scheduler -- airflow dags list-runs chatbot_bronze -o plain | awk 'NR==1 || /chatbot_bronze/' | cut -c1-160
 dag-report:    ## Task 2: per day from the task logs in the scheduler pod: landing found?, rows loaded, validation result
 	@kubectl -n airflow exec deploy/airflow-scheduler -c scheduler -- sh -c 'grep -rhoE "\[landing\] [0-9-]+: chatlog=[a-z]+, bot_predict=[a-z]+|\[bronze\] bronze\.[a-z_]+: [0-9]+ rows read, [0-9]+ rows in partition [0-9-]+|\[validate\] [0-9]+/[0-9]+ checks passed for _ingest_date=[0-9-]+" /opt/airflow/logs/dag_id=chatbot_bronze/ | sort | uniq -c'
+drill-driver:  ## Task 2 drill 1: re-run DRILL_DATE (default 2024-07-24) and delete the bronze DRIVER pod mid-run
+	$(MAKE) --no-print-directory backfill FROM=$(DRILL_DATE) TO=$(DRILL_DATE) REPROCESS=completed 2>&1 | grep -c "backfill" >/dev/null
+	@for i in $$(seq 1 300); do p=$$(kubectl -n spark-jobs get pods -l 'task_id=bronze,spark-role=driver' \
+	    --field-selector=status.phase=Running -o name 2>/dev/null | head -1); [ -n "$$p" ] && break; sleep 1; done; \
+	  test -n "$$p" || { echo "[drill] no running bronze driver within 300 s"; exit 1; }; sleep 5; \
+	  echo "[drill] $$(date -u +%T) UTC: deleting $$p (driver)"; kubectl -n spark-jobs delete $$p --wait=false
+drill-executor: ## Task 2 drill 2: re-run DRILL_DATE and delete the bronze EXECUTOR pod mid-run
+	$(MAKE) --no-print-directory backfill FROM=$(DRILL_DATE) TO=$(DRILL_DATE) REPROCESS=completed 2>&1 | grep -c "backfill" >/dev/null
+	@for i in $$(seq 1 300); do p=$$(kubectl -n spark-jobs get pods -l 'task_id=bronze,spark-role=executor' \
+	    --field-selector=status.phase=Running -o name 2>/dev/null | head -1); [ -n "$$p" ] && break; sleep 1; done; \
+	  test -n "$$p" || { echo "[drill] no running bronze executor within 300 s"; exit 1; }; sleep 2; \
+	  echo "[drill] $$(date -u +%T) UTC: deleting $$p (executor)"; kubectl -n spark-jobs delete $$p --wait=false
+drill-scheduler: ## Task 2 drill 3: re-run DRILL_DATE and restart the Airflow scheduler while the bronze driver runs
+	$(MAKE) --no-print-directory backfill FROM=$(DRILL_DATE) TO=$(DRILL_DATE) REPROCESS=completed 2>&1 | grep -c "backfill" >/dev/null
+	@for i in $$(seq 1 300); do p=$$(kubectl -n spark-jobs get pods -l 'task_id=bronze,spark-role=driver' \
+	    --field-selector=status.phase=Running -o name 2>/dev/null | head -1); [ -n "$$p" ] && break; sleep 1; done; \
+	  test -n "$$p" || { echo "[drill] no running bronze driver within 300 s"; exit 1; }; sleep 5; \
+	  echo "[drill] $$(date -u +%T) UTC: restarting the scheduler while $$p runs"; kubectl -n airflow rollout restart deploy/airflow-scheduler

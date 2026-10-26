@@ -14,6 +14,23 @@ Time spent:
 
 ---
 
+### 2026-10-26 — Doubled log lines and the midnight run explained; drills prepared
+Observed (Bee): `grep -c "23/23"` in one attempt's log (07-19 validate attempt=2) → **2**: the line is repeated inside a single log (the operator re-streams the driver log), not a second validation. `airflow dags details`: `timetable_summary 0 0 * * *`, `is_paused False`, next run **logical 2026-10-26, interval [10-26, 10-27), run_after 2026-10-27 00:00 UTC**. The 10-25 day was not scheduled because the last automated run (old timetable, ended 10-25 16:29) is the reference; the next midnight-aligned interval after it starts 10-26 (transition artifact, one-time).
+Prepared (Claude): `make drill-driver` / `drill-executor` / `drill-scheduler` (DRILL_DATE=2024-07-24: re-queue the day, wait until the bronze driver/executor pod is Running, then delete it / restart the scheduler); `07_drills.md` with expectations and theory.
+
+### 2026-10-26 — 2.5 E38 proof on a fresh day; attempt numbers explained
+Did (Bee): `make backfill FROM=2024-07-26 TO=2024-07-26` (a day with no run and no data); grep of its check_landing log; listing of `attempt=*` log files.
+Observed: **`logical_date=2024-07-26 … run_after=2024-07-27`** and **`ds=2024-07-26 data_interval=[2024-07-26 00:00:00+00:00, 2024-07-27 00:00:00+00:00)`** → real one-day intervals at midnight, logical date = interval start: **E38 fix proven** on revision 5. Log files are `attempt=2` for every task of every backfill run and `attempt=3` for the two manual runs; no `attempt=1` files in the new pod. Reason: `REPROCESS=completed` **clears** the existing task instances, and each clear increments `try_number`; the attempt=1 logs lived in the scheduler pod replaced by revision 5. So the numbers count clears, not failures (no task failed: every run `success`).
+Note: no midnight scheduled run was seen because the laptop was off at midnight; with catchup False the scheduler only creates the most recent missed interval after it starts (check `airflow dags details` / `next-execution`).
+
+### 2026-10-26 — 2.5 second backfill on revision 5 (idempotency proof)
+Did (Bee): `make backfill REPROCESS=completed` (backfill_id=2) on helm revision 5 (`git dc530d4`); `make dag-runs`; `make dag-report` (scheduler pod new → report = this backfill only).
+Observed: all 24 runs `success` in ~13 min (02:10 → 02:23 UTC; faster than the first, images cached); landing `yes,yes` on 18 days, `no,no` on 07-07/12/13/14/20/21; **bronze rows identical to the first backfill on all 18 days × 2 tables** (07-24 12,970 / 6,485; 07-25 7,552 / 3,892; …); `23/23` on all 18 days → **rerun of the full history gives the same result (idempotent)**. Doubled log lines again but on *different* days (07-06 / 07-24 bot_predict, validate 07-19) than in the first backfill → random duplication when the operator re-streams the driver log, not data reloads (attempt=2 check pending).
+Learned: `REPROCESS=completed` **reuses** existing runs (clears + re-queues tasks; no new run, the stored data interval stays as created) → it cannot show a new timetable; a fresh date is needed (07-26). Only one active backfill per DAG.
+
+### 2026-10-26 — PR #12 merged; cluster restarted (E40); E38 fix deployed (revision 5)
+Did (Bee): PR #12 4/4 green, merged (main `dc530d4`); `make airflow-install` → guard printed `deploying git dc530d4 from main`, then failed: cluster stopped overnight (E40); `minikube start` (profile kept: Allocatable 7442652Ki), `HMS schema 3.1.0 exists`; `make airflow-install` again → **revision 5, description `git dc530d4`** (E39 traceability works).
+
 ### 2026-10-26 — 2.5 first backfill 2024-07-02 → 07-25 (old DAG version)
 Did (Bee): `make backfill DRY=yes` (22 dates: `REPROCESS=none` leaves out 07-02 and 07-07, which had manual runs), `make backfill REPROCESS=completed` (backfill_id=1: 22 new `backfill__…` runs + the 2 manual runs re-queued), `make dag-runs`, `make dag-report`.
 Observed: 25 runs `success` (24 days + old scheduled run); about **50 s per data day**, ~20 min total; landing `yes,yes` on 18 days, `no,no` on exactly 07-07/12/13/14/20/21 (skipped, D2); bronze rows read = rows in partition for 18 days × 2 tables, all equal to `bronze_daily.json` (e.g. 07-24 12,970 / 6,485; 07-25 7,552 / 3,892); `[validate] 23/23` on all 18 days. Some single-table bronze lines and three validate lines appear twice (07-04/05/22 bot_predict; validate 07-05/15/17): suspected duplicated log lines when the operator re-streams the driver log, not retries (check pending: attempt=2 files).
