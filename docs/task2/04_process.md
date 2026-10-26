@@ -14,6 +14,9 @@ Time spent:
 
 ---
 
+### 2026-10-27 — PR #33 merged (main `c0babb5`); airflow digest promoted (PR #34)
+Images run 40372279799: airflow → `sha256:cf03f5d3…3054` (hello_lake removed); spark-job unchanged.
+
 ### 2026-10-27 — 2.8 prepared: from-zero targets (decision: real from-zero test, A) + hello_lake removed
 Decided (Bee): **A** = real from-zero test (`minikube delete`, then `make k8s-up && make k8s-demo`), accepting the loss of everything in the cluster (tables, Airflow history, and the backups, since they live in the same MinIO = a gap to record); **remove `hello_lake`** (2.3 smoke DAG with the E38 `timedelta` pattern).
 Prepared (Claude, branch `task2/docs-2-8`): `make k8s-up` (deploy-guard → minikube start with the E25 flags if not running → metrics-server → k8s-secrets → `kubectl apply -k` → wait postgres/minio/bucket-init/minio-users/HMS → operator 2.2.1 by digest → airflow-install → airflow-admin → pod list); `make k8s-demo` (landing → unpause chatbot_bronze → backfill FROM..TO → poll until all runs finished → dag-report → fail on any failed run → unpause lake_maintenance); Secret `ghcr-pull` now rendered from `GHCR_PULL_TOKEN` in secrets.env (kustomize, 3 namespaces) instead of typed by hand, so the from-zero path has no manual step; `dags/hello_lake.py` deleted. Render tested in a scratch copy with dummy values (real `infra/k8s/secrets/` untouched, E42).
