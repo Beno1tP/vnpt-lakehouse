@@ -31,7 +31,7 @@ SPARK_SUBMIT = $(COMPOSE) exec -T spark /opt/spark/bin/spark-submit --master $(S
 SPARK_SQL    = $(COMPOSE) exec -T spark /opt/spark/bin/spark-sql --master local[1]
 NOISE        = ^Time taken|^:: loading settings
 
-.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore
+.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog
 
 help:          ## list targets and variables
 	@awk -F':.*## ' '/^[a-zA-Z0-9_-]+:.*## /{printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -183,3 +183,10 @@ restore-metastore: ## Task 2 2.5b: restore the metastore DB from backup TS (make
 	kubectl -n lake wait --for=condition=complete job/pg-restore-metastore --timeout=300s; kubectl -n lake logs job/pg-restore-metastore -c restore | tail -3
 	kubectl -n lake scale deploy/hive-metastore --replicas=1 && kubectl -n lake rollout status deploy/hive-metastore --timeout=300s
 	kubectl -n lake logs deploy/hive-metastore -c schema-init | tail -1
+catalog:       ## Task 2 2.5b drill 7: make catalog CMD=info|forget|register TABLE=bronze.chatlog [METADATA=s3a://…metadata.json]
+	@n=catalog-$$(date -u +%H%M%S); \
+	  args=$$(python3 -c 'import json,sys; a=["$(CMD)","--table","$(TABLE)"]+(["--metadata","$(METADATA)"] if "$(METADATA)" else []); print(json.dumps(a))'); \
+	  sed -e "s|__NAME__|$$n|" -e 's|__IMAGE__|$(JOB_IMAGE)|' -e "s|__ARGS__|$$args|" infra/k8s/spark-jobs/catalog-sparkapp.yaml | kubectl apply -f - >/dev/null; \
+	  for i in $$(seq 1 120); do s=$$(kubectl -n spark-jobs get sparkapplication $$n -o jsonpath='{.status.applicationState.state}'); \
+	    case "$$s" in COMPLETED|FAILED|SUBMISSION_FAILED) break;; esac; sleep 5; done; echo "[catalog] $$n state=$$s"; \
+	  kubectl -n spark-jobs logs $$n-driver | grep -E "^\[catalog\]|Error|Exception" || true; test "$$s" = COMPLETED

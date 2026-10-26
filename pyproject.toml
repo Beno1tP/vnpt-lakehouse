@@ -9,7 +9,7 @@ extend-exclude = ["infra/compose/__pycache__"]
 select = ["E", "F", "I", "B", "SIM", "DTZ"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["bronze_ingest", "validate_bronze", "landing_simulator", "lake_alerts"]
+known-first-party = ["bronze_ingest", "validate_bronze", "landing_simulator", "lake_alerts", "catalog_tool"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit"]
