@@ -48,7 +48,7 @@ Python 3.11 · Spark 3.5.9 (Scala 2.12, Java 17) · Iceberg 1.11.0 runtime, form
 - Secrets from git-ignored `infra/k8s/secrets.env` (kustomize secretGenerator) and rendered `infra/k8s/secrets/hive-site.xml`; mounted as files. MinIO root keys only for MinIO, bucket-init, minio-users; consumers use service users (2.1b): spark-jobs (`s3-credentials`), landing-writer, hive-metastore.
 - Spark Operator **webhook stays on** (it applies volumes, env, ConfigMaps to driver/executor pods).
 - One retry layer: Airflow retries; SparkApplication `restartPolicy: Never`; validation `retries=0`.
-- Airflow 3: daily intervals via `timedelta(days=1)` or `CronDataIntervalTimetable`, not a bare cron string. Day = date as written in `CREATED_TIME`; daily runs 2024-07-02 → 07-25 (D2 = A): 18 days load, 6 days without a landing file are skipped.
+- Airflow 3: daily intervals only via `CronDataIntervalTimetable("0 0 * * *", timezone="UTC")` (a bare cron string → CronTriggerTimetable and a `timedelta` → DeltaTriggerTimetable both give zero-length intervals: E38). Deploy only from clean `main` (`make deploy-guard`, E39). After a laptop restart: `minikube start` first (E40). Day = date as written in `CREATED_TIME`; daily runs 2024-07-02 → 07-25 (D2 = A): 18 days load, 6 days without a landing file are skipped.
 - Task 2 tech = Minikube + Airflow + Spark only (no DuckDB etc.); Trino is Task 3. Expected counts via Spark SQL (D3).
 - Excel input comes from the MinIO landing zone `s3://landing/<table>/dt=YYYY-MM-DD/`, never a hostPath.
 - Deployed image digests: `infra/k8s/images.env` (+ kustomize `images:`), bumped by PR after an images run.

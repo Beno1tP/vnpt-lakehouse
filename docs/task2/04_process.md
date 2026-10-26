@@ -14,6 +14,9 @@ Time spent:
 
 ---
 
+### 2026-10-26 — PR #12 merged; cluster restarted (E40); E38 fix deployed (revision 5)
+Did (Bee): PR #12 4/4 green, merged (main `dc530d4`); `make airflow-install` → guard printed `deploying git dc530d4 from main`, then failed: cluster stopped overnight (E40); `minikube start` (profile kept: Allocatable 7442652Ki), `HMS schema 3.1.0 exists`; `make airflow-install` again → **revision 5, description `git dc530d4`** (E39 traceability works).
+
 ### 2026-10-26 — 2.5 first backfill 2024-07-02 → 07-25 (old DAG version)
 Did (Bee): `make backfill DRY=yes` (22 dates: `REPROCESS=none` leaves out 07-02 and 07-07, which had manual runs), `make backfill REPROCESS=completed` (backfill_id=1: 22 new `backfill__…` runs + the 2 manual runs re-queued), `make dag-runs`, `make dag-report`.
 Observed: 25 runs `success` (24 days + old scheduled run); about **50 s per data day**, ~20 min total; landing `yes,yes` on 18 days, `no,no` on exactly 07-07/12/13/14/20/21 (skipped, D2); bronze rows read = rows in partition for 18 days × 2 tables, all equal to `bronze_daily.json` (e.g. 07-24 12,970 / 6,485; 07-25 7,552 / 3,892); `[validate] 23/23` on all 18 days. Some single-table bronze lines and three validate lines appear twice (07-04/05/22 bot_predict; validate 07-05/15/17): suspected duplicated log lines when the operator re-streams the driver log, not retries (check pending: attempt=2 files).
