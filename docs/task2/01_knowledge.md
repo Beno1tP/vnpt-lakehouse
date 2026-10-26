@@ -58,7 +58,7 @@ Version note (verified 2026-10-25 from each tag's `Dockerfile`): Kubeflow Spark 
 |---|---|
 | Logical date / data interval | Each run processes **one day** `[data_interval_start, data_interval_end)`; pass it to the job, never `now()` |
 | `catchup` | Default `False` in Airflow 3; use **backfill** (`airflow backfill create --dag-id … --from-date … --to-date …`) to fill history on purpose |
-| Retries | `retries=2`, `retry_delay=5m` for the load (transient: pod eviction, HMS restart); **`retries=0` for validation** (a wrong number is deterministic) |
+| Retries | `retries=2`, `retry_delay=5m` for the load (transient: pod eviction, HMS restart); validation **`retries=1`, 1 min** — a wrong number fails again, an interrupted process (scheduler replaced, E41) is retried. ~~`retries=0`~~ (drill 3) |
 | `max_active_runs=1` | Runs write the same tables, so one at a time |
 | `execution_timeout` | Always set, so a hung run frees its slot |
 | Idempotency | Safe retries and backfills **only** because the job overwrites its own partition (Task 1) |

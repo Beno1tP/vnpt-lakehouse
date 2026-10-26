@@ -6,7 +6,8 @@ check_landing -> bronze (SparkApplication) -> validate (SparkApplication) -> not
   DeltaTriggerTimetable (zero-length intervals, logical date = run time): E38. Manual runs: ds = --logical-date.
 - A day without landing files is SKIPPED (decision D2): 6 of the 24 days 2024-07-02..25 have no data.
 - One retry layer (A4): Airflow retries the load (transient failures); SparkApplications use restartPolicy Never;
-  validation never retries (a wrong number is deterministic).
+  validation retries once, quickly: a wrong number is deterministic and fails again, but an infrastructure
+  interruption (e.g. scheduler pod replaced mid-task, drill 3 / E41) must not fail the day.
 - Safe to rerun/backfill only because bronze overwrites its own partition (Task 1 idempotency).
 """
 from __future__ import annotations
@@ -46,7 +47,7 @@ def chatbot_bronze():
               "delete_on_termination": True}
     bronze = SparkKubernetesOperator(task_id="bronze", application_file="templates/bronze_sparkapp.yaml", **common)
     validate = SparkKubernetesOperator(task_id="validate", application_file="templates/validate_sparkapp.yaml",
-                                       retries=0, **common)
+                                       retries=1, retry_delay=timedelta(minutes=1), **common)
 
     @task(retries=0)
     def notify(ds=None):

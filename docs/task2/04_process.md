@@ -14,6 +14,18 @@ Time spent:
 
 ---
 
+### 2026-10-26 — Drill 3 (scheduler restart) failed the run → E41 fix prepared
+Did (Bee): `make drill-scheduler`, rollout status, task states, sparkapplications, scheduler events + strategy.
+Observed: bronze `success` (02:52:39 → 02:53:04), validate `failed` after 10 s (02:53:05 → 02:53:15), notify `upstream_failed`, run `failed`; no validate app from this run; no task logs (new pod). Events: new scheduler pod started 02:53:01, `Startup probe failed: No alive jobs found` (normal during start), old pod `Killing` 14 s later; strategy `RollingUpdate`, grace `10` → **E41**. Leftover `bronze-2024-07-24-32sdj8zv FAILED` = drill 1's app (operator keeps failed apps for inspection; TTL 1 day removes it).
+Prepared (Claude, branch `task2/drills`): scheduler grace 120 s, validate retries=1 / 1 min, CI rule, docs.
+
+### 2026-10-26 — Drill 2 (executor deleted) passed
+Did (Bee): `make drill-executor`. Observed: bronze attempt 5 log `Executor lost: 1 (epoch 0)` / `Lost executor 1 … deleted by a user`; the same attempt completed (02:44:41 → 02:45:01, 12,970 / 6,485); only attempt 5 exists → Airflow did not need to retry; validate + notify success. Executor loss is handled inside Spark (driver re-requests the executor, recomputes lost tasks).
+
+### 2026-10-26 — Drill 1 (driver killed) passed
+Did (Bee): PR #13 merged; `make drill-driver` (2024-07-24).
+Observed: run re-queued 02:35:30; bronze attempt 3 lost its driver → `Task failed`, no `[bronze] … rows in partition` line (nothing committed); Airflow retry started 02:40:44 (retry_delay 5 min), attempt 4 loaded 12,970 / 6,485 in 22 s; validate success (exact per-day counts → no duplicates); notify success. One retry layer works: SparkApplication restartPolicy Never, Airflow retries; the new attempt got a new app name (random suffix), no `AlreadyExists`.
+
 ### 2026-10-26 — Doubled log lines and the midnight run explained; drills prepared
 Observed (Bee): `grep -c "23/23"` in one attempt's log (07-19 validate attempt=2) → **2**: the line is repeated inside a single log (the operator re-streams the driver log), not a second validation. `airflow dags details`: `timetable_summary 0 0 * * *`, `is_paused False`, next run **logical 2026-10-26, interval [10-26, 10-27), run_after 2026-10-27 00:00 UTC**. The 10-25 day was not scheduled because the last automated run (old timetable, ended 10-25 16:29) is the reference; the next midnight-aligned interval after it starts 10-26 (transition artifact, one-time).
 Prepared (Claude): `make drill-driver` / `drill-executor` / `drill-scheduler` (DRILL_DATE=2024-07-24: re-queue the day, wait until the bronze driver/executor pod is Running, then delete it / restart the scheduler); `07_drills.md` with expectations and theory.
