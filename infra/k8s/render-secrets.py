@@ -23,6 +23,7 @@ REQUIRED = (
     "AIRFLOW_ADMIN_PASSWORD",
     "TELEGRAM_BOT_TOKEN",
     "TELEGRAM_CHAT_ID",
+    "GHCR_PULL_TOKEN",
 )
 # generated once and appended to secrets.env, so they stay stable across renders (a new fernet key would make
 # stored Airflow connections unreadable; a new JWT secret breaks running tasks)
@@ -127,6 +128,11 @@ def main():
     )
     # Telegram (step 2.6) for plugins/lake_alerts.py, in its own Secret
     write_private("airflow-alerts.env", "".join(f"{k}={env[k]}\n" for k in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID")))
+    # GHCR pull secret (2.0c), rendered since 2.8 so a from-zero cluster needs no typed token; read:packages only
+    user = env.get("GHCR_USER", "Beno1tP")
+    auth = base64.b64encode(f"{user}:{env['GHCR_PULL_TOKEN']}".encode()).decode()
+    cfg = {"auths": {"ghcr.io": {"username": user, "password": env["GHCR_PULL_TOKEN"], "auth": auth}}}
+    write_private("ghcr-dockerconfig.json", json.dumps(cfg))
     # HMS JDBC settings as a file (never in SERVICE_OPTS: the entrypoint prints it with set -x)
     props = {
         "javax.jdo.option.ConnectionDriverName": "org.postgresql.Driver",

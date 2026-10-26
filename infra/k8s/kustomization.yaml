@@ -46,6 +46,10 @@ secretGenerator:                       # from files rendered by `make k8s-secret
   - { name: airflow-jwt-secret, namespace: airflow, envs: [secrets/airflow-jwt.env], options: { disableNameSuffixHash: true } }
   - { name: airflow-connections, namespace: airflow, envs: [secrets/airflow-connections.env], options: { disableNameSuffixHash: true } }
   - { name: airflow-alerts, namespace: airflow, envs: [secrets/airflow-alerts.env], options: { disableNameSuffixHash: true } }
+  # GHCR pull secret (2.0c), rendered from GHCR_PULL_TOKEN (2.8); referenced by name in pods, templates and the chart
+  - { name: ghcr-pull, namespace: lake, type: kubernetes.io/dockerconfigjson, files: [.dockerconfigjson=secrets/ghcr-dockerconfig.json], options: { disableNameSuffixHash: true } }
+  - { name: ghcr-pull, namespace: spark-jobs, type: kubernetes.io/dockerconfigjson, files: [.dockerconfigjson=secrets/ghcr-dockerconfig.json], options: { disableNameSuffixHash: true } }
+  - { name: ghcr-pull, namespace: airflow, type: kubernetes.io/dockerconfigjson, files: [.dockerconfigjson=secrets/ghcr-dockerconfig.json], options: { disableNameSuffixHash: true } }
 configMapGenerator:
   - name: postgres-initdb
     namespace: lake
