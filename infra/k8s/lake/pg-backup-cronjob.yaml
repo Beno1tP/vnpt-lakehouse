@@ -1,0 +1,59 @@
+# Task 2 step 2.5b (gap #5): daily logical backup of the two Postgres databases (metastore = the Iceberg catalog
+# pointers, airflow = run history) to s3://backup/postgres/<UTC timestamp>/<db>.dump (pg_dump custom format).
+# Caveat: same MinIO, same laptop disk -> protects against a lost/corrupted database, NOT against losing the disk.
+# The MinIO user backup-writer may list/read/write the backup bucket but not delete (no s3:DeleteObject).
+# Run now: make backup-now. Restore drill: make drill-lose-metastore + make restore-metastore TS=… (docs/task2/07_drills.md)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pg-backup
+  namespace: lake
+spec:
+  schedule: "0 1 * * *"                    # 01:00 UTC daily
+  timeZone: Etc/UTC
+  startingDeadlineSeconds: 43200           # laptop off at 01:00 -> still runs if it is back within 12 h
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 86400
+      template:
+        spec:
+          restartPolicy: Never
+          initContainers:
+            - name: dump                     # same postgres:16 image as the server -> pg_dump matches its major version
+              image: postgres:16@sha256:1a6ab3f5345eb6dbe04a1349529caabdb0ab09293a09590fad07b2246bfa4b54
+              imagePullPolicy: IfNotPresent
+              command: ["bash", "-c"]
+              args:
+                - |
+                  set -euo pipefail
+                  ts=$(date -u +%Y%m%dT%H%M%SZ); mkdir -p /backup/postgres/$ts
+                  for db in metastore airflow; do
+                    pg_dump -Fc -h postgres.lake.svc.cluster.local -U "$PGUSER" -d "$db" -f /backup/postgres/$ts/$db.dump
+                  done
+                  echo "backup ts=$ts"; ls -l /backup/postgres/$ts
+              env:
+                - name: PGUSER
+                  valueFrom: { secretKeyRef: { name: postgres-credentials, key: PG_USER } }
+                - name: PGPASSWORD                # process env only; never printed
+                  valueFrom: { secretKeyRef: { name: postgres-credentials, key: PG_PASSWORD } }
+              resources: { requests: { memory: 64Mi, cpu: 50m }, limits: { memory: 256Mi } }
+              volumeMounts: [{ name: work, mountPath: /backup }]
+          containers:
+            - name: upload                   # Chainguard minio-client: entrypoint mc, no shell
+              image: cgr.dev/chainguard/minio-client@sha256:1a1b84b36947e93b2d0eb9373e1c886eadfdcf223c91f47bcaa3756d3437785c
+              imagePullPolicy: IfNotPresent
+              args: ["--config-dir", "/tmp/mc", "cp", "--recursive", "/backup/postgres/", "lake/backup/postgres/"]
+              env:
+                - name: MINIO_BACKUP_SECRET
+                  valueFrom: { secretKeyRef: { name: minio-service-users, key: MINIO_BACKUP_SECRET } }
+                - name: MC_HOST_lake               # alias "lake" for mc (hex password: no URL escaping needed)
+                  value: "http://backup-writer:$(MINIO_BACKUP_SECRET)@minio.lake.svc.cluster.local:9000"
+              resources: { requests: { memory: 32Mi, cpu: 50m }, limits: { memory: 128Mi } }
+              volumeMounts: [{ name: work, mountPath: /backup, readOnly: true }]
+          volumes:
+            - name: work
+              emptyDir: { sizeLimit: 512Mi }

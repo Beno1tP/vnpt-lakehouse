@@ -27,6 +27,7 @@ GENERATED = {
     "MINIO_HMS_SECRET": lambda: secrets.token_hex(24),
     "MINIO_AIRFLOW_LANDING_SECRET": lambda: secrets.token_hex(24),          # step 2.4: DAG check_landing
     "MINIO_AIRFLOW_LOGS_SECRET": lambda: secrets.token_hex(24),             # step 2.6: Airflow remote task logs
+    "MINIO_BACKUP_SECRET": lambda: secrets.token_hex(24),                   # step 2.5b: pg-backup (hex: URL-safe)
 }
 
 
@@ -70,7 +71,7 @@ def main():
     write_private("minio.env", "".join(f"{k}={env[k]}\n" for k in ("MINIO_ROOT_USER", "MINIO_ROOT_PASSWORD")))
     # MinIO service users (step 2.1b): passwords for the minio-users Job, and per-consumer S3 keys (AWS SDK env names)
     users = ("MINIO_SPARK_JOBS_SECRET", "MINIO_LANDING_WRITER_SECRET", "MINIO_HMS_SECRET",
-             "MINIO_AIRFLOW_LANDING_SECRET", "MINIO_AIRFLOW_LOGS_SECRET")
+             "MINIO_AIRFLOW_LANDING_SECRET", "MINIO_AIRFLOW_LOGS_SECRET", "MINIO_BACKUP_SECRET")
     write_private("minio-service-users.env", "".join(f"{k}={env[k]}\n" for k in users))
 
     def s3_keys(user, secret_key):

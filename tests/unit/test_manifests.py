@@ -69,3 +69,13 @@ def test_airflow_may_only_manage_spark_jobs():
     for rule in role["rules"]:
         assert "*" not in rule["verbs"] and "*" not in rule["resources"]
         assert "secrets" not in rule["resources"]
+
+
+def test_backup_cronjob_dumps_both_databases_with_server_major_version():
+    cj = yaml.safe_load((ROOT / "infra/k8s/lake/pg-backup-cronjob.yaml").read_text())
+    pod = cj["spec"]["jobTemplate"]["spec"]["template"]["spec"]
+    dump = pod["initContainers"][0]
+    server = yaml.safe_load((ROOT / "infra/k8s/lake/postgres.yaml").read_text().split("---")[1])
+    assert dump["image"] == server["spec"]["template"]["spec"]["containers"][0]["image"]   # pg_dump == server major
+    assert "for db in metastore airflow" in dump["args"][0]
+    assert cj["spec"]["concurrencyPolicy"] == "Forbid"
