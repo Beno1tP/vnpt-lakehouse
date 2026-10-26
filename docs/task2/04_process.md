@@ -14,6 +14,9 @@ Time spent:
 
 ---
 
+### 2026-10-26 — 2.6 PR #16 merged; Airflow digest promoted (PR #17)
+Did (Bee): `make k8s-secrets` (E42 repaired: 0 files with dummy values; MINIO_AIRFLOW_LOGS_SECRET generated; airflow-alerts.env written); PR #16 4/4 green (DAG integrity imported both DAGs + `lake_alerts` from plugins inside the image), merged (main `43f1b46`); images run 40282284105: airflow `43f1b46` → `sha256:048b18ba…ee0f`.
+
 ### 2026-10-26 — 2.6 Telegram channel set up; 2.6 prepared on branch `task2/alerts`
 Did (Bee): dedicated group "Alert group" with bot `bee_lake_alerts_bot` (leader agreed; teammates later). Token pasted in the chat → revoked and replaced (E43); new token stored with `read -rs` in `secrets.env`; `getMe ok: True`; `getUpdates` empty after the revoke → bot removed/re-added → chat ID **-5368542184** (basic group; changes to -100… if Telegram upgrades it to a supergroup); test `sendMessage` → 200, message received.
 Checked (Airflow 3.3.2 source/docs): `DeadlineAlert(reference=DeadlineReference.DAGRUN_QUEUED_AT, interval, callback=AsyncCallback|SyncCallback)` from `airflow.sdk`; async callbacks run in the **triggerer** and must be importable there → plugins folder; Airflow passes `context` (dag_run, deadline). Amazon provider 9.36.0 in the constraints → S3 remote logging.
