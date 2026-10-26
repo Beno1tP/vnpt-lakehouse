@@ -14,6 +14,9 @@ Time spent:
 
 ---
 
+### 2026-10-26 — PR #24 merged; spark-job + airflow digests promoted (PR #25)
+Did (Bee): PR #24 merged (main `37b5dfa`); images run 40294133237: spark-job `37b5dfa` → `sha256:d9e2fe94…02fc`, airflow `37b5dfa` → `sha256:2c1e554d…edbb`.
+
 ### 2026-10-26 — 2.5c maintenance prepared on branch `task2/maintenance`
 Checked (Iceberg 1.11.0 Spark 3.5 source): `expire_snapshots(table, older_than, retain_last, …)` (no dry_run), `remove_orphan_files(table, older_than, dry_run, prefix_listing, equal_schemes, …)`, `rewrite_data_files(table, strategy, options, where, …)`, `rewrite_manifests(table)`. Orphan listing goes through Hadoop FileSystem by default — the Spark image has no S3A jar — so `prefix_listing => true` (S3FileIO implements `listPrefix`).
 Prepared (Claude): `jobs/maintenance.py` (per table: stats before → metadata retention properties → expire → compaction + manifests → orphans → stats after → row count must not change → time travel to the oldest snapshot: proves the expiry trade-off; `--dry-run` = counts + orphans that would go; timestamps as explicit UTC literals because the session zone is Asia/Ho_Chi_Minh); `dags/templates/maintenance_sparkapp.yaml` (shared by DAG and make); `dags/lake_maintenance.py` (weekly Sunday 02:00 UTC, params snapshot_hours 168 / retain_last 5 / orphan_hours 72 / dry_run, deadline 2 h, failure alert, retries 1); `make maintenance [SNAP_HOURS] [RETAIN] [ORPHAN_HOURS] [DRY=yes]`; tests 45.
