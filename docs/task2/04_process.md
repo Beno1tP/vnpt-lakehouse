@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-10-27 — 2.7 done: operator by digest, GHCR pruned (E50)
+Did (Bee): paused `alert_smoke` + `hello_lake` (CLI prints the state *before* the change); checked failed runs = only the deliberate tests (chatbot_bronze `manual__…10:18:49` E47, alert_smoke 07:05 + 07:49 from 2.6); running operator imageID = `@sha256:865ff4da…948a` = the pin; PR #31 merged; `helm upgrade spark-operator` → revision 2, both pods `controller:2.2.1@sha256:865ff4da…`; `make maintenance DRY=yes` → COMPLETED (snapshots 7 = 6 + the 07-24 rerun, all files 23, live 18, rows unchanged, orphans ≥ 72 h: 0); `make ghcr-prune` dry run → 16 versions listed; `CONFIRM=yes` → HTTP 422 on the first DELETE, nothing deleted (E50, gh 2.4.0); upgraded gh to 2.103.2 (official apt repo, +7.8 MB); PR #32 (delete via urllib) merged; `CONFIRM=yes` → **deleted 16 versions**; dry run → 0; `gh auth refresh --remove-scopes delete:packages` → scopes `gist, read:org, read:packages, repo, workflow`.
+GHCR now: spark 1, hms 1, spark-job 3, airflow 3 (deployed + 2 rollback each). **Step 2.7 done.**
+
 ### 2026-10-26 — 2.7 image hygiene prepared (branch `task2/close-docs`)
 Audit (Claude, `grep image:` over infra/, dags/, Makefile): every K8s manifest already pins a digest (postgres, minio, mc directly; spark/hms via kustomize `images:`; Airflow + spark-job via images.env), **except the Spark Operator** (`controller:2.2.1`, tag only). Chart 2.2.1 builds `registry/repository:tag` (`_helpers.tpl`), so `image.tag: "2.2.1@sha256:865ff4da…948a"` pins it (index digest of tag 2.2.1 from the ghcr.io registry API; Bee checks it equals the running pod's imageID before upgrading).
 Added: CI kustomize job fails on any rendered `image:` without `@sha256:`; unit test for the operator pin; `make ghcr-prune [KEEP=3] [CONFIRM=yes]` (`.github/scripts/ghcr_prune.py`: keeps images.env digests + newest 3 per package, dry run by default; safe because images are pushed with `provenance: false` = no child manifests) + unit tests.
