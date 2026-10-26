@@ -14,6 +14,9 @@ Time spent:
 
 ---
 
+### 2026-10-26 — 2024-07-24 recovered; PR #14 merged; Airflow digest promoted (PR #15)
+Did (Bee): `make backfill FROM=TO=2024-07-24 REPROCESS=failed` → all 4 tasks `success` (03:23:27 → 03:24:21); PR #14 merged (main `1c09d26`); images run 40264945988: airflow `1c09d26` → `sha256:a447aa4c…29a0`.
+
 ### 2026-10-26 — Drill 3 (scheduler restart) failed the run → E41 fix prepared
 Did (Bee): `make drill-scheduler`, rollout status, task states, sparkapplications, scheduler events + strategy.
 Observed: bronze `success` (02:52:39 → 02:53:04), validate `failed` after 10 s (02:53:05 → 02:53:15), notify `upstream_failed`, run `failed`; no validate app from this run; no task logs (new pod). Events: new scheduler pod started 02:53:01, `Startup probe failed: No alive jobs found` (normal during start), old pod `Killing` 14 s later; strategy `RollingUpdate`, grace `10` → **E41**. Leftover `bronze-2024-07-24-32sdj8zv FAILED` = drill 1's app (operator keeps failed apps for inspection; TTL 1 day removes it).
