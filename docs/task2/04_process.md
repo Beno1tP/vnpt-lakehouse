@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-10-26 — PR #30 deployed (revision 12): reformatted images rerun a real day
+Did (Bee): PR #30 merged, `make airflow-install` (`git c1c61d3`, revision 12), `spark_job_image` = `…@sha256:05ff7b97…9eb2`; trigger with `--logical-date 2024-07-24` refused (E49); `airflow tasks clear chatbot_bronze --start-date 2024-07-24 --end-date 2024-07-24 --yes`.
+Observed: `backfill__2024-07-24T00:00:00+00:00` rerun **success** 16:49:22 → 16:50:38 (76 s) on the new images. **Lab-doc tooling items done.**
+
 ### 2026-10-26 — PR #29 merged (lab-doc tooling); spark-job + airflow digests promoted (PR #30)
 Did (Bee): `make venv` failed on `pre-commit==4.7.0` (E48 → 4.6.2); `make all` / `make hooks` / `pre-commit run --all-files` passed; first CI run: DAG integrity `OSError: File name too long` (my check treated `application_file` as a path, but DagBag already resolves `.yaml` templates to their text) → fixed, 4/4 green; merged (main `7fd88ec`); images run 40360779190: spark-job → `sha256:05ff7b97…9eb2`, airflow → `sha256:fd7c8088…378a` (formatting only).
 
