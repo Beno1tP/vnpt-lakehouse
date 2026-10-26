@@ -65,20 +65,21 @@ for dag_id, dag in sorted(bag.dags.items()):
         app_file = getattr(t, "application_file", None)
         if not app_file:
             continue
-        text = (Path(dag.fileloc).parent / app_file).read_text()
+        # DagBag already replaced the path with the file's content (template_ext .yaml is resolved at parse time)
+        text = app_file if "\n" in app_file else (Path(dag.fileloc).parent / app_file).read_text()
         try:
             doc = yaml.safe_load(env.from_string(text).render(**base, ds="2024-07-24"))
             if doc.get("kind") != "SparkApplication":
-                problems.append(f"{t.task_id}: {app_file} does not render to a SparkApplication")
+                problems.append(f"{t.task_id}: application_file does not render to a SparkApplication")
         except Exception as e:  # noqa: BLE001
-            problems.append(f"{t.task_id}: {app_file} fails to render with a logical date: {type(e).__name__}: {e}")
+            problems.append(f"{t.task_id}: application_file fails to render with a date: {type(e).__name__}: {e}")
             continue
         try:
             env.from_string(text).render(**base)
         except jinja2.UndefinedError as e:
             if "check_landing" not in t.get_flat_relative_ids(upstream=True):
                 problems.append(
-                    f"{t.task_id}: {app_file} needs a logical date ({e}) but nothing upstream stops "
+                    f"{t.task_id}: application_file needs a logical date ({e}) but nothing upstream stops "
                     f"runs without one (E47)"
                 )
     for p in problems:
