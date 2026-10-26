@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import re
 import subprocess
+import urllib.request
 from pathlib import Path
 
 PACKAGES = ["vnpt-lake-spark", "vnpt-lake-hms", "vnpt-lake-spark-job", "vnpt-lake-airflow"]
@@ -41,6 +42,19 @@ def gh_versions(pkg: str) -> list[dict]:
     return [{"id": r[0], "name": r[1], "created_at": r[2], "tags": r[3] if len(r) > 3 else ""} for r in rows]
 
 
+def delete_version(pkg: str, version_id: str) -> None:
+    """DELETE with an empty body via urllib: the old gh call was rejected with
+    422 "For 'links/0/schema', {} is not a null" (E50). Token from `gh auth token` (gh >= 2.17), never printed."""
+    token = subprocess.run(["gh", "auth", "token"], check=True, capture_output=True, text=True).stdout.strip()
+    req = urllib.request.Request(
+        f"https://api.github.com/user/packages/container/{pkg}/versions/{version_id}",
+        method="DELETE",
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        assert resp.status == 204, resp.status
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--keep", type=int, default=3, help="newest versions kept per package (rollback)")
@@ -57,9 +71,7 @@ def main() -> None:
         for v in delete:
             print(f"  delete {v['name'][:19]}… {v['created_at']} tags={v['tags'] or '-'}")
             if args.confirm:
-                subprocess.run(
-                    ["gh", "api", "-X", "DELETE", f"/user/packages/container/{pkg}/versions/{v['id']}"], check=True
-                )
+                delete_version(pkg, v["id"])
         total += len(delete)
     print(f"[ghcr] {'deleted' if args.confirm else 'would delete'} {total} versions")
 
