@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-10-26 — 2.5 E38 proof on a fresh day; attempt numbers explained
+Did (Bee): `make backfill FROM=2024-07-26 TO=2024-07-26` (a day with no run and no data); grep of its check_landing log; listing of `attempt=*` log files.
+Observed: **`logical_date=2024-07-26 … run_after=2024-07-27`** and **`ds=2024-07-26 data_interval=[2024-07-26 00:00:00+00:00, 2024-07-27 00:00:00+00:00)`** → real one-day intervals at midnight, logical date = interval start: **E38 fix proven** on revision 5. Log files are `attempt=2` for every task of every backfill run and `attempt=3` for the two manual runs; no `attempt=1` files in the new pod. Reason: `REPROCESS=completed` **clears** the existing task instances, and each clear increments `try_number`; the attempt=1 logs lived in the scheduler pod replaced by revision 5. So the numbers count clears, not failures (no task failed: every run `success`).
+Note: no midnight scheduled run was seen because the laptop was off at midnight; with catchup False the scheduler only creates the most recent missed interval after it starts (check `airflow dags details` / `next-execution`).
+
 ### 2026-10-26 — 2.5 second backfill on revision 5 (idempotency proof)
 Did (Bee): `make backfill REPROCESS=completed` (backfill_id=2) on helm revision 5 (`git dc530d4`); `make dag-runs`; `make dag-report` (scheduler pod new → report = this backfill only).
 Observed: all 24 runs `success` in ~13 min (02:10 → 02:23 UTC; faster than the first, images cached); landing `yes,yes` on 18 days, `no,no` on 07-07/12/13/14/20/21; **bronze rows identical to the first backfill on all 18 days × 2 tables** (07-24 12,970 / 6,485; 07-25 7,552 / 3,892; …); `23/23` on all 18 days → **rerun of the full history gives the same result (idempotent)**. Doubled log lines again but on *different* days (07-06 / 07-24 bot_predict, validate 07-19) than in the first backfill → random duplication when the operator re-streams the driver log, not data reloads (attempt=2 check pending).
