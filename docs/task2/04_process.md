@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-10-26 — Drill 7 (register_table) passed → step 2.5b done
+Did (Bee): PR #22 merged (main `f31c931`), `make airflow-install` → revision 9; drill 7 (see `07_drills.md` #7).
+Observed: chatlog `00047-6e05c394…` 48 snapshots → reload → `00048-4c174f4a…` 49 (08:19:28) → restore of backup `20261026T075751Z` → `00047…` 48 (RPO: newest commit invisible) → `forget` (files kept) → `register` from `00048-4c174f4a…` → 49, 08:19:28 again. Validate then failed (FAIL lines not captured; most likely the one-batch rule: chatlog at the 08:19 load, bot_predict at the backup's) → reload → 23/23; bot_predict now `00048-d2103ce7…` (49 snapshots, 08:27:00). Note: the 08:19 bot_predict `00048-…` file written before the restore is now an **orphan** (a second `00048` with another UUID was created from `00047`) → removed later by `remove_orphan_files` (2.5c). E45: my placeholder in a command block.
+Learned: Iceberg tables are self-describing; the catalog is an index that can be rebuilt from the newest `metadata.json`. Backup + register_table together give RPO ≈ 0 for committed data. **Step 2.5b done.**
+
 ### 2026-10-26 — PR #21 merged; spark-job digest promoted (PR #22)
 Did (Bee): PR #21 merged (main `56e7b95`); images run 40290365480: spark-job `56e7b95` → `sha256:40ece292…1208` (contains catalog_tool.py). `make airflow-install` after the merge so the DAG's `spark_job_image` Variable follows images.env.
 
