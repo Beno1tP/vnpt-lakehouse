@@ -14,6 +14,9 @@ Time spent:
 
 ---
 
+### 2026-10-27 — pre-delete checks: token copied, baseline report empty (E51)
+Did (Bee): copied the GHCR pull token from Secret `ghcr-pull` into secrets.env without printing it; `make k8s-secrets` → `ghcr-dockerconfig.json`; sha256 prefix cluster = render = `7616eea4db01`; PR #34 merged (main `8b6cfa1`, airflow `cf03f5d3…`); `make dag-report` → **0 lines** (E51) → fix: report from `s3://airflow-logs` (branch `task2/dag-report-s3`), run again before `minikube delete`.
+
 ### 2026-10-27 — PR #33 merged (main `c0babb5`); airflow digest promoted (PR #34)
 Images run 40372279799: airflow → `sha256:cf03f5d3…3054` (hello_lake removed); spark-job unchanged.
 
