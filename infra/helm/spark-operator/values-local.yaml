@@ -1,7 +1,11 @@
 # Kubeflow Spark Operator, chart 2.2.1 (last release built on Spark 3.5: docs/task2/02_config.md).
 # Install: helm upgrade --install spark-operator spark-operator/spark-operator --version 2.2.1 \
 #            -n spark-operator -f infra/helm/spark-operator/values-local.yaml --wait
-# Image ghcr.io/kubeflow/spark-operator/controller:2.2.1 (tag = chart appVersion).
+# Image ghcr.io/kubeflow/spark-operator/controller:2.2.1, pinned by digest (2.7): the chart builds
+# registry/repository:tag, so tag "2.2.1@sha256:…" gives a valid tag+digest reference (the digest wins).
+# Digest = OCI index of tag 2.2.1 on ghcr.io (registry API, 2026-10-26); must equal the running pod's imageID.
+image:
+  tag: "2.2.1@sha256:865ff4da56869cc817706a31e44e4d039619ca3e17caea49ea6ae3a0c51f948a"
 
 controller:
   replicas: 1
