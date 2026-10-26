@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-10-26 — 2.5 second backfill on revision 5 (idempotency proof)
+Did (Bee): `make backfill REPROCESS=completed` (backfill_id=2) on helm revision 5 (`git dc530d4`); `make dag-runs`; `make dag-report` (scheduler pod new → report = this backfill only).
+Observed: all 24 runs `success` in ~13 min (02:10 → 02:23 UTC; faster than the first, images cached); landing `yes,yes` on 18 days, `no,no` on 07-07/12/13/14/20/21; **bronze rows identical to the first backfill on all 18 days × 2 tables** (07-24 12,970 / 6,485; 07-25 7,552 / 3,892; …); `23/23` on all 18 days → **rerun of the full history gives the same result (idempotent)**. Doubled log lines again but on *different* days (07-06 / 07-24 bot_predict, validate 07-19) than in the first backfill → random duplication when the operator re-streams the driver log, not data reloads (attempt=2 check pending).
+Learned: `REPROCESS=completed` **reuses** existing runs (clears + re-queues tasks; no new run, the stored data interval stays as created) → it cannot show a new timetable; a fresh date is needed (07-26). Only one active backfill per DAG.
+
 ### 2026-10-26 — PR #12 merged; cluster restarted (E40); E38 fix deployed (revision 5)
 Did (Bee): PR #12 4/4 green, merged (main `dc530d4`); `make airflow-install` → guard printed `deploying git dc530d4 from main`, then failed: cluster stopped overnight (E40); `minikube start` (profile kept: Allocatable 7442652Ki), `HMS schema 3.1.0 exists`; `make airflow-install` again → **revision 5, description `git dc530d4`** (E39 traceability works).
 
