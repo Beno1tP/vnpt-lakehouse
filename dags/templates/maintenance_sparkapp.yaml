@@ -1,0 +1,50 @@
+# Iceberg maintenance of the Bronze tables (step 2.5c), Jinja template used by BOTH the DAG lake_maintenance and
+# `make maintenance` (sed fills the same Jinja expressions). Writes (deletes files), so it runs with restartPolicy Never.
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: maintenance-{{ ds }}
+  namespace: spark-jobs
+spec:
+  type: Python
+  pythonVersion: "3"
+  mode: cluster
+  sparkVersion: "3.5.9"
+  image: {{ var.value.spark_job_image }}
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: [ghcr-pull]
+  mainApplicationFile: local:///opt/jobs/maintenance.py
+  arguments: ["--table", "bronze.chatlog", "--table", "bronze.bot_predict",
+              "--snapshot-hours", "{{ params.snapshot_hours }}", "--retain-last", "{{ params.retain_last }}",
+              "--orphan-hours", "{{ params.orphan_hours }}", "--dry-run", "{{ params.dry_run }}"]
+  restartPolicy: { type: Never }
+  timeToLiveSeconds: 86400
+  sparkConf:
+    spark.sql.extensions: org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions
+    spark.sql.catalog.lake: org.apache.iceberg.spark.SparkCatalog
+    spark.sql.catalog.lake.type: hive
+    spark.sql.catalog.lake.uri: thrift://hive-metastore.lake.svc.cluster.local:9083
+    spark.sql.catalog.lake.warehouse: s3a://lakehouse/warehouse
+    spark.sql.catalog.lake.io-impl: org.apache.iceberg.aws.s3.S3FileIO
+    spark.sql.catalog.lake.s3.endpoint: http://minio.lake.svc.cluster.local:9000
+    spark.sql.catalog.lake.s3.path-style-access: "true"
+    spark.sql.catalog.lake.client.region: us-east-1
+    spark.sql.defaultCatalog: lake
+    spark.sql.session.timeZone: Asia/Ho_Chi_Minh
+    spark.sql.shuffle.partitions: "4"
+  driver:
+    cores: 1
+    memory: 1g
+    memoryOverhead: 512m
+    serviceAccount: spark-operator-spark
+    labels: { app: maintenance }
+    env: [{ name: AWS_REGION, value: us-east-1 }]
+    envFrom: [{ secretRef: { name: s3-credentials } }]
+  executor:
+    instances: 1
+    cores: 1
+    memory: 768m
+    memoryOverhead: 384m
+    labels: { app: maintenance }
+    env: [{ name: AWS_REGION, value: us-east-1 }]
+    envFrom: [{ secretRef: { name: s3-credentials } }]

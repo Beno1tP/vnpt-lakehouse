@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-10-26 — 2.5c maintenance prepared on branch `task2/maintenance`
+Checked (Iceberg 1.11.0 Spark 3.5 source): `expire_snapshots(table, older_than, retain_last, …)` (no dry_run), `remove_orphan_files(table, older_than, dry_run, prefix_listing, equal_schemes, …)`, `rewrite_data_files(table, strategy, options, where, …)`, `rewrite_manifests(table)`. Orphan listing goes through Hadoop FileSystem by default — the Spark image has no S3A jar — so `prefix_listing => true` (S3FileIO implements `listPrefix`).
+Prepared (Claude): `jobs/maintenance.py` (per table: stats before → metadata retention properties → expire → compaction + manifests → orphans → stats after → row count must not change → time travel to the oldest snapshot: proves the expiry trade-off; `--dry-run` = counts + orphans that would go; timestamps as explicit UTC literals because the session zone is Asia/Ho_Chi_Minh); `dags/templates/maintenance_sparkapp.yaml` (shared by DAG and make); `dags/lake_maintenance.py` (weekly Sunday 02:00 UTC, params snapshot_hours 168 / retain_last 5 / orphan_hours 72 / dry_run, deadline 2 h, failure alert, retries 1); `make maintenance [SNAP_HOURS] [RETAIN] [ORPHAN_HOURS] [DRY=yes]`; tests 45.
+
 ### 2026-10-26 — Drill 7 (register_table) passed → step 2.5b done
 Did (Bee): PR #22 merged (main `f31c931`), `make airflow-install` → revision 9; drill 7 (see `07_drills.md` #7).
 Observed: chatlog `00047-6e05c394…` 48 snapshots → reload → `00048-4c174f4a…` 49 (08:19:28) → restore of backup `20261026T075751Z` → `00047…` 48 (RPO: newest commit invisible) → `forget` (files kept) → `register` from `00048-4c174f4a…` → 49, 08:19:28 again. Validate then failed (FAIL lines not captured; most likely the one-batch rule: chatlog at the 08:19 load, bot_predict at the backup's) → reload → 23/23; bot_predict now `00048-d2103ce7…` (49 snapshots, 08:27:00). Note: the 08:19 bot_predict `00048-…` file written before the restore is now an **orphan** (a second `00048` with another UUID was created from `00047`) → removed later by `remove_orphan_files` (2.5c). E45: my placeholder in a command block.
