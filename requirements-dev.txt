@@ -2,5 +2,5 @@
 ruff==0.16.10
 pytest==9.1.1
 pyyaml==6.0.2
-pre-commit==4.7.0
+pre-commit==4.6.2                  # 4.7.0 requires Python >= 3.11; laptop, CI and Spark image are 3.10 (E48)
 -r docker/spark/requirements.txt
