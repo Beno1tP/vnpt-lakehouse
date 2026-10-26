@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-10-26 — Drill 3 (scheduler restart) failed the run → E41 fix prepared
+Did (Bee): `make drill-scheduler`, rollout status, task states, sparkapplications, scheduler events + strategy.
+Observed: bronze `success` (02:52:39 → 02:53:04), validate `failed` after 10 s (02:53:05 → 02:53:15), notify `upstream_failed`, run `failed`; no validate app from this run; no task logs (new pod). Events: new scheduler pod started 02:53:01, `Startup probe failed: No alive jobs found` (normal during start), old pod `Killing` 14 s later; strategy `RollingUpdate`, grace `10` → **E41**. Leftover `bronze-2024-07-24-32sdj8zv FAILED` = drill 1's app (operator keeps failed apps for inspection; TTL 1 day removes it).
+Prepared (Claude, branch `task2/drills`): scheduler grace 120 s, validate retries=1 / 1 min, CI rule, docs.
+
 ### 2026-10-26 — Drill 2 (executor deleted) passed
 Did (Bee): `make drill-executor`. Observed: bronze attempt 5 log `Executor lost: 1 (epoch 0)` / `Lost executor 1 … deleted by a user`; the same attempt completed (02:44:41 → 02:45:01, 12,970 / 6,485); only attempt 5 exists → Airflow did not need to retry; validate + notify success. Executor loss is handled inside Spark (driver re-requests the executor, recomputes lost tasks).
 
