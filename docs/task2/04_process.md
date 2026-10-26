@@ -14,6 +14,9 @@ Time spent:
 
 ---
 
+### 2026-10-26 — PR #29 merged (lab-doc tooling); spark-job + airflow digests promoted (PR #30)
+Did (Bee): `make venv` failed on `pre-commit==4.7.0` (E48 → 4.6.2); `make all` / `make hooks` / `pre-commit run --all-files` passed; first CI run: DAG integrity `OSError: File name too long` (my check treated `application_file` as a path, but DagBag already resolves `.yaml` templates to their text) → fixed, 4/4 green; merged (main `7fd88ec`); images run 40360779190: spark-job → `sha256:05ff7b97…9eb2`, airflow → `sha256:fd7c8088…378a` (formatting only).
+
 ### 2026-10-26 — lab-doc tooling: make lint/test/all, pre-commit, Bronze I/O tests, CI template rendering
 Decided (Bee): no trigger-form `day` field (explicit logical dates); format the repo once with `ruff format` and enforce `ruff format --check` in CI.
 Did (Claude, branch `task2/lab-doc-items`): `requirements-dev.txt` (ruff 0.16.10, pytest 9.1.1, pyyaml 6.0.2, pre-commit 4.6.2 + job deps (E48); CI installs the same file); `make venv/lint/fmt/test/all/hooks`; `.pre-commit-config.yaml` (ruff-pre-commit v0.16.10 check+format, pre-commit-hooks v6.0.0: check-yaml, end-of-file, trailing whitespace, large files > 500 KB, detect-private-key, merge conflicts); `tests/unit/test_bronze_io.py` (pandas → strings / empty → None, S3 landing read via pyarrow with a fake filesystem, `table_exists` → overwritePartitions vs create v2 partitioned by `_ingest_date`) → 49 tests; DAG integrity now renders every `application_file` in strict Jinja with and without a logical date (E47 prevention); one `ruff format` commit (cosmetic).
