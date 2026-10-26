@@ -14,6 +14,20 @@ Time spent:
 
 ---
 
+### 2026-10-26 — lake_maintenance through Airflow: scheduled run OK, manual run without logical date failed (E47)
+Did (Bee): unpause + trigger `lake_maintenance` with `--conf '{"dry_run": "true"}'` (no logical date).
+Observed: unpause created `scheduled__2026-10-25T02:00` (logical 2026-10-18, real defaults 168 h / 5 / 72 h) → **success** in 41 s: already clean (6 snapshots, 22 files, 0 expired, 0 orphans; time travel to today's oldest kept snapshot still possible); its log also printed `log read interrupted … might get duplicated` = the doubled-lines cause, now confirmed. Manual run → `UndefinedError: 'ds' is undefined` ×2 attempts (retry 10 min) → ❌ alert received (`attempt 2/2, final`) → E47; fix: maintenance name without a date variable, bronze fails fast without a logical date.
+
+### 2026-10-26 — 2.5c maintenance runs (E46)
+Did (Bee): PR #25 merged, `make airflow-install` (revision 10, `lake_maintenance` listed); `make maintenance DRY=yes ORPHAN_HOURS=1` → refused by Iceberg (E46); dry run with 24 h; real run `SNAP_HOURS=1 ORPHAN_HOURS=24`; validate 2024-07-24.
+Observed:
+| table | snapshots | all data files | live files | live bytes | metadata.json | rows |
+|---|---|---|---|---|---|---|
+| chatlog before → after | 50 → **6** | 50 → **22** | 18 → 18 | 1,328,792 → same | 50 → **11** | 21,224 → same |
+| bot_predict before → after | 49 → **6** | 49 → **22** | 18 → 18 | 752,508 → same | 49 → **11** | 10,729 → same |
+expire_snapshots deleted 28 / 27 data files, 55 / 53 manifests, 45 / 44 manifest lists; rewrite_data_files 0 (one live file per partition already); rewrite_manifests 19 → 1; orphans older than 24 h: 0 (today's drill orphans become eligible tomorrow); 6 snapshots = 5 retained + 1 from rewrite_manifests; 11 metadata files = current + 10 previous (`write.metadata.previous-versions-max`); time travel to the oldest snapshot (2026-10-25 04:18) → **gone (IllegalArgumentException) = the expected trade-off**; validate **23/23**.
+Learned: retention = time-travel window; maintenance changes files and history, never rows (asserted).
+
 ### 2026-10-26 — PR #24 merged; spark-job + airflow digests promoted (PR #25)
 Did (Bee): PR #24 merged (main `37b5dfa`); images run 40294133237: spark-job `37b5dfa` → `sha256:d9e2fe94…02fc`, airflow `37b5dfa` → `sha256:2c1e554d…edbb`.
 
