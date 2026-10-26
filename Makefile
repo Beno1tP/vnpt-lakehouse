@@ -143,8 +143,8 @@ backfill:      ## Task 2: backfill chatbot_bronze: make backfill [FROM=2024-07-0
 	  --reprocess-behavior $(REPROCESS) --max-active-runs 1 $(if $(filter yes,$(DRY)),--dry-run)
 dag-runs:      ## Task 2: runs of chatbot_bronze with state, logical date (= the day) and run type
 	@kubectl -n airflow exec deploy/airflow-scheduler -c scheduler -- airflow dags list-runs chatbot_bronze -o plain | awk 'NR==1 || /chatbot_bronze/' | cut -c1-160
-dag-report:    ## Task 2: per day from the task logs in the scheduler pod: landing found?, rows loaded, validation result
-	@kubectl -n airflow exec deploy/airflow-scheduler -c scheduler -- sh -c 'grep -rhoE "\[landing\] [0-9-]+: chatlog=[a-z]+, bot_predict=[a-z]+|\[bronze\] bronze\.[a-z_]+: [0-9]+ rows read, [0-9]+ rows in partition [0-9-]+|\[validate\] [0-9]+/[0-9]+ checks passed for _ingest_date=[0-9-]+" /opt/airflow/logs/dag_id=chatbot_bronze/ | sort | uniq -c'
+dag-report:    ## Task 2: per day from the task logs in s3://airflow-logs (E51): landing found?, rows loaded, validation result
+	kubectl -n airflow exec -i deploy/airflow-scheduler -c scheduler -- python - chatbot_bronze < tests/k8s/dag_report.py
 drill-driver:  ## Task 2 drill 1: re-run DRILL_DATE (default 2024-07-24) and delete the bronze DRIVER pod mid-run
 	$(MAKE) --no-print-directory backfill FROM=$(DRILL_DATE) TO=$(DRILL_DATE) REPROCESS=completed 2>&1 | grep -c "backfill" >/dev/null
 	@for i in $$(seq 1 300); do p=$$(kubectl -n spark-jobs get pods -l 'task_id=bronze,spark-role=driver' \
