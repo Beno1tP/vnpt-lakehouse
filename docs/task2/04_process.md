@@ -14,6 +14,9 @@ Time spent:
 
 ---
 
+### 2026-10-26 — PR #21 merged; spark-job digest promoted (PR #22)
+Did (Bee): PR #21 merged (main `56e7b95`); images run 40290365480: spark-job `56e7b95` → `sha256:40ece292…1208` (contains catalog_tool.py). `make airflow-install` after the merge so the DAG's `spark_job_image` Variable follows images.env.
+
 ### 2026-10-26 — 2.5b backup + drill 6 (lose the catalog, restore) passed; drill 7 prepared
 Did (Bee): PR #20 merged (main `e9a83a8`); `make k8s-secrets` (MINIO_BACKUP_SECRET), jobs re-run (bucket `backup`, user `backup-writer` → `lake-backup`), `cronjob.batch/pg-backup created`; `make backup-now` → **`backup ts=20261026T075751Z`**, metastore.dump 125,274 B + airflow.dump 222,051 B, 339 KiB uploaded; drill 6: validate 23/23 → `make drill-lose-metastore CONFIRM=yes` (DROP/CREATE DATABASE, HMS re-initialised schema 3.1.0) → validate **FAILED** `[TABLE_OR_VIEW_NOT_FOUND] lake.bronze.chatlog` → `make restore-metastore TS=20261026T075751Z` → `restored … 2 tables, schema 3.1.0`, `HMS schema 3.1.0 exists` → validate **23/23**.
 Learned: the whole catalog is 125 KB of pointers; the data (Parquet + Iceberg metadata in MinIO) was never touched. Restore ≈ 1 min.
