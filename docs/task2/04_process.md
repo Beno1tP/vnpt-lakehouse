@@ -14,6 +14,9 @@ Time spent:
 
 ---
 
+### 2026-10-26 — PR #27 merged (E46 results + E47 fix, #26 closed into it); Airflow digest promoted (PR #28)
+Did (Bee): PR #26 closed, PR #27 4/4 green (DAG integrity 2m18s), merged (main `87804e7`); images run 40303175320: airflow → `sha256:0c7cc70c…c988`.
+
 ### 2026-10-26 — lake_maintenance through Airflow: scheduled run OK, manual run without logical date failed (E47)
 Did (Bee): unpause + trigger `lake_maintenance` with `--conf '{"dry_run": "true"}'` (no logical date).
 Observed: unpause created `scheduled__2026-10-25T02:00` (logical 2026-10-18, real defaults 168 h / 5 / 72 h) → **success** in 41 s: already clean (6 snapshots, 22 files, 0 expired, 0 orphans; time travel to today's oldest kept snapshot still possible); its log also printed `log read interrupted … might get duplicated` = the doubled-lines cause, now confirmed. Manual run → `UndefinedError: 'ds' is undefined` ×2 attempts (retry 10 min) → ❌ alert received (`attempt 2/2, final`) → E47; fix: maintenance name without a date variable, bronze fails fast without a logical date.
