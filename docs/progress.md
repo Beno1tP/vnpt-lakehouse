@@ -14,7 +14,7 @@ Update this file at the end of each work block (status, decisions, blockers).
 | Code hosting | Personal GitHub (Bee will say if this changes) |
 | Data | Trial chatbot data, allowed on the laptop, **must not leave the laptop** (no cloud VM, no uploads, no data contents in alerts) |
 | Required tools (from lab doc) | Docker Desktop, Minikube (`--memory=7168 --cpus=4`, needs 6 GB+ RAM), Helm v3, kubectl, Python 3.10+, DBeaver or a MySQL client for StarRocks |
-| Alerts | Telegram group for the fresher team |
+| Alerts | Telegram group **"Alert group"** (dedicated, created 10-26 with the bot `bee_lake_alerts_bot`; leader agreed; teammates can be added later) |
 | Coding assistant | Claude Code, with `CLAUDE.md` in the repo as the hand-over context |
 
 ---
@@ -59,7 +59,7 @@ The deadline is tight for "learn K8s + 8 tools". **Learn K8s just-in-time while 
 | Task | Scope | Docs | Status |
 |---|---|---|---|
 | 1 | MinIO + Spark → Iceberg (Docker Compose) | `docs/task1/` | ✅ 10-18 (Bronze validated, idempotent, from-zero tested, failure drills, README); presented 10-23; Silver deferred (Bronze only for now) |
-| 2 | Minikube + Airflow running the Spark job | `docs/task2/` | 🟡 10-25 plan reviewed (operator 2.2.1, chart 1.22.0 + Airflow 3.3.2, minikube v1.39.0/K8s v1.37.0); D1 chart 1.22.0 + Airflow 3.3.2, D2 = A (daily 07-02→07-25, 6 skipped), D3 Spark-only expected counts; 10-25: 2.0 done (minikube v1.39.0/K8s v1.37.0, Allocatable 7268 Mi), 2.1 done (Postgres, MinIO, HMS in `lake`), 2.2 done (operator 2.2.1, landing, SparkApplication + validator on K8s); plan v2: CI→GHCR (D5) + production gaps (03_plan.md §G/§H); next 2.0b CI |
+| 2 | Minikube + Airflow running the Spark job | `docs/task2/` | 🟡 10-25 plan reviewed (operator 2.2.1, chart 1.22.0 + Airflow 3.3.2, minikube v1.39.0/K8s v1.37.0); D1 chart 1.22.0 + Airflow 3.3.2, D2 = A (daily 07-02→07-25, 6 skipped), D3 Spark-only expected counts; 10-25: 2.0 done (minikube v1.39.0/K8s v1.37.0, Allocatable 7268 Mi), 2.1 done (Postgres, MinIO, HMS in `lake`), 2.2 done (operator 2.2.1, landing, SparkApplication + validator on K8s); plan v2: CI→GHCR (D5) + production gaps (03_plan.md §G/§H); 10-26: 2.0b/2.0c CI→GHCR, 2.1b MinIO service users, 2.3 Airflow, 2.4 DAG + DQ rules, **2.5 backfill ×2 + drills 1–3 done** (E25–E41); next 2.6 durable logs + alert + 2 h deadline |
 | 3 | Trino querying Iceberg | `docs/task3/` | ⬜ |
 | 4 | StarRocks Gold via SQL/dbt | `docs/task4/` | ⬜ |
 | 5 | Superset dashboard UC4–UC8 | `docs/task5/` | ⬜ |

@@ -21,7 +21,7 @@ spec:
           command: ["python3", "/scripts/bucket_init.py"]
           env:
             - { name: S3_ENDPOINT, value: "minio.lake.svc.cluster.local:9000" }
-            - { name: BUCKETS, value: "lakehouse landing" }
+            - { name: BUCKETS, value: "lakehouse landing airflow-logs" }   # airflow-logs: remote task logs (2.6)
           resources:
             requests: { memory: 128Mi, cpu: 100m }
             limits:   { memory: 256Mi }

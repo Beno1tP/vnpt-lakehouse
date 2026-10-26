@@ -16,8 +16,10 @@ from datetime import datetime, timedelta, timezone
 
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.providers.cncf.kubernetes.operators.spark_kubernetes import SparkKubernetesOperator
-from airflow.sdk import CronDataIntervalTimetable, dag, task
+from airflow.sdk import AsyncCallback, CronDataIntervalTimetable, DeadlineAlert, DeadlineReference, dag, task
 from airflow.sdk.exceptions import AirflowSkipException  # Airflow 3 location (core alias is deprecated)
+
+from lake_alerts import deadline_alert, task_failure_alert
 
 LANDING = {"chatlog": "bot_dvc_hcm.xlsx", "bot_predict": "bot_ddvc_hcm_bot_predict.xlsx"}
 
@@ -27,8 +29,12 @@ LANDING = {"chatlog": "bot_dvc_hcm.xlsx", "bot_predict": "bot_ddvc_hcm_bot_predi
     start_date=datetime(2024, 7, 2, tzinfo=timezone.utc),
     catchup=False,                                    # history only through an explicit backfill
     max_active_runs=1,                                # all runs write the same two tables
-    dagrun_timeout=timedelta(hours=1),
-    default_args={"retries": 2, "retry_delay": timedelta(minutes=5), "execution_timeout": timedelta(minutes=20)},
+    dagrun_timeout=timedelta(hours=3),               # hard stop, after the 2 h deadline alert below
+    # step 2.6: alert (Telegram) when a run is not finished 2 h after it was queued (replaces Airflow 2 SLAs)
+    deadline=DeadlineAlert(reference=DeadlineReference.DAGRUN_QUEUED_AT, interval=timedelta(hours=2),
+                           callback=AsyncCallback(deadline_alert)),
+    default_args={"retries": 2, "retry_delay": timedelta(minutes=5), "execution_timeout": timedelta(minutes=20),
+                  "on_failure_callback": task_failure_alert},   # one message after the last try fails
     tags=["task2", "lake", "bronze"],
 )
 def chatbot_bronze():
@@ -51,7 +57,7 @@ def chatbot_bronze():
 
     @task(retries=0)
     def notify(ds=None):
-        print(f"[notify] {ds}: bronze loaded and validated")  # Telegram in step 2.6 (metadata only)
+        print(f"[notify] {ds}: bronze loaded and validated")  # success stays quiet; failures/deadlines alert
 
     check_landing() >> bronze >> validate >> notify()
 

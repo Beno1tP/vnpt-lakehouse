@@ -20,6 +20,7 @@ def env_file(tmp_path, password="Pw1@x"):
     path = tmp_path / "secrets.env"
     path.write_text("\n".join(line.replace("change-me-pg", password).replace("change-me-airflow-db", password)
                               .replace("change-me-minio", password).replace("change-me-airflow-admin", password)
+                              .replace("change-me-telegram-token", "tg-token").replace("change-me-telegram-chat", "-1")
                               for line in text.splitlines()) + "\n")
     return path
 
@@ -53,3 +54,5 @@ def test_generates_keys_once_and_escapes(tmp_path, monkeypatch):
     minio = json.loads(conns["AIRFLOW_CONN_MINIO_LANDING"])
     assert minio["login"] == "airflow-landing" and minio["extra"]["endpoint_url"].endswith(":9000")
     assert json.loads(conns["AIRFLOW_CONN_KUBERNETES_IN_CLUSTER"])["extra"]["in_cluster"] is True
+    assert json.loads(conns["AIRFLOW_CONN_MINIO_LOGS"])["login"] == "airflow-logs"
+    assert (out / "airflow-alerts.env").read_text() == "TELEGRAM_BOT_TOKEN=tg-token\nTELEGRAM_CHAT_ID=-1\n"
