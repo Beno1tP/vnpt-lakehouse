@@ -31,7 +31,7 @@ SPARK_SUBMIT = $(COMPOSE) exec -T spark /opt/spark/bin/spark-submit --master $(S
 SPARK_SQL    = $(COMPOSE) exec -T spark /opt/spark/bin/spark-sql --master local[1]
 NOISE        = ^Time taken|^:: loading settings
 
-.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog
+.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance
 
 help:          ## list targets and variables
 	@awk -F':.*## ' '/^[a-zA-Z0-9_-]+:.*## /{printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -190,3 +190,12 @@ catalog:       ## Task 2 2.5b drill 7: make catalog CMD=info|forget|register TAB
 	  for i in $$(seq 1 120); do s=$$(kubectl -n spark-jobs get sparkapplication $$n -o jsonpath='{.status.applicationState.state}'); \
 	    case "$$s" in COMPLETED|FAILED|SUBMISSION_FAILED) break;; esac; sleep 5; done; echo "[catalog] $$n state=$$s"; \
 	  kubectl -n spark-jobs logs $$n-driver | grep -E "^\[catalog\]|Error|Exception" || true; test "$$s" = COMPLETED
+maintenance:   ## Task 2 2.5c: Iceberg maintenance now (same template as DAG lake_maintenance): [SNAP_HOURS=168] [RETAIN=5] [ORPHAN_HOURS=72] [DRY=yes]
+	kubectl -n spark-jobs delete sparkapplication maintenance-manual --ignore-not-found --wait=true
+	sed -e 's/maintenance-{{ ds }}/maintenance-manual/' -e 's|{{ var.value.spark_job_image }}|$(JOB_IMAGE)|' \
+	    -e 's/{{ params.snapshot_hours }}/$(or $(SNAP_HOURS),168)/' -e 's/{{ params.retain_last }}/$(or $(RETAIN),5)/' \
+	    -e 's/{{ params.orphan_hours }}/$(or $(ORPHAN_HOURS),72)/' -e 's/{{ params.dry_run }}/$(if $(filter yes,$(DRY)),true,false)/' \
+	    dags/templates/maintenance_sparkapp.yaml | kubectl apply -f -
+	@for i in $$(seq 1 180); do s=$$(kubectl -n spark-jobs get sparkapplication maintenance-manual -o jsonpath='{.status.applicationState.state}'); \
+	  case "$$s" in COMPLETED|FAILED|SUBMISSION_FAILED) break;; esac; sleep 5; done; echo "[maint] state=$$s"; \
+	  kubectl -n spark-jobs logs maintenance-manual-driver | grep -E "^\[maint\]|Error|Exception" || true; test "$$s" = COMPLETED
