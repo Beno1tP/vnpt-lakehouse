@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-10-26 — Drill 3 passes after the E41 fix → step 2.5 done
+Did (Bee): PR #15 merged, `make airflow-install` (revision 6: image `a447aa4c…`, scheduler grace 120 s), `make drill-scheduler`.
+Observed: run 2024-07-24 **success**: check_landing 03:46:21, bronze 03:46:30–03:46:53, validate 03:48:09–03:48:32, notify 03:48:33. The 75 s between bronze and validate is the scheduler hand-over (old pod drains, new pod schedules the next task) instead of a killed task. **Step 2.5 done**: backfill 24 days ×2 identical, 18 × 23/23, 6 skipped; drills: driver kill → Airflow retry; executor delete → Spark recovers in the same attempt; scheduler restart → run completes.
+
 ### 2026-10-26 — 2024-07-24 recovered; PR #14 merged; Airflow digest promoted (PR #15)
 Did (Bee): `make backfill FROM=TO=2024-07-24 REPROCESS=failed` → all 4 tasks `success` (03:23:27 → 03:24:21); PR #14 merged (main `1c09d26`); images run 40264945988: airflow `1c09d26` → `sha256:a447aa4c…29a0`.
 
