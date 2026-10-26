@@ -3,6 +3,10 @@ rules from docs/task2/01_knowledge.md A3 hold. Plain asserts (no pytest in the A
 import inspect
 import os
 import sys
+from pathlib import Path
+
+import jinja2
+import yaml
 
 os.environ.setdefault("AIRFLOW__CORE__LOAD_EXAMPLES", "False")   # set before importing airflow (config is read once)
 
@@ -44,6 +48,29 @@ for dag_id, dag in sorted(bag.dags.items()):
             problems.append("needs a DeadlineAlert (2.6)")
         problems += [f"{t.task_id}: validation retries at most once (deterministic failures, E41)" for t in dag.tasks
                      if "validate" in t.task_id and t.retries > 1]
+    # E47: render every application_file template like Airflow does (strict Jinja), with AND without a logical date.
+    # Without one, a template may only use ds if a check_landing task upstream stops such runs first.
+    env = dag.get_template_env() if hasattr(dag, "get_template_env") else jinja2.Environment(
+        undefined=jinja2.StrictUndefined)
+    base = {"var": {"value": {"spark_job_image": "img@sha256:0"}}, "params": dag.params.dump(), "run_id": "manual__x"}
+    for t in dag.tasks:
+        app_file = getattr(t, "application_file", None)
+        if not app_file:
+            continue
+        text = (Path(dag.fileloc).parent / app_file).read_text()
+        try:
+            doc = yaml.safe_load(env.from_string(text).render(**base, ds="2024-07-24"))
+            if doc.get("kind") != "SparkApplication":
+                problems.append(f"{t.task_id}: {app_file} does not render to a SparkApplication")
+        except Exception as e:  # noqa: BLE001
+            problems.append(f"{t.task_id}: {app_file} fails to render with a logical date: {type(e).__name__}: {e}")
+            continue
+        try:
+            env.from_string(text).render(**base)
+        except jinja2.UndefinedError as e:
+            if "check_landing" not in t.get_flat_relative_ids(upstream=True):
+                problems.append(f"{t.task_id}: {app_file} needs a logical date ({e}) but nothing upstream stops "
+                                f"runs without one (E47)")
     for p in problems:
         print(f"[dags] RULE {dag_id}: {p}")
     errors += len(problems)

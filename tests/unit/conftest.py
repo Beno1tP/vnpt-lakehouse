@@ -11,6 +11,7 @@ if "pyspark" not in sys.modules:
         sql = types.ModuleType("pyspark.sql")
         sql.SparkSession = object
         sql.functions = types.ModuleType("pyspark.sql.functions")
+        sql.functions.col = lambda name: f"col({name})"             # enough for write_bronze's partition spec
         sql_types = types.ModuleType("pyspark.sql.types")
         for name in ("StringType", "StructField", "StructType"):
             setattr(sql_types, name, object)
