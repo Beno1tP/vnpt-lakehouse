@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-10-26 — 2.6 closed (E44 texts verified); 2.5b backup + restore prepared on branch `task2/backup`
+Did (Bee): PR #19 merged, revision 8; `alert_smoke` with `--logical-date 2024-07-24` → `⏰ alert_smoke run for 2024-07-24T00:00:00Z … deadline 2026-10-26 07:49:51.758193+00:00 passed / run: manual__2026-10-26T07:49:21.750587+00:00` and `❌ alert_smoke.fail_on_purpose FAILED for day 2024-07-24 (attempt 1/1, final)` → texts correct. **Step 2.6 done.**
+Prepared (Claude): `lake/pg-backup-cronjob.yaml` (daily 01:00 UTC, `startingDeadlineSeconds` 12 h for a laptop that was off, Forbid concurrency; initContainer `pg_dump -Fc` of metastore + airflow with the server's own postgres:16 digest; container Chainguard `mc cp` to `s3://backup/postgres/<UTC ts>/`); MinIO user `backup-writer` (list/get/put on `backup`, **no delete**); bucket `backup`; `lake/pg-restore-job.yaml` (download dump → `DROP DATABASE … WITH (FORCE)` → `pg_restore` → print table count + schema version); make `backup-now`, `drill-lose-metastore CONFIRM=yes` (destructive, refuses without CONFIRM), `restore-metastore TS=` (scales HMS to 0 and back; secret names resolved from the CronJob, not by grep, because old hashed Secrets stay around); tests 36; drills 6–7 in `07_drills.md`.
+
 ### 2026-10-26 — PR #18 merged (E44); Airflow digest promoted (PR #19)
 Did (Bee): PR #18 4/4 green, merged (main `1590fef`); images run 40286034074: airflow `1590fef` → `sha256:97382ff9…bad2`.
 

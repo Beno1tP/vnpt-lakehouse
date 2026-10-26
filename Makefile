@@ -31,7 +31,7 @@ SPARK_SUBMIT = $(COMPOSE) exec -T spark /opt/spark/bin/spark-submit --master $(S
 SPARK_SQL    = $(COMPOSE) exec -T spark /opt/spark/bin/spark-sql --master local[1]
 NOISE        = ^Time taken|^:: loading settings
 
-.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler
+.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore
 
 help:          ## list targets and variables
 	@awk -F':.*## ' '/^[a-zA-Z0-9_-]+:.*## /{printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -163,3 +163,23 @@ drill-scheduler: ## Task 2 drill 3: re-run DRILL_DATE and restart the Airflow sc
 	    --field-selector=status.phase=Running -o name 2>/dev/null | head -1); [ -n "$$p" ] && break; sleep 1; done; \
 	  test -n "$$p" || { echo "[drill] no running bronze driver within 300 s"; exit 1; }; sleep 5; \
 	  echo "[drill] $$(date -u +%T) UTC: restarting the scheduler while $$p runs"; kubectl -n airflow rollout restart deploy/airflow-scheduler
+backup-now:    ## Task 2 2.5b: run the pg-backup CronJob now and print its log (incl. "backup ts=…")
+	@j=pg-backup-manual-$$(date -u +%H%M%S); kubectl -n lake create job $$j --from=cronjob/pg-backup && \
+	  kubectl -n lake wait --for=condition=complete job/$$j --timeout=300s && kubectl -n lake logs job/$$j -c dump && kubectl -n lake logs job/$$j -c upload | tail -3
+drill-lose-metastore: ## Task 2 2.5b DESTRUCTIVE drill: drop the metastore DB (catalog lost; Iceberg files stay). Needs CONFIRM=yes
+	@test "$(CONFIRM)" = yes || { echo "refusing: drops the Iceberg catalog database. Run make backup-now first, then CONFIRM=yes"; exit 1; }
+	kubectl -n lake scale deploy/hive-metastore --replicas=0 && kubectl -n lake wait --for=delete pod -l app=hive-metastore --timeout=120s
+	kubectl -n lake exec postgres-0 -- sh -c 'psql -U "$$POSTGRES_USER" -d postgres -v ON_ERROR_STOP=1 -c "DROP DATABASE metastore WITH (FORCE)" -c "CREATE DATABASE metastore"'
+	kubectl -n lake scale deploy/hive-metastore --replicas=1 && kubectl -n lake rollout status deploy/hive-metastore --timeout=300s
+	kubectl -n lake logs deploy/hive-metastore -c schema-init | tail -2
+restore-metastore: ## Task 2 2.5b: restore the metastore DB from backup TS (make restore-metastore TS=20261026T…Z)
+	@test -n "$(TS)" || { echo "set TS= to a backup timestamp (backup ts=… in make backup-now)"; exit 1; }
+	kubectl -n lake scale deploy/hive-metastore --replicas=0 && kubectl -n lake wait --for=delete pod -l app=hive-metastore --timeout=120s
+	kubectl -n lake delete job pg-restore-metastore --ignore-not-found
+	pg=$$(kubectl -n lake get cronjob pg-backup -o jsonpath='{.spec.jobTemplate.spec.template.spec.initContainers[0].env[0].valueFrom.secretKeyRef.name}'); \
+	  su=$$(kubectl -n lake get cronjob pg-backup -o jsonpath='{.spec.jobTemplate.spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name}'); \
+	  test -n "$$pg" -a -n "$$su" || { echo "cannot resolve the current secret names from cronjob/pg-backup"; exit 1; }; \
+	  sed -e 's/__TS__/$(TS)/g' -e "s/__PG_SECRET_NAME__/$$pg/" -e "s/__BACKUP_SECRET_NAME__/$$su/" infra/k8s/lake/pg-restore-job.yaml | kubectl apply -f -
+	kubectl -n lake wait --for=condition=complete job/pg-restore-metastore --timeout=300s; kubectl -n lake logs job/pg-restore-metastore -c restore | tail -3
+	kubectl -n lake scale deploy/hive-metastore --replicas=1 && kubectl -n lake rollout status deploy/hive-metastore --timeout=300s
+	kubectl -n lake logs deploy/hive-metastore -c schema-init | tail -1

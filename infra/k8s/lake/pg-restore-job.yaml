@@ -1,0 +1,48 @@
+# Task 2 step 2.5b: restore the metastore database from one backup (applied by `make restore-metastore TS=…`, not in
+# kustomization). Order done by make: Hive Metastore scaled to 0 -> this Job -> Hive Metastore back to 1.
+# __TS__ = backup timestamp printed by the backup job ("backup ts=…").
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pg-restore-metastore
+  namespace: lake
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      initContainers:
+        - name: download
+          image: cgr.dev/chainguard/minio-client@sha256:1a1b84b36947e93b2d0eb9373e1c886eadfdcf223c91f47bcaa3756d3437785c
+          imagePullPolicy: IfNotPresent
+          args: ["--config-dir", "/tmp/mc", "cp", "lake/backup/postgres/__TS__/metastore.dump", "/restore/metastore.dump"]
+          env:
+            - name: MINIO_BACKUP_SECRET
+              valueFrom: { secretKeyRef: { name: __BACKUP_SECRET_NAME__, key: MINIO_BACKUP_SECRET } }
+            - name: MC_HOST_lake
+              value: "http://backup-writer:$(MINIO_BACKUP_SECRET)@minio.lake.svc.cluster.local:9000"
+          resources: { requests: { memory: 32Mi, cpu: 50m }, limits: { memory: 128Mi } }
+          volumeMounts: [{ name: work, mountPath: /restore }]
+      containers:
+        - name: restore
+          image: postgres:16@sha256:1a6ab3f5345eb6dbe04a1349529caabdb0ab09293a09590fad07b2246bfa4b54
+          imagePullPolicy: IfNotPresent
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              H=postgres.lake.svc.cluster.local
+              psql -h $H -d postgres -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS metastore WITH (FORCE)" -c "CREATE DATABASE metastore"
+              pg_restore -h $H -d metastore --exit-on-error /restore/metastore.dump
+              echo "restored from __TS__: $(psql -h $H -d metastore -Atc 'SELECT count(*) FROM "TBLS"') tables, schema $(psql -h $H -d metastore -Atc 'SELECT "SCHEMA_VERSION" FROM "VERSION"')"
+          env:
+            - name: PGUSER
+              valueFrom: { secretKeyRef: { name: __PG_SECRET_NAME__, key: PG_USER } }
+            - name: PGPASSWORD
+              valueFrom: { secretKeyRef: { name: __PG_SECRET_NAME__, key: PG_PASSWORD } }
+          resources: { requests: { memory: 64Mi, cpu: 50m }, limits: { memory: 256Mi } }
+          volumeMounts: [{ name: work, mountPath: /restore, readOnly: true }]
+      volumes:
+        - name: work
+          emptyDir: { sizeLimit: 512Mi }

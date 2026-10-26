@@ -27,7 +27,7 @@ def test_hms_cannot_touch_landing():
 
 
 def test_no_wildcards_or_admin():
-    for policy in ("lake-spark-jobs", "lake-landing-writer", "lake-hms", "lake-landing-reader", "lake-airflow-logs"):
+    for policy in sorted(p.stem for p in (ROOT / "infra/k8s/lake/minio-users").glob("*.json")):   # every policy file
         for action, res in grants(policy):
             assert action != "s3:*" and not action.startswith("admin:") and res != "arn:aws:s3:::*", policy
             assert "CreateBucket" not in action and "DeleteBucket" not in action, policy
@@ -41,3 +41,10 @@ def test_airflow_landing_reader_is_read_only():
 
 def test_airflow_logs_user_only_touches_its_bucket():
     assert {r for _, r in grants("lake-airflow-logs")} <= {"arn:aws:s3:::airflow-logs", "arn:aws:s3:::airflow-logs/*"}
+
+
+def test_backup_writer_cannot_delete_backups():
+    g = grants("lake-backup")
+    assert {r for _, r in g} <= {"arn:aws:s3:::backup", "arn:aws:s3:::backup/*"}
+    assert ("s3:PutObject", "arn:aws:s3:::backup/*") in g
+    assert not any(a == "s3:DeleteObject" for a, _ in g)          # a compromised job cannot wipe the backups
