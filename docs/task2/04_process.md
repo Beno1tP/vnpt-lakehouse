@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-10-26 — E47 verified (revision 11) → step 2.5c done
+Did (Bee): PR #28 merged, `make airflow-install` (revision 11, `git 4f5060d`); triggered `lake_maintenance` (dry run) and `chatbot_bronze`, both **without** a logical date.
+Observed: lake_maintenance manual run **success** in 40 s (no UndefinedError); chatbot_bronze failed immediately in check_landing (AirflowFailException, no retry wait) → exactly one Telegram `❌ chatbot_bronze.check_landing FAILED for day none (run without a logical date) (attempt 1/1, final)`. **Step 2.5c done.**
+Decision (open, Bee): optional `day` field in the Airflow trigger form; current rule = loading a day must be explicit (logical date / backfill), runs without one fail fast.
+
 ### 2026-10-26 — PR #27 merged (E46 results + E47 fix, #26 closed into it); Airflow digest promoted (PR #28)
 Did (Bee): PR #26 closed, PR #27 4/4 green (DAG integrity 2m18s), merged (main `87804e7`); images run 40303175320: airflow → `sha256:0c7cc70c…c988`.
 
