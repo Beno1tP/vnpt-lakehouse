@@ -25,6 +25,10 @@ DRILL_DATE          ?= 2024-07-24
 IDEMPOTENCY_SED      = -e 's|"/opt/tests/sql/bronze_rules.sql"]|"/opt/tests/sql/bronze_rules.sql", "--check-idempotency"]|'
 LOCAL_JOB_IMAGE      = vnpt-lake-spark-job:$(JOB_TAG)
 JOB_IMAGE           ?= $(SPARK_JOB_IMAGE_REF)
+# Airflow CLI for make: in the api-server container, never in the scheduler (it runs the tasks; a CLI process there
+# pushed it over its memory limit, E52)
+AF                   = kubectl -n airflow exec deploy/airflow-api-server -c api-server --
+AFI                  = kubectl -n airflow exec -i deploy/airflow-api-server -c api-server --
 
 COMPOSE      = docker compose -f infra/compose/docker-compose.yml --env-file $(ENV_FILE)
 SPARK_SUBMIT = $(COMPOSE) exec -T spark /opt/spark/bin/spark-submit --master $(SPARK_MASTER) --driver-memory $(SPARK_DRIVER_MEMORY)
@@ -132,19 +136,19 @@ deploy-guard:  ## Task 2: refuse to deploy unless on main with a clean tree (dep
 	@echo "deploying git $$(git rev-parse --short HEAD) from $$(git rev-parse --abbrev-ref HEAD)"
 airflow-admin: ## Task 2: (re)create the Airflow UI user admin with the password from infra/k8s/secrets/airflow-admin-password
 	@test -s infra/k8s/secrets/airflow-admin-password || { echo "run make k8s-secrets first"; exit 1; }
-	-@kubectl -n airflow exec deploy/airflow-scheduler -c scheduler -- airflow users delete --username admin >/dev/null 2>&1
-	@kubectl -n airflow exec deploy/airflow-scheduler -c scheduler -- airflow users create --username admin --role Admin \
+	-@$(AF) airflow users delete --username admin >/dev/null 2>&1
+	@$(AF) airflow users create --username admin --role Admin \
 	  --firstname admin --lastname lab --email admin@lab.local --password "$$(cat infra/k8s/secrets/airflow-admin-password)" \
 	  | grep -v -i password
 airflow-ui:    ## Task 2: open the Airflow UI on http://localhost:8080 (Ctrl+C to stop)
 	kubectl -n airflow port-forward svc/airflow-api-server 8080:8080
 backfill:      ## Task 2: backfill chatbot_bronze: make backfill [FROM=2024-07-02] [TO=2024-07-25] [REPROCESS=none|completed|failed] [DRY=yes]
-	kubectl -n airflow exec deploy/airflow-scheduler -c scheduler -- airflow backfill create --dag-id chatbot_bronze --from-date $(FROM) --to-date $(TO) \
+	$(AF) airflow backfill create --dag-id chatbot_bronze --from-date $(FROM) --to-date $(TO) \
 	  --reprocess-behavior $(REPROCESS) --max-active-runs 1 $(if $(filter yes,$(DRY)),--dry-run)
 dag-runs:      ## Task 2: runs of chatbot_bronze with state, logical date (= the day) and run type
-	@kubectl -n airflow exec deploy/airflow-scheduler -c scheduler -- airflow dags list-runs chatbot_bronze -o plain | awk 'NR==1 || /chatbot_bronze/' | cut -c1-160
+	@$(AF) airflow dags list-runs chatbot_bronze -o plain | awk 'NR==1 || /chatbot_bronze/' | cut -c1-160
 dag-report:    ## Task 2: per day from the task logs in s3://airflow-logs (E51): landing found?, rows loaded, validation result
-	kubectl -n airflow exec -i deploy/airflow-scheduler -c scheduler -- python - chatbot_bronze < tests/k8s/dag_report.py
+	$(AFI) python - chatbot_bronze < tests/k8s/dag_report.py
 drill-driver:  ## Task 2 drill 1: re-run DRILL_DATE (default 2024-07-24) and delete the bronze DRIVER pod mid-run
 	$(MAKE) --no-print-directory backfill FROM=$(DRILL_DATE) TO=$(DRILL_DATE) REPROCESS=completed 2>&1 | grep -c "backfill" >/dev/null
 	@for i in $$(seq 1 300); do p=$$(kubectl -n spark-jobs get pods -l 'task_id=bronze,spark-role=driver' \
@@ -221,7 +225,7 @@ ghcr-prune:    ## Task 2 2.7: list old GHCR versions (keeps images.env digests +
 MINIKUBE_START = minikube start --driver=docker --kubernetes-version=v1.37.0 --memory=8192 --cpus=6 \
                  --extra-config=kubelet.system-reserved=memory=3686Mi
 DEMO_DAYS      = $$(( ($$(date -ud $(TO) +%s) - $$(date -ud $(FROM) +%s)) / 86400 + 1 ))
-AF             = kubectl -n airflow exec deploy/airflow-scheduler -c scheduler --
+
 k8s-up: deploy-guard ## Task 2: whole stack, idempotent (also from zero after minikube delete): cluster, secrets, lake, operator, Airflow
 	minikube status >/dev/null 2>&1 || $(MINIKUBE_START)
 	minikube addons enable metrics-server
@@ -249,5 +253,7 @@ k8s-demo:      ## Task 2: landing -> unpause -> backfill FROM..TO -> wait -> per
 	$(MAKE) --no-print-directory dag-report
 	@failed=$$($(AF) airflow dags list-runs chatbot_bronze -o plain | grep backfill__ | grep -c " failed " || true); \
 	  test "$$failed" -eq 0 || { echo "[demo] $$failed backfill runs failed"; exit 1; }
+	@r=$$(kubectl -n airflow get pods -l component=scheduler -o jsonpath='{.items[0].status.containerStatuses[?(@.name=="scheduler")].restartCount}'); \
+	  test "$$r" -eq 0 || { echo "[demo] scheduler container restarted $$r times (E52: OOM?)"; exit 1; }
 	$(AF) airflow dags unpause lake_maintenance >/dev/null
 	@echo "[demo] PASSED: $(FROM)..$(TO) backfilled, no failed run; lake_maintenance unpaused"

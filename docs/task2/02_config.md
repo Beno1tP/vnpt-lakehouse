@@ -41,7 +41,7 @@ Minikube runs as a container in Docker Desktop. Docker Desktop and Ubuntu share 
 | minio | 256 Mi | 512 Mi | |
 | hive-metastore | 768 Mi | 1 Gi | `-Xmx768m` |
 | spark-operator controller + webhook | 128 Mi + 64 Mi | 512 Mi + 256 Mi | webhook stays on (`01_knowledge.md` A2) |
-| Airflow api-server / scheduler / dag-processor / triggerer | 512 / 512 / 256 / 256 Mi | 1 Gi / 1 Gi / 512 Mi / 512 Mi | statsd, redis, pgbouncer, flower **off** |
+| Airflow api-server / scheduler / dag-processor / triggerer | 512 / **1024** / 256 / 256 Mi | 1 Gi / **1.5 Gi** / 768 Mi / 512 Mi | statsd, redis, pgbouncer, flower **off**; scheduler raised 10-27 (E52: OOMKilled ×9 at 1 Gi; measured idle 893 Mi with parallelism 4) |
 | Spark driver | 2 Gi | 2 Gi | 1 Gi heap + 1 Gi overhead (pandas) |
 | Spark executor ×1 | 1 Gi | 1 Gi | |
 | **Sum (without control plane)** | **6,080 Mi ≈ 5.9 GiB requests** | **8,960 Mi ≈ 8.75 GiB limits** | Requests must fit **Allocatable** (`kubectl describe node minikube`) — only meaningful after the E25 fix (`kubelet.system-reserved`, Allocatable 7268 Mi); limits may overcommit, but real use near limits → OOM |

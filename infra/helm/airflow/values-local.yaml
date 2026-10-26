@@ -65,7 +65,8 @@ config:
     remote_log_conn_id: minio_logs
   core:
     load_examples: "False"
-    parallelism: 4                  # max concurrent task processes in the scheduler pod (RAM)
+    parallelism: 2                  # LocalExecutor keeps this many worker processes (~260 MiB RSS each, E52);
+                                    # chatbot_bronze runs one task at a time, + weekly lake_maintenance = 2
     default_timezone: utc
     # E37: with LocalExecutor the task runs in the scheduler pod and the API server fetches its log from
     # <hostname>:8793. A Deployment's pod hostname is not in cluster DNS, so register the pod IP instead
@@ -75,7 +76,9 @@ config:
 apiServer:
   resources: { requests: { memory: 512Mi, cpu: 200m }, limits: { memory: 1Gi } }
 scheduler:
-  resources: { requests: { memory: 512Mi, cpu: 200m }, limits: { memory: 1Gi } }
+  # E52: 1Gi was OOMKilled 9x in the from-zero demo (idle 893Mi = 4 LocalExecutor workers + scheduler + serve-logs,
+  # then a task supervisor + make's CLI on top). Request = measured peak, limit with margin; node requests stay < 7268 Mi.
+  resources: { requests: { memory: 1Gi, cpu: 200m }, limits: { memory: 1536Mi } }
   # E41: with LocalExecutor the task processes live in this pod; on a rollout the old pod gets SIGTERM and was killed
   # after the chart default 10 s, cutting a running task (drill 3). 120 s lets a normal task (~25 s) finish first.
   terminationGracePeriodSeconds: 120
