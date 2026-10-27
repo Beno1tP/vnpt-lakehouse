@@ -8,7 +8,7 @@
 - Bee starts in **Windows cmd** (not PowerShell), then `wsl` into Ubuntu-22.04 for all project commands. Verify user/home with `whoami; pwd` (observed `quang`, `/home/quang`; Bee calls it "user").
 
 ## Lab scope and data
-- Onboarding lab only. Tasks 1–5 are standalone mini-projects on the same data (1 Spark→Iceberg on MinIO, 2 K8s+Airflow, 3 Trino, 4 StarRocks/dbt Gold, 5 Superset). Current: **Task 2** (Task 1 done: tags task1-v1-lab, task1-v2-standard, task1-v3-operable; `infra/compose/` stays unchanged and must keep running).
+- Onboarding lab only. Tasks 1–5 are standalone mini-projects on the same data (1 Spark→Iceberg on MinIO, 2 K8s+Airflow, 3 Trino, 4 StarRocks/dbt Gold, 5 Superset). Current: **Task 3** (Task 1 done: tags task1-v1-lab, task1-v2-standard, task1-v3-operable; **Task 2 done: tag task2-v1, summary docs/task2/README.md**; `infra/compose/` stays unchanged and must keep running).
 - Data = **trial/imaginary chatbot logs for freshers, not real people**. Still keep it on the laptop: no uploads, no row contents in alerts/Git/public logs.
 - Raw files: `~/data/vnpt-lab/` (outside the repo).
 
@@ -36,7 +36,7 @@ Python 3.11 · Spark 3.5.9 (Scala 2.12, Java 17) · Iceberg 1.11.0 runtime, form
 - No secrets in Git or images; `.env` and `infra/compose/secrets/` are git-ignored. HMS/Postgres credentials are Compose secret files rendered by `make secrets` (never in `SERVICE_OPTS`); MinIO/S3 keys are still env vars (phase 2), so still treat `docker inspect` output and logs as sensitive.
 - Log every error in `docs/task1/05_errors_and_fixes.md` (symptom → root cause → fix → theory) and every step in `docs/task1/04_process.md`; update `docs/progress.md` at session end.
 
-## Task 2 (Spark on Minikube + Airflow) — plan in docs/task2/ (01 knowledge, 02 config/versions/budgets, 03 plan)
+## Task 2 (Spark on Minikube + Airflow) — DONE (task2-v1); docs/task2/README.md, details in 01–07
 - Pins (checked 2026-10-25): minikube v1.39.0, K8s v1.37.0, Kubeflow Spark Operator **2.2.1** (last on Spark 3.5; 2.3+ = Spark 4.0), Airflow 3.3.2 on chart 1.22.0 (D1 decided: chart only gates at >=3.0.0), provider cncf.kubernetes 10.22.0 (bundled in apache/airflow:3.3.2-python3.12; image vnpt-lake-airflow with DAGs baked, built by CI, D5). Airflow chart from dlcdn + SHA-512 (`make airflow-chart`, E29).
 - **Bee types every command** (minikube, kubectl, helm, docker, make, git push, PRs, and all checks) in WSL. Claude writes files/docs/local commits, guides one stage at a time with Expect lines, and does NOT run cluster/Docker/GitHub commands, not even read-only checks.
 - Plan v2 (docs/task2/03_plan.md): no image builds on the laptop: GitHub Actions builds, GHCR stores (`ghcr.io/beno1tp/…`, tag = git SHA, deploy by digest), Minikube pulls with Secret `ghcr-pull` (repo is private; token `read:packages` only). Branch + PR for every change from step 2.0b; CI must be green before merge.
@@ -47,12 +47,14 @@ Python 3.11 · Spark 3.5.9 (Scala 2.12, Java 17) · Iceberg 1.11.0 runtime, form
 - Namespaces: lake (postgres, minio, hive-metastore), spark-operator, spark-jobs, airflow. Cross-namespace DNS: `<svc>.<ns>.svc.cluster.local`.
 - Secrets from git-ignored `infra/k8s/secrets.env` (kustomize secretGenerator) and rendered `infra/k8s/secrets/hive-site.xml`; mounted as files. MinIO root keys only for MinIO, bucket-init, minio-users; consumers use service users (2.1b): spark-jobs (`s3-credentials`), landing-writer, hive-metastore.
 - Spark Operator **webhook stays on** (it applies volumes, env, ConfigMaps to driver/executor pods).
-- One retry layer: Airflow retries; SparkApplication `restartPolicy: Never`; validation `retries=0`.
+- One retry layer: Airflow retries; SparkApplication `restartPolicy: Never`; validation `retries=1` (E41).
 - Airflow 3: daily intervals only via `CronDataIntervalTimetable("0 0 * * *", timezone="UTC")` (a bare cron string → CronTriggerTimetable and a `timedelta` → DeltaTriggerTimetable both give zero-length intervals: E38). Deploy only from clean `main` (`make deploy-guard`, E39). After a laptop restart: `minikube start` first (E40). Day = date as written in `CREATED_TIME`; daily runs 2024-07-02 → 07-25 (D2 = A): 18 days load, 6 days without a landing file are skipped.
 - Task 2 tech = Minikube + Airflow + Spark only (no DuckDB etc.); Trino is Task 3. Expected counts via Spark SQL (D3).
 - Excel input comes from the MinIO landing zone `s3://landing/<table>/dt=YYYY-MM-DD/`, never a hostPath.
 - Deployed image digests: `infra/k8s/images.env` (+ kustomize `images:`), bumped by PR after an images run.
-- Errors: docs/task2/05_errors_and_fixes.md, IDs from **E25**.
+- Errors: docs/task2/05_errors_and_fixes.md (E25–E52); Task 3 errors start at **E53**.
+- Bring-up: `make k8s-up` (idempotent, also from zero) + `make k8s-demo` (landing → backfill → report; fails on failed runs or scheduler restarts). Airflow CLI from make runs in the **api-server** container (`AF`), never the scheduler (E52). Scheduler: LocalExecutor `parallelism: 2`, 1Gi/1536Mi. Rerun a day = `airflow tasks clear`, not trigger (E49). `dag-report` reads `s3://airflow-logs` (E51).
+- Bee's gh is 2.103.2 (official apt repo), modern flags work.
 
 ## Commands
 - `DC="docker compose -f infra/compose/docker-compose.yml --env-file infra/compose/.env"` then `$DC up -d …`, `$DC logs -f <svc>`, `$DC ps -a`

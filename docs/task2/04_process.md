@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-10-27 — 2.8 closing: measurements, README, tag
+Measured (Bee): node 4,393 Mi used (60 %); top pods scheduler 615 Mi, HMS 517, triggerer 516, dag-processor 393, apiserver 379, api-server 353; Docker `Images` 7.58 GB (12, 1.7 GB reclaimable), `Local Volumes` 8.34 GB (Minikube node), build cache 0.88 GB, `~/.minikube` 856 MB; `lake_maintenance` catch-up run `scheduled__2026-10-25T02:00` success in 31 s right after the from-zero load.
+Wrote (Claude): `docs/task2/README.md` (architecture, run, versions, decisions, deviations from the lab doc, footprint, results, drills, gaps closed/open, lessons, files); root README, `progress.md` §4 + §8, `HANDOFF.md` banner, `CLAUDE.md` (current = Task 3, Task 2 operating facts). Next: PR, then Bee tags `task2-v1`.
+
 ### 2026-10-27 — from-zero run 2 (after E52): PASSED, 0 restarts, demo 16 min
 Did (Bee): PR #36 merged (main `2156c7e`); `minikube delete`; `make k8s-up` → interrupted with Ctrl+C at 23m15s during the Airflow install (all Airflow pods `Init:0/1` behind the migration job). Cause: **image pull** of `vnpt-lake-airflow@sha256:cf03…` took **~9m50s** (events: Pulling 14m ago → Pulled 4m13s ago), the migration itself 1 s (`Database migration done!` 02:01:06Z); release left `failed` (not pending) → `make k8s-up` again: **20.7 s**, idempotent (everything unchanged/configured, Jobs recreated after TTL, operator rev 2, Airflow rev 2, admin created). `time make k8s-demo` → **16m08s**: landing 18 days × 2 OK; 24 runs, 0 failed; poll smooth (no exit 137, no `container not found`); `dag-report`: **36 `[bronze]` lines** (18 days × 2 tables, none missing), `23/23` ×18, `no/no` ×6 (+ scheduled 2026-10-26 run skipped), 79 log files; restart check passed; `PASSED`.
 After: scheduler `RESTARTS 0`, 615 Mi in `top` while the `lake_maintenance` catch-up run executed (2 LocalExecutor workers: one busy with that task, one idle; scheduler 190 MiB, serve-logs 152 MiB); api-server 351 Mi, dag-processor 393 Mi, triggerer 516 Mi.
