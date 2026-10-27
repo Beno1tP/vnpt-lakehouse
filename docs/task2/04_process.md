@@ -14,6 +14,13 @@ Time spent:
 
 ---
 
+### 2026-10-27 — automation evidence (decision C)
+Question (Bee): with mostly manual commands, did we use Airflow's scheduler at all? Did (Bee): `make dag-runs | grep scheduled__`, `airflow dags list-runs lake_maintenance`, `kubectl -n lake get jobs`, CronJob creation/lastSchedule.
+Observed: `chatbot_bronze` `scheduled__2026-10-27` (logical 10-26) success, skipped for no landing file; `lake_maintenance` `scheduled__2026-10-25T02:00` (logical 10-18) success in 31 s; no `pg-backup` job yet: CronJob created 01:38:15Z, after the 01:00 slot → first run 10-28 01:00 UTC.
+Decided (Bee): **C** = document the automation evidence (`06_validation.md` §3); a "new data arrives → runs by itself" demo is not possible with 2024 data; event-driven trigger (option A) to revisit at the start of Task 3. Rejected: copying a 2024 day under a 2026 `dt=` (wrong partition, exact checks fail).
+Learned: backfill runs are still orchestrated by the scheduler (only the dates are chosen by a person); a K8s CronJob never runs slots from before its creation.
+Next: 10-28 check the first `pg-backup` job, fill §3.
+
 ### 2026-10-27 ~03:00–04:00 UTC — after the tag: restart (E53) + resource proof "Airflow orchestrates, Spark works"
 Did (Bee): `kubectl -n lake get pods` → `localhost:8080 … connection refused` (**E53**) → `minikube start`; MinIO console via `kubectl -n lake port-forward svc/minio 9001:9001` (buckets checked: landing = one xlsx per table and day; warehouse = one Parquet data file per day partition + Iceberg `metadata/`). Then 3 stages around a rerun of 2024-07-24 (`airflow tasks clear chatbot_bronze --start-date 2024-07-24 --end-date 2024-07-24 --yes`, run in the api-server, E49/E52).
 Observed:
