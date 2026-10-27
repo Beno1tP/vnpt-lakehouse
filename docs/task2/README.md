@@ -38,7 +38,7 @@ make k8s-demo    # landing → backfill 2024-07-02..07-25 → wait → per-day r
 make airflow-ui  # http://localhost:8080, user admin (password from secrets.env)
 ```
 
-Day-2 targets (all in `make help`): `backfill [FROM TO REPROCESS DRY]`, `dag-runs`, `dag-report`, `sparkapp APP= DATE=`, `maintenance [DRY=yes]`, `backup-now`, `restore-metastore TS=`, `catalog CMD=`, `drill-driver|executor|scheduler`, `s3-access-test`, `ghcr-prune [CONFIRM=yes]`, dev: `venv lint fmt test all hooks`. Rerun one day = **clear** its run (`airflow tasks clear chatbot_bronze --start-date D --end-date D --yes`), not a new trigger (E49). After a laptop restart: `minikube start` first (E40).
+Day-2 targets (all in `make help`): `backfill [FROM TO REPROCESS DRY]`, `dag-runs`, `dag-report`, `sparkapp APP= DATE=`, `maintenance [DRY=yes]`, `backup-now`, `restore-metastore TS=`, `catalog CMD=`, `drill-driver|executor|scheduler`, `s3-access-test`, `ghcr-prune [CONFIRM=yes]`, dev: `venv lint fmt test all hooks`. Rerun one day = **clear** its run (`airflow tasks clear chatbot_bronze --start-date D --end-date D --yes`), not a new trigger (E49). In `make dag-runs` the run for day D is named `…__D+1` (run_id follows `run_after` = interval end); its `logical_date` = `ds` = D (E38). After a laptop restart: `minikube start` first (E40).
 
 ## Versions and why
 
@@ -76,6 +76,8 @@ Day-2 targets (all in `make help`): `backfill [FROM TO REPROCESS DRY]`, `dag-run
 ## Resource footprint (measured 2026-10-27, after the from-zero demo)
 
 RAM: node 4,393 Mi used idle (60 % of Allocatable). Largest pods: scheduler 615 Mi (during a maintenance task), HMS 517, triggerer 516, dag-processor 393, kube-apiserver 379, api-server 353, Postgres 117, MinIO 106, operator 93. Node memory **requests**: 4,036 Mi idle (3,524 measured + 512 for the E52 scheduler raise). A bronze run adds driver 2 Gi (1g heap + 1g overhead for pandas) + executor 1.1 Gi → **7,236 of 7,268 Mi**: it fits with 32 Mi to spare, so a second Spark app at the same moment (e.g. maintenance) waits `Pending` until the first ends (safe, not an OOM). validate needs 2.6 Gi, maintenance 2.6 Gi.
+
+**Proof that Airflow orchestrates and Spark works** (10-27, rerun of 07-24 by `tasks clear`, `04_process.md`): node memory requests **4,036 Mi idle → ~7,236 Mi while bronze runs → 4,036 Mi after**; the `spark-jobs` namespace is empty before and after (`delete_on_termination`), while the Airflow pods stay ≈ 1.6 Gi and flat. Result unchanged: 12,970 / 6,485, 23/23. Use node *requests* as evidence: metrics-server samples too slowly for 20–60 s Spark pods. CPU requests show ~8 allocatable cores despite `--cpus=6` (CPU side of E25, harmless).
 
 Disk (Docker Desktop's `docker_data.vhdx`): Minikube node volume **8.3 GB** (node image store + PVC data), kicbase image ~1.9 GB (part of 7.6 GB `Images`, which also holds the Task 1 images), `~/.minikube` 0.86 GB, dev `.venv` 0.33 GB → **≈ 11 GB for Task 2**. First pull of the Airflow image from GHCR took ~10 min. Cleanup after the task: `minikube delete` (frees the node volume, **deletes all data**), `docker builder prune`, compact the vhdx (Task 1 `04_process.md` 1.15).
 
@@ -120,7 +122,7 @@ Disk (Docker Desktop's `docker_data.vhdx`): Minikube node volume **8.3 GB** (nod
 | 11 | Ingestion | daily landing files, reprocess = clear the day | JDBC/CDC, late data |
 | 12 | Change management | branches + PRs (#1–#37), tags | branch protection (paid plan for private repos) |
 
-## Errors met and lessons (details: `05_errors_and_fixes.md`, E25–E52)
+## Errors met and lessons (details: `05_errors_and_fixes.md`, E25–E53)
 
 - **Resources are what the kubelet believes** (E25 Allocatable, E52 LocalExecutor workers): measure, then size; check restart counts, a green run can hide OOM kills.
 - **Airflow 3 changed defaults**: timedelta/cron schedules give zero-length intervals (E38), manual runs may have no logical date and templates render strictly (E47), one run per logical date (E49), DagBag API (E34), hostname for logs (E37).
@@ -133,6 +135,11 @@ Disk (Docker Desktop's `docker_data.vhdx`): Minikube node volume **8.3 GB** (nod
 
 - Task 3 starts with **Silver** (`jobs/silver_transform.py`, typed/deduped/flagged, `final_intent`), added to `chatbot_bronze` (→ `chatbot_pipeline`), then Trino on Bronze + Silver. Required pytest topic: Oracle timestamp parsing.
 - Open with the leader: D6 (Silver placement), public vs private GHCR images.
+- **Design notes (10-27):**
+  - *Scale.* The pattern is standard (Spark Operator + Airflow, Iceberg + catalog + S3, CI → registry → deploy by digest, idempotent partitions); the deployment is lab-sized. Job code, DAG logic and CI carry over; the platform layer is replaced, not enlarged: multi-node managed K8s + autoscaling, KubernetesExecutor/Celery + HA scheduler, HA Postgres / S3 / ≥ 2 HMS (or a REST catalog), GitOps deploy, off-cluster backups, Vault/External Secrets.
+  - *First bottleneck for more data:* the Excel read (`pd.read_excel` on the driver, `bronze_ingest.py:46`): single-threaded and bounded by driver memory, more executors do not help. Everything after Bronze reads Parquet in parallel.
+  - *Landing stays xlsx* (what the source delivers; Bronze is where raw input becomes Parquet). Alternatives: simulator writes Parquet (converter at the edge; record the xlsx name for lineage), or `binaryFile` + `mapInPandas` to parse one file per executor task. Production: Parquet/CSV export or JDBC/CDC at the source. Note: the Excel is parsed twice today (simulator + Bronze).
+  - *Event-driven option:* start a run when the landing file arrives (`S3KeySensor` / Airflow 3 asset) instead of at midnight; only if Task 3+ needs it.
 - Off-cluster backup copy; WAP; History Server — only if Task 3+ needs them.
 
 ## Files
