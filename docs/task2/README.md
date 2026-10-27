@@ -89,6 +89,7 @@ Disk (Docker Desktop's `docker_data.vhdx`): Minikube node volume **8.3 GB** (nod
 | Backfill 24 days, twice | identical per-day counts, 23/23 ×18, 6 skipped |
 | Day-generic DQ rules (13) + exact reconciliation (10) | 23 checks per day, all pass |
 | Least privilege | `make s3-access-test`: allowed and **denied** operations per MinIO user |
+| Automation (nobody triggered) | daily `chatbot_bronze` scheduled run (empty day skipped) ✅, weekly `lake_maintenance` ✅, `pg-backup` CronJob first run 10-28 01:00 UTC ⏳ (`06_validation.md` §3) |
 | From zero | `k8s-up` 12.5 min (run 1; run 2 longer: Airflow image pull ~10 min) + `k8s-demo` 16 min, PASSED, 0 restarts |
 
 ## Failure drills (details: `07_drills.md`)

@@ -139,6 +139,8 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 | 10-25 | Disk cleanup: build cache pruned (2.085 GB), fstrim + `diskpart compact` → Docker vhdx 22.9 → 9.45 GB, Ubuntu vhdx 9.02 → 8.24 GB (−14.2 GB total); C: free 87.2 GB. Images and data volumes kept. E24 (Linux `wsl` package vs `wsl.exe`) | `dir` before/after |
 | 10-25 | **Task 2 plan** reviewed and saved in `docs/task2/01–07`. Fixes: operator webhook must stay on; chart 1.22.0 has no 3.3.x default; thin images need a second copy in Minikube (+4.16 GB); control plane missing from RAM budget; hive-site.xml secret; 6 empty days in backfill; Task 2 errors from E25 | upstream Dockerfiles, chart index, PyPI, minikube constants |
 
+| 10-27 | Automation evidence = **C**: scheduled `chatbot_bronze` (empty day skipped) and `lake_maintenance` runs prove the scheduler; first `pg-backup` CronJob run 10-28 01:00 UTC. A new-data end-to-end automatic run needs a replay clock/event trigger (option A) → revisit at the start of Task 3 | `docs/task2/06_validation.md` §3 |
+
 ## 5b. Reading notes (Bee's ratings, 10-15)
 
 | Source | Bee's takeaway | Gap to fill |
@@ -187,5 +189,6 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 - Task 2 done, tag `task2-v1`; read `docs/task2/README.md` first (architecture, run, decisions, gaps closed/open, lessons).
 - Cluster state: Minikube running with the from-zero load (Bronze 18 days, Airflow history since 10-27, `chatbot_bronze` + `lake_maintenance` unpaused, `alert_smoke` paused). `minikube stop` to free RAM; `minikube start` before use (E40, E53).
 - 10-27 after the tag: restart after a stop (E53); resource proof of orchestrator vs worker by rerunning 07-24 (`docs/task2/04_process.md`, README "Resource footprint"): requests 4,036 → ~7,236 → 4,036 Mi, 12,970 / 6,485 rows, 23/23. Design notes added to the README (xlsx landing, pandas bottleneck, scaling).
+- Pending check 10-28: first `pg-backup` CronJob run (01:00 UTC) → fill `docs/task2/06_validation.md` §3.
 - Next: Task 3 = Silver Spark job (D6, confirm with the leader) → Trino. New errors from **E54**.
 - Open questions for the leader: D6 Silver placement; public vs private GHCR images; off-cluster backup copy (backups live in the same MinIO).
