@@ -38,3 +38,4 @@ Observed 2026-10-25: 0 parse failures (no NULL day); `unmatched_same_day` = `unm
 | Task 1 `make acceptance` after `bronze_ingest.py` change | PASSED | 17/17, 23/23, PASSED, exit 0 | 2026-10-25 |
 | Backfill 07-02 → 07-25 (18 loaded, 6 skipped) | sums = totals above | 18 days rows = expected, 23/23 each; 6 days skipped; 25 runs success | 2026-10-26 |
 | Backfill ×2 → identical counts per day | same rows, 23/23 | identical on 18 days × 2 tables, 23/23 ×18 (backfill_id 1 and 2) | 2026-10-26 |
+| From zero (`minikube delete` → `make k8s-up` → `make k8s-demo`), run 2 after E52 | 18 days loaded = expected, 6 skipped, 0 failed, scheduler 0 restarts | landing 18 days × 2 OK (21,224 / 10,729); 36 bronze lines = expected; 23/23 ×18; 0 failed; 0 restarts; demo 16m08s | 2026-10-27 |

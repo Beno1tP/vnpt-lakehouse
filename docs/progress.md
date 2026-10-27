@@ -59,8 +59,8 @@ The deadline is tight for "learn K8s + 8 tools". **Learn K8s just-in-time while 
 | Task | Scope | Docs | Status |
 |---|---|---|---|
 | 1 | MinIO + Spark → Iceberg (Docker Compose) | `docs/task1/` | ✅ 10-18 (Bronze validated, idempotent, from-zero tested, failure drills, README); presented 10-23; Silver deferred (Bronze only for now) |
-| 2 | Minikube + Airflow running the Spark job | `docs/task2/` | 🟡 10-25 plan reviewed (operator 2.2.1, chart 1.22.0 + Airflow 3.3.2, minikube v1.39.0/K8s v1.37.0); D1 chart 1.22.0 + Airflow 3.3.2, D2 = A (daily 07-02→07-25, 6 skipped), D3 Spark-only expected counts; 10-25: 2.0 done (minikube v1.39.0/K8s v1.37.0, Allocatable 7268 Mi), 2.1 done (Postgres, MinIO, HMS in `lake`), 2.2 done (operator 2.2.1, landing, SparkApplication + validator on K8s); plan v2: CI→GHCR (D5) + production gaps (03_plan.md §G/§H); 10-26: 2.0b/2.0c CI→GHCR, 2.1b MinIO service users, 2.3 Airflow, 2.4 DAG + DQ rules, **2.5 backfill ×2 + drills 1–3 done** (E25–E41); next 2.6 durable logs + alert + 2 h deadline |
-| 3 | Trino querying Iceberg | `docs/task3/` | ⬜ |
+| 2 | Minikube + Airflow running the Spark job | `docs/task2/` | ✅ 10-27 (`task2-v1`): Bronze on K8s under Airflow 3.3.2, CI → GHCR by digest, 24 daily runs (18 load / 6 skip, 23/23 checks), drills 1–7, backup/restore, maintenance DAG, Telegram alerts + 2 h deadline, remote logs, from zero `make k8s-up && make k8s-demo` with 0 restarts; E25–E52; summary `docs/task2/README.md` |
+| 3 | Trino querying Iceberg (starts with Silver, D6) | `docs/task3/` | ⬜ next |
 | 4 | StarRocks Gold via SQL/dbt | `docs/task4/` | ⬜ |
 | 5 | Superset dashboard UC4–UC8 | `docs/task5/` | ⬜ |
 
@@ -177,3 +177,10 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 - Chat phase ended. Continue from `docs/HANDOFF.md` (sections 6–10).
 - Open: **E17** (confirm in HMS log; hadoop-aws 3.1.0), infra redesign toward pulled images + compose config, disk audit (setup used 30–50 GB).
 - Data reminder: trial/imaginary data, lab only; keep local.
+
+## 8. Status 2026-10-27 (end of Task 2)
+
+- Task 2 done, tag `task2-v1`; read `docs/task2/README.md` first (architecture, run, decisions, gaps closed/open, lessons).
+- Cluster state: Minikube running with the from-zero load (Bronze 18 days, Airflow history since 10-27, `chatbot_bronze` + `lake_maintenance` unpaused, `alert_smoke` paused). `minikube stop` to free RAM; `minikube start` before use (E40).
+- Next: Task 3 = Silver Spark job (D6, confirm with the leader) → Trino. New errors from **E53**.
+- Open questions for the leader: D6 Silver placement; public vs private GHCR images; off-cluster backup copy (backups live in the same MinIO).

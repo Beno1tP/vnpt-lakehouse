@@ -2,6 +2,8 @@
 
 Written 2026-10-16 13:50 (UTC+7) at the end of the claude.ai chat phase. Read this first, then `CLAUDE.md`, `docs/progress.md`, and `docs/task1/*`.
 
+**Update 2026-10-27:** this file is the 10-16 chat → Claude Code handoff (Task 1 era). Current state: Task 1 ✅ (`task1-v3-operable`), **Task 2 ✅ (`task2-v1`, `docs/task2/README.md`)**, next Task 3 (Silver first, then Trino). Live status: `docs/progress.md` §4 and §8. Sections below are historical.
+
 ---
 
 ## 0. Ground rules (from Bee)
