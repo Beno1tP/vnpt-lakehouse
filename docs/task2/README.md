@@ -75,7 +75,7 @@ Day-2 targets (all in `make help`): `backfill [FROM TO REPROCESS DRY]`, `dag-run
 
 ## Resource footprint (measured 2026-10-27, after the from-zero demo)
 
-RAM: node 4,393 Mi used idle (60 % of Allocatable). Largest pods: scheduler 615 Mi (during a maintenance task), HMS 517, triggerer 516, dag-processor 393, kube-apiserver 379, api-server 353, Postgres 117, MinIO 106, operator 93. One Spark run adds driver 1.5 Gi + executor 1.15 Gi of requests; node requests with a run ≈ 6.6 of 7.27 Gi.
+RAM: node 4,393 Mi used idle (60 % of Allocatable). Largest pods: scheduler 615 Mi (during a maintenance task), HMS 517, triggerer 516, dag-processor 393, kube-apiserver 379, api-server 353, Postgres 117, MinIO 106, operator 93. Node memory **requests**: 4,036 Mi idle (3,524 measured + 512 for the E52 scheduler raise). A bronze run adds driver 2 Gi (1g heap + 1g overhead for pandas) + executor 1.1 Gi → **7,236 of 7,268 Mi**: it fits with 32 Mi to spare, so a second Spark app at the same moment (e.g. maintenance) waits `Pending` until the first ends (safe, not an OOM). validate needs 2.6 Gi, maintenance 2.6 Gi.
 
 Disk (Docker Desktop's `docker_data.vhdx`): Minikube node volume **8.3 GB** (node image store + PVC data), kicbase image ~1.9 GB (part of 7.6 GB `Images`, which also holds the Task 1 images), `~/.minikube` 0.86 GB, dev `.venv` 0.33 GB → **≈ 11 GB for Task 2**. First pull of the Airflow image from GHCR took ~10 min. Cleanup after the task: `minikube delete` (frees the node volume, **deletes all data**), `docker builder prune`, compact the vhdx (Task 1 `04_process.md` 1.15).
 
