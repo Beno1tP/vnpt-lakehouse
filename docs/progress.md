@@ -43,6 +43,8 @@ Update this file at the end of each work block (status, decisions, blockers).
 
 ## 3. Scope for the 2026-10-23 demo
 
+> **Superseded (10-18):** the lab moved to standalone tasks done to an operable standard (§4); the 10-23 demo presented Task 1 only. This list is kept as the original scope; most "Should/Could" items (alert, drills, maintenance DAG, CI) were delivered in Task 2.
+
 The deadline is tight for "learn K8s + 8 tools". **Learn K8s just-in-time while building**, not as a separate 2-week course.
 
 | Priority | Item |
@@ -59,25 +61,27 @@ The deadline is tight for "learn K8s + 8 tools". **Learn K8s just-in-time while 
 | Task | Scope | Docs | Status |
 |---|---|---|---|
 | 1 | MinIO + Spark → Iceberg (Docker Compose) | `docs/task1/` | ✅ 10-18 (Bronze validated, idempotent, from-zero tested, failure drills, README); presented 10-23; Silver deferred (Bronze only for now) |
-| 2 | Minikube + Airflow running the Spark job | `docs/task2/` | ✅ 10-27 (`task2-v1`): Bronze on K8s under Airflow 3.3.2, CI → GHCR by digest, 24 daily runs (18 load / 6 skip, 23/23 checks), drills 1–7, backup/restore, maintenance DAG, Telegram alerts + 2 h deadline, remote logs, from zero `make k8s-up && make k8s-demo` with 0 restarts; E25–E52; summary `docs/task2/README.md` |
+| 2 | Minikube + Airflow running the Spark job | `docs/task2/` | ✅ 10-27 (`task2-v1`): Bronze on K8s under Airflow 3.3.2, CI → GHCR by digest, 24 daily runs (18 load / 6 skip, 23/23 checks), drills 1–7, backup/restore, maintenance DAG, Telegram alerts + 2 h deadline, remote logs, from zero `make k8s-up && make k8s-demo` with 0 restarts; E25–E53; summary `docs/task2/README.md` |
 | 3 | Trino querying Iceberg (starts with Silver, D6) | `docs/task3/` | ⬜ next |
 | 4 | StarRocks Gold via SQL/dbt | `docs/task4/` | ⬜ |
 | 5 | Superset dashboard UC4–UC8 | `docs/task5/` | ⬜ |
 
-## 4b. Day plan and status
+## 4b. Day plan (10-15) and actual outcome
+
+> **Historical.** This is the original 8-day plan for the whole lab. It was superseded on 10-18 by the per-task approach (§4), so the dates no longer hold; the Status column below records what actually happened (updated 10-27). Live tracker = §4.
 
 Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 
-| Day | Phase | Work | Done when | Status |
+| Day (planned) | Phase | Work | Done when | Actual outcome |
 |---|---|---|---|---|
-| Thu 10-15 | 0 + Task 1 | Install / configure tools, `.wslconfig`; repo skeleton + `CLAUDE.md`; DuckDB expected numbers; `docs/metrics.md`; K8s basics (Pod, Deployment, Service, PVC, Secret, ConfigMap) about 2 h | Expected numbers saved (✅ `docs/task1/06_validation.md`); `kubectl get nodes` works | 🔄 |
-| Fri 10-16 | Task 1 | Compose: MinIO + Postgres + Hive Metastore; Spark writes Bronze (Silver stretch) | Bronze counts = `06_validation.md`; rerun gives no duplicates | ✅ (finished 10-18) |
-| Sat–Sun 10-17/18 | 2 | Minikube: MinIO/Postgres/HMS via Helm; Spark Operator; `SparkApplication` runs the job | `make up` from zero works | ⬜ |
-| Mon 10-19 | 3 | Airflow Helm + DAG (sensor → bronze → silver → dbt → checks) | Scheduled + manual runs succeed; retry works | ⬜ |
-| Tue 10-20 | 4–5a | Trino on Iceberg; StarRocks FE/BE + Iceberg catalog | Trino = Spark counts; StarRocks reads Iceberg | ⬜ |
-| Wed 10-21 | 5b | dbt Gold (UC models) + tests + reconciliation | `dbt build` passes; Gold = DuckDB | ⬜ |
-| Thu 10-22 | 6–7 | Superset dashboard; Telegram alert; one failure drill; README | Dashboard numbers reconciled; alert received | ⬜ |
-| Fri 10-23 | 9 | Rehearse; record backup video; **demo** | Demo delivered | ⬜ |
+| Thu 10-15 | 0 + Task 1 | Install / configure tools, `.wslconfig`; repo skeleton + `CLAUDE.md`; DuckDB expected numbers; `docs/metrics.md`; K8s basics (Pod, Deployment, Service, PVC, Secret, ConfigMap) about 2 h | Expected numbers saved (✅ `docs/task1/06_validation.md`); `kubectl get nodes` works | ✅ except `docs/metrics.md` (UC metric definitions → Task 4/5); `kubectl` works since Task 2 step 2.0 (10-25) |
+| Fri 10-16 | Task 1 | Compose: MinIO + Postgres + Hive Metastore; Spark writes Bronze (Silver stretch) | Bronze counts = `06_validation.md`; rerun gives no duplicates | ✅ 10-18 (Bronze; Silver → Task 3, D6) |
+| Sat–Sun 10-17/18 | 2 | Minikube: MinIO/Postgres/HMS via Helm; Spark Operator; `SparkApplication` runs the job | `make up` from zero works | ✅ in Task 2, 10-25/26 (kustomize manifests instead of Helm for the lake; from zero = `make k8s-up`) |
+| Mon 10-19 | 3 | Airflow Helm + DAG (sensor → bronze → silver → dbt → checks) | Scheduled + manual runs succeed; retry works | 🔄 Task 2 ✅ `check_landing → bronze → validate → notify`, retries + drills; silver = Task 3, dbt = Task 4 |
+| Tue 10-20 | 4–5a | Trino on Iceberg; StarRocks FE/BE + Iceberg catalog | Trino = Spark counts; StarRocks reads Iceberg | ⬜ Task 3 / Task 4 |
+| Wed 10-21 | 5b | dbt Gold (UC models) + tests + reconciliation | `dbt build` passes; Gold = DuckDB | ⬜ Task 4 |
+| Thu 10-22 | 6–7 | Superset dashboard; Telegram alert; one failure drill; README | Dashboard numbers reconciled; alert received | 🔄 alert + drills 1–7 + README ✅ (Task 2); Superset ⬜ Task 5 |
+| Fri 10-23 | 9 | Rehearse; record backup video; **demo** | Demo delivered | ✅ demo delivered with Task 1 |
 
 ---
 
@@ -153,8 +157,8 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 - [x] `apache/hive:4.0.1` exists (also `standalone-metastore-4.1.0` / `4.2.1`) — no longer used (E16)
 - [x] Hadoop bundled in `apache/hive:3.1.3` = hadoop-common **3.1.0** → `HADOOP_AWS_VERSION=3.1.0`
 - [x] `apache/spark:3.5.9-scala2.12-java17-python3-ubuntu` pulls
-- [ ] Pin MinIO and aws-cli by digest (`.env` still says `:latest`)
-- [ ] Confirm the Spark Operator chart version that supports Spark 3.5.9
+- [x] Pin MinIO and aws-cli by digest (`infra/compose/.env.example`: both `@sha256:`)
+- [x] Spark Operator for Spark 3.5.9: **2.2.1** (last release on Spark 3.5; 2.3+ = Spark 4.0), pinned by digest in Task 2
 
 ## 6b. Errors met (live)
 
@@ -172,7 +176,7 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 | Disk growth | < 30 GB free | Prune images; expire snapshots; compact the WSL2 disk |
 
 
-## 7. Handoff to Claude Code (2026-10-16 13:50)
+## 7b. Handoff to Claude Code (2026-10-16 13:50)
 
 - Chat phase ended. Continue from `docs/HANDOFF.md` (sections 6–10).
 - Open: **E17** (confirm in HMS log; hadoop-aws 3.1.0), infra redesign toward pulled images + compose config, disk audit (setup used 30–50 GB).
@@ -181,6 +185,7 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 ## 8. Status 2026-10-27 (end of Task 2)
 
 - Task 2 done, tag `task2-v1`; read `docs/task2/README.md` first (architecture, run, decisions, gaps closed/open, lessons).
-- Cluster state: Minikube running with the from-zero load (Bronze 18 days, Airflow history since 10-27, `chatbot_bronze` + `lake_maintenance` unpaused, `alert_smoke` paused). `minikube stop` to free RAM; `minikube start` before use (E40).
-- Next: Task 3 = Silver Spark job (D6, confirm with the leader) → Trino. New errors from **E53**.
+- Cluster state: Minikube running with the from-zero load (Bronze 18 days, Airflow history since 10-27, `chatbot_bronze` + `lake_maintenance` unpaused, `alert_smoke` paused). `minikube stop` to free RAM; `minikube start` before use (E40, E53).
+- 10-27 after the tag: restart after a stop (E53); resource proof of orchestrator vs worker by rerunning 07-24 (`docs/task2/04_process.md`, README "Resource footprint"): requests 4,036 → ~7,236 → 4,036 Mi, 12,970 / 6,485 rows, 23/23. Design notes added to the README (xlsx landing, pandas bottleneck, scaling).
+- Next: Task 3 = Silver Spark job (D6, confirm with the leader) → Trino. New errors from **E54**.
 - Open questions for the leader: D6 Silver placement; public vs private GHCR images; off-cluster backup copy (backups live in the same MinIO).

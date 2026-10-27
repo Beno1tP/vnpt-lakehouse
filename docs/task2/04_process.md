@@ -14,6 +14,18 @@ Time spent:
 
 ---
 
+### 2026-10-27 ~03:00–04:00 UTC — after the tag: restart (E53) + resource proof "Airflow orchestrates, Spark works"
+Did (Bee): `kubectl -n lake get pods` → `localhost:8080 … connection refused` (**E53**) → `minikube start`; MinIO console via `kubectl -n lake port-forward svc/minio 9001:9001` (buckets checked: landing = one xlsx per table and day; warehouse = one Parquet data file per day partition + Iceberg `metadata/`). Then 3 stages around a rerun of 2024-07-24 (`airflow tasks clear chatbot_bronze --start-date 2024-07-24 --end-date 2024-07-24 --yes`, run in the api-server, E49/E52).
+Observed:
+| Stage | Node memory requests | `spark-jobs` pods | Airflow pods (`top`) |
+|---|---|---|---|
+| 1 idle | **4036 Mi (55 %)**, limits 7516 Mi (103 %, overcommit allowed); node used 3312 Mi; CPU requests 2130m = 26 % | none | api-server 263 Mi, dag-processor 519, scheduler 313, triggerer 529 (≈ 1.6 Gi) |
+| 2 run (watched, Bee: "as expected") | ~**7236 Mi** while bronze ran (driver 2048 + executor 1152 = +3200 Mi, `bronze_sparkapp.yaml`) | bronze driver + exec, then validate driver + exec → Completed → deleted | roughly flat |
+| 3 after | **4036 Mi (55 %)** | `No resources found` (`delete_on_termination: True`) | flat |
+Result: run `backfill__2024-07-25` (logical date 07-24) success, start 03:48:52 UTC; `dag-report`: landing yes/yes, 12,970 / 6,485 rows read = written, `23/23` (each line counted in 2 log files = first load + rerun, identical).
+Learned: the scheduler/orchestrator (≈ 1.6 Gi, flat) decides, launches and watches; Spark borrows +3.2 Gi only while it has work, and Kubernetes returns it; that's why one 8 GiB node holds the stack. Scheduler 313 Mi vs 615–893 Mi before = fresh pod + `parallelism: 2` (E52). **Run naming:** with `CronDataIntervalTimetable` the run_id is named after `run_after` (= interval end, D+1) while `logical_date` = `ds` = D; `tasks clear --start-date D` matches the logical date. CPU requests show ~8 allocatable cores despite `--cpus=6`: CPU side of E25 (kubelet reads the host), harmless (CPU throttles, does not OOM). metrics-server is too slow for 20–60 s Spark pods, so node **requests** are the reliable evidence, not `top`.
+Next: Task 3 (Silver).
+
 ### 2026-10-27 — 2.8 closing: measurements, README, tag
 Measured (Bee): node 4,393 Mi used (60 %); top pods scheduler 615 Mi, HMS 517, triggerer 516, dag-processor 393, apiserver 379, api-server 353; Docker `Images` 7.58 GB (12, 1.7 GB reclaimable), `Local Volumes` 8.34 GB (Minikube node), build cache 0.88 GB, `~/.minikube` 856 MB; `lake_maintenance` catch-up run `scheduled__2026-10-25T02:00` success in 31 s right after the from-zero load.
 Wrote (Claude): `docs/task2/README.md` (architecture, run, versions, decisions, deviations from the lab doc, footprint, results, drills, gaps closed/open, lessons, files); root README, `progress.md` §4 + §8, `HANDOFF.md` banner, `CLAUDE.md` (current = Task 3, Task 2 operating facts). Next: PR, then Bee tags `task2-v1`.
