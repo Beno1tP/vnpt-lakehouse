@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-10-27 — from-zero run 1: k8s-up 12m31s ✅, k8s-demo 43m56s PASSED but scheduler OOMKilled ×9 (E52)
+Did (Bee): PR #35 merged; baseline `dag-report` (only 07-24: remote logs exist since 2.6, the 2.5 backfill logs were local); `minikube delete`; `time make k8s-up` → **12m31s**, all pods Running/Completed, Allocatable 7442652Ki, operator rev 1, Airflow rev 1 (`git 7a318b7`, airflow `cf03f5d3…`), admin created; `time make k8s-demo` → **43m56s**: landing 18 days × 2 tables OK (21,224 / 10,729), backfill 24 runs, 0 failed, `[validate] 23/23` ×18, landing no/no ×6 (+ the scheduled 2026-10-25 run, skipped), `PASSED`.
+But: exit 137 + `container not found ("scheduler")` ~8× during the poll; scheduler RESTARTS 9, OOMKilled at 1Gi; 7 bronze attempt=2; `[bronze]` lines missing for 07-03/15/17/19/23/25 (retry reattached to the running driver) → **E52**; fix on branch `task2/scheduler-oom`; from-zero to be repeated with 0 restarts as acceptance.
+
 ### 2026-10-27 — pre-delete checks: token copied, baseline report empty (E51)
 Did (Bee): copied the GHCR pull token from Secret `ghcr-pull` into secrets.env without printing it; `make k8s-secrets` → `ghcr-dockerconfig.json`; sha256 prefix cluster = render = `7616eea4db01`; PR #34 merged (main `8b6cfa1`, airflow `cf03f5d3…`); `make dag-report` → **0 lines** (E51) → fix: report from `s3://airflow-logs` (branch `task2/dag-report-s3`), run again before `minikube delete`.
 
