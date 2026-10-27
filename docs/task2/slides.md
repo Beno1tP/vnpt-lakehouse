@@ -1,4 +1,3 @@
----
 # Slide 1 — Task 2: Spark on Kubernetes, orchestrated by Airflow
 VNPT AI · Data Engineering onboarding lab · Task 2 of 5
 The Task 1 Bronze job, run per day on Minikube by Airflow, shipped by CI
