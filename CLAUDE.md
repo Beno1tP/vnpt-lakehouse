@@ -52,8 +52,8 @@ Python 3.11 · Spark 3.5.9 (Scala 2.12, Java 17) · Iceberg 1.11.0 runtime, form
 - Task 2 tech = Minikube + Airflow + Spark only (no DuckDB etc.); Trino is Task 3. Expected counts via Spark SQL (D3).
 - Excel input comes from the MinIO landing zone `s3://landing/<table>/dt=YYYY-MM-DD/`, never a hostPath.
 - Deployed image digests: `infra/k8s/images.env` (+ kustomize `images:`), bumped by PR after an images run.
-- Errors: docs/task2/05_errors_and_fixes.md (E25–E53); Task 3 errors start at **E54**.
-- Bring-up: `make k8s-up` (idempotent, also from zero) + `make k8s-demo` (landing → backfill → report; fails on failed runs or scheduler restarts). Airflow CLI from make runs in the **api-server** container (`AF`), never the scheduler (E52). Scheduler: LocalExecutor `parallelism: 2`, 1Gi/1536Mi. Rerun a day = `airflow tasks clear`, not trigger (E49); in `dag-runs` day D's run_id is `…__D+1` (named after `run_after`), logical_date = D. `localhost:8080 refused` from kubectl = no context → `minikube start` (E53). `dag-report` reads `s3://airflow-logs` (E51).
+- Errors: docs/task2/05_errors_and_fixes.md (E25–E54); Task 3 errors start at **E55**.
+- Bring-up: `make k8s-up` (idempotent, also from zero) + `make k8s-demo` (landing → backfill → report; fails on failed runs or scheduler restarts). Airflow CLI from make runs in the **api-server** container (`AF`), never the scheduler (E52). Scheduler: LocalExecutor `parallelism: 2`, 1Gi/1536Mi. Rerun a day = `airflow tasks clear`, not trigger (E49); in `dag-runs` day D's run_id is `…__D+1` (named after `run_after`), logical_date = D. `localhost:8080 refused` from kubectl = no context → `minikube start` (E53). Apply `infra/k8s/` **only with `-k`** (`make k8s-up`), never `-f` on single files: generated Secret names have hash suffixes (E54); after fixing a StatefulSet template, delete its never-Ready pod. `dag-report` reads `s3://airflow-logs` (E51).
 - Bee's gh is 2.103.2 (official apt repo), modern flags work.
 
 ## Commands

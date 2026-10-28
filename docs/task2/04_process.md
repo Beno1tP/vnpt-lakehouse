@@ -14,6 +14,13 @@ Time spent:
 
 ---
 
+### 2026-10-28 — E54 MinIO down (Secret name drift) fixed; backup slot missed
+Did (Bee): opened the K8s Dashboard (empty = `default` namespace; ours are in `lake`/`airflow`/…); `minio-0` `CreateContainerConfigError` → diagnosis (secrets, StatefulSet secret ref, rollout history: revision 2 with the plain name) → `make k8s-up` from `main` `98a327a` → `kubectl -n lake delete pod minio-0` (forced rollback).
+Observed: `minio-0` Running in 6 s; `postgres` StatefulSet also `configured` but its pod not rolled (32 h); Airflow untouched (no restarts; migrations job = normal helm upgrade); `secrets.env` mtime 2026-10-26 17:56Z → Secret `configured` lines are annotation-only. No `pg-backup` job at all: Bee: cluster not running at 01:00 UTC → 10-28 slot missed.
+Decided (Bee): option 1 = leave Minikube running overnight and check the 10-29 01:00 UTC run (laptop must not sleep).
+Learned: E54 (apply `infra/k8s/` only with `-k`; delete a StatefulSet pod that never became Ready after fixing its template). A laptop cluster isn't on 24/7: scheduled infrastructure jobs need the cluster up at their slot or within `startingDeadlineSeconds`.
+Next: `make backup-now` (backup path after the fix); 10-29 check `kubectl -n lake get jobs | grep pg-backup`.
+
 ### 2026-10-27 — automation evidence (decision C)
 Question (Bee): with mostly manual commands, did we use Airflow's scheduler at all? Did (Bee): `make dag-runs | grep scheduled__`, `airflow dags list-runs lake_maintenance`, `kubectl -n lake get jobs`, CronJob creation/lastSchedule.
 Observed: `chatbot_bronze` `scheduled__2026-10-27` (logical 10-26) success, skipped for no landing file; `lake_maintenance` `scheduled__2026-10-25T02:00` (logical 10-18) success in 31 s; no `pg-backup` job yet: CronJob created 01:38:15Z, after the 01:00 slot → first run 10-28 01:00 UTC.

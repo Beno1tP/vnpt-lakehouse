@@ -189,6 +189,7 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 - Task 2 done, tag `task2-v1`; read `docs/task2/README.md` first (architecture, run, decisions, gaps closed/open, lessons).
 - Cluster state: Minikube running with the from-zero load (Bronze 18 days, Airflow history since 10-27, `chatbot_bronze` + `lake_maintenance` unpaused, `alert_smoke` paused). `minikube stop` to free RAM; `minikube start` before use (E40, E53).
 - 10-27 after the tag: restart after a stop (E53); resource proof of orchestrator vs worker by rerunning 07-24 (`docs/task2/04_process.md`, README "Resource footprint"): requests 4,036 → ~7,236 → 4,036 Mi, 12,970 / 6,485 rows, 23/23. Design notes added to the README (xlsx landing, pandas bottleneck, scaling).
-- Pending check 10-28: first `pg-backup` CronJob run (01:00 UTC) → fill `docs/task2/06_validation.md` §3.
-- Next: Task 3 = Silver Spark job (D6, confirm with the leader) → Trino. New errors from **E54**.
+- 10-28: E54 (MinIO Secret name drift after a non-kustomize apply) fixed; 10-28 backup slot missed (cluster down).
+- Pending check 10-29: first scheduled `pg-backup` run (01:00 UTC, Minikube left running) → fill `docs/task2/06_validation.md` §3.
+- Next: Task 3 = Silver Spark job (D6, confirm with the leader) → Trino. New errors from **E55**.
 - Open questions for the leader: D6 Silver placement; public vs private GHCR images; off-cluster backup copy (backups live in the same MinIO).
