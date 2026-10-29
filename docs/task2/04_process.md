@@ -14,6 +14,12 @@ Time spent:
 
 ---
 
+### 2026-10-29 — scheduled backup proven (catch-up after sleep)
+Did (Bee): `minikube status` (Running); `kubectl -n lake get jobs`; CronJob status; upload log of the job.
+Observed: `pg-backup-29887260 Complete 1/1, 5s, age 9h`; `lastScheduleTime 2026-10-29T01:00:00Z`, `lastSuccessfulTime 05:09:08Z`; job-name suffix 29887260 × 60 s = 2026-10-29T01:00:00Z (CronJob names jobs by scheduled minute); upload 321.71 KiB.
+Learned: the laptop slept through 01:00 UTC; on wake the CronJob controller ran the missed slot because it was still inside `startingDeadlineSeconds` (12 h). So the overnight plan (option 1) was not needed. A scheduled run after the E54 fix also replaces `make backup-now` as the post-fix check. Automation proof (06_validation §3) complete: daily DAG, weekly DAG, nightly backup.
+Next: PR (E54 + this), `minikube addons disable dashboard`, Task 3.
+
 ### 2026-10-28 — E54 MinIO down (Secret name drift) fixed; backup slot missed
 Did (Bee): opened the K8s Dashboard (empty = `default` namespace; ours are in `lake`/`airflow`/…); `minio-0` `CreateContainerConfigError` → diagnosis (secrets, StatefulSet secret ref, rollout history: revision 2 with the plain name) → `make k8s-up` from `main` `98a327a` → `kubectl -n lake delete pod minio-0` (forced rollback).
 Observed: `minio-0` Running in 6 s; `postgres` StatefulSet also `configured` but its pod not rolled (32 h); Airflow untouched (no restarts; migrations job = normal helm upgrade); `secrets.env` mtime 2026-10-26 17:56Z → Secret `configured` lines are annotation-only. No `pg-backup` job at all: Bee: cluster not running at 01:00 UTC → 10-28 slot missed.
