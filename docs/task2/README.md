@@ -89,7 +89,7 @@ Disk (Docker Desktop's `docker_data.vhdx`): Minikube node volume **8.3 GB** (nod
 | Backfill 24 days, twice | identical per-day counts, 23/23 ×18, 6 skipped |
 | Day-generic DQ rules (13) + exact reconciliation (10) | 23 checks per day, all pass |
 | Least privilege | `make s3-access-test`: allowed and **denied** operations per MinIO user |
-| Automation (nobody triggered) | daily `chatbot_bronze` scheduled run (empty day skipped) ✅, weekly `lake_maintenance` ✅, `pg-backup` CronJob first run 10-28 01:00 UTC ⏳ (`06_validation.md` §3) |
+| Automation (nobody triggered) | daily `chatbot_bronze` scheduled run (empty day skipped) ✅, weekly `lake_maintenance` ✅, `pg-backup` CronJob ✅ (10-29 slot, caught up 4 h late after sleep; 10-28 missed, cluster down) (`06_validation.md` §3) |
 | From zero | `k8s-up` 12.5 min (run 1; run 2 longer: Airflow image pull ~10 min) + `k8s-demo` 16 min, PASSED, 0 restarts |
 
 ## Failure drills (details: `07_drills.md`)
@@ -123,7 +123,7 @@ Disk (Docker Desktop's `docker_data.vhdx`): Minikube node volume **8.3 GB** (nod
 | 11 | Ingestion | daily landing files, reprocess = clear the day | JDBC/CDC, late data |
 | 12 | Change management | branches + PRs (#1–#37), tags | branch protection (paid plan for private repos) |
 
-## Errors met and lessons (details: `05_errors_and_fixes.md`, E25–E53)
+## Errors met and lessons (details: `05_errors_and_fixes.md`, E25–E54)
 
 - **Resources are what the kubelet believes** (E25 Allocatable, E52 LocalExecutor workers): measure, then size; check restart counts, a green run can hide OOM kills.
 - **Airflow 3 changed defaults**: timedelta/cron schedules give zero-length intervals (E38), manual runs may have no logical date and templates render strictly (E47), one run per logical date (E49), DagBag API (E34), hostname for logs (E37).
