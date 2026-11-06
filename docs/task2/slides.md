@@ -507,3 +507,56 @@ Chain: Spark Operator 2.2.1 (spark-submit 3.5.5) → driver Spark 3.5.9 → Iceb
 - Tag: task2-v1 · Docs: docs/task2/README.md, 04 (process), 05 (errors), 06 (validation), 07 (drills)
 
 Speaker notes: Stop the Task 1 Compose stack first; both share the 10 GiB WSL VM. `minikube stop` keeps the data; `minikube delete` removes it.
+
+---
+# Appendix A3 — Study notes: the stack in three rules
+
+Full answers to 52 study questions: `docs/task2/08_study_notes.md` (global view, then Kubernetes · Helm/GitOps · Spark · Airflow · idempotency · Iceberg/catalogs · query engines)
+
+- **Desired state, reconciled:** Kubernetes, the Spark Operator, Helm and Airflow store what should be and loop until reality matches (E54: a StatefulSet waits forever for a pod that never becomes Ready)
+- **A run is identified by its data, not its clock:** day D = `ds`; each run overwrites exactly its partition, so reruns and backfills are safe (E38, E49)
+- **Size from measurement:** the kubelet, the JVM and Airflow each believe something different about memory; requests, limits and heaps must agree (E25, E52)
+
+Visual: three columns, one icon each (loop arrows · calendar · gauge).
+
+Speaker notes: These three ideas explain most of the 55 errors across Tasks 1–2. The notes file maps each of Bee's questions to the place in the repo where it shows up.
+
+---
+# Appendix A4 — Kubernetes and memory, end to end
+
+- `kubectl apply` → API server (authn → RBAC → admission webhook) → etcd → controller → scheduler (requests vs Allocatable) → kubelet → containerd → runc; no dockershim since K8s 1.24
+- Allocatable = Capacity − kube-reserved − system-reserved − eviction threshold (ours 7,268 Mi, E25)
+- Spark pod limit = heap (`memory`) + `memoryOverhead`; heap = 300 MB reserved + 60 % unified (execution ⇄ storage) + 40 % user
+- JVM `OutOfMemoryError` = heap full · Kubernetes `OOMKilled` (exit 137) = whole container over its limit (heap + off-heap + Python + tmpfs)
+- Requests decide placement, limits decide death; usage only shows in `top`, sampled too slowly for 20 s Spark pods
+
+Visual: a stacked bar: node capacity → reserved → Allocatable → requests (Airflow, lake, driver 2 Gi, executor 1.1 Gi).
+
+Speaker notes: Our pandas-on-driver read lives in memoryOverhead, not in the heap; that is why the driver is 1g + 1g.
+
+---
+# Appendix A5 — Airflow 3 roles and idempotency
+
+| Component | Job |
+|---|---|
+| dag-processor | parse DAG files (untrusted code) → serialized DAGs |
+| scheduler | create runs per data interval, queue ready tasks, detect dead tasks by heartbeat |
+| executor (Local: inside the scheduler pod) | run tasks; `parallelism` = worker processes (E52) |
+| triggerer | async waits for deferred tasks, frees worker slots |
+| api-server | UI, REST, Task Execution API (JWT) |
+
+- Idempotency: partition overwrite (ours) · MERGE on a stable key · windowed recompute for late data
+- Airflow records task state, not data: a deleted partition after a green run is found only by data checks
+
+Speaker notes: Separating parsing, scheduling, execution and waiting is the main architectural change from Airflow 2.
+
+---
+# Appendix A6 — Iceberg catalogs: where we are, where it goes
+
+- Commit = new files + CAS swap of the metadata pointer in the catalog; COW for batch overwrites (ours), MOR for frequent upserts
+- Ours: HMS (thrift) for metadata + static S3 keys in every engine
+- Next generation: REST catalog (Polaris, Lakekeeper, Gravitino, Nessie) that also vends short-lived storage credentials
+- Maintenance: expire · compact · rewrite manifests · remove orphans; scheduled now, event-driven later
+- Strategy: keep the lab stack (lab doc, verified); for production replace the platform layer, keep the jobs, DAGs and CI
+
+Speaker notes: The catalog is the single point that makes Iceberg transactional; choosing it is choosing your engines, security model and operations load.

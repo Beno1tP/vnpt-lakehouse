@@ -155,4 +155,4 @@ Disk (Docker Desktop's `docker_data.vhdx`): Minikube node volume **8.3 GB** (nod
 | `infra/k8s/` | kustomize (namespaces, lake, rbac, secrets generator), `images.env`, `render-secrets.py`, `secrets.env.example` |
 | `infra/helm/` | values for Airflow and the Spark Operator |
 | `.github/` | `workflows/ci.yml`, `workflows/images.yml`, `scripts/` (Trivy counts, GHCR prune) |
-| `docs/task2/` | 01 knowledge · 02 config/budgets · 03 plan · 04 process · 05 errors · 06 validation · 07 drills |
+| `docs/task2/` | 01 knowledge · 02 config/budgets · 03 plan · 04 process · 05 errors · 06 validation · 07 drills · 08 study notes (52 Q&A, global + per stack) · slides (appendix A3–A6 = notes summary) |
