@@ -19,7 +19,7 @@ What Task 2 implements:
 - 24 calendar days (2024-07-02 → 07-25): 18 load, 6 have no export and are skipped
 - Same Bronze tables and rules as Task 1 (raw strings + load metadata), now partitioned by the data day
 
-Agenda: Knowledge (Kubernetes, Minikube, operators, Spark on K8s, Airflow 3, Helm, CI/CD) · Stack of this task · Running it (intervals, backfill, drills, backup, maintenance, sizing) · Errors
+Agenda: Knowledge (Kubernetes, Minikube, operators, Spark on K8s, Airflow 3, Helm, CI/CD) · Stack of this task · Running it (intervals, backfill, drills, backup, maintenance, sizing) · Errors · Deep dive: 52 questions from the stack review, one global view + per-stack answers
 
 Visual: left "s3://landing/…/dt=2024-07-24/x.xlsx" → Airflow box (check → bronze → validate → notify) → Kubernetes box (driver pod + executor pod) → "Bronze: Iceberg on MinIO"; a Telegram icon under Airflow.
 
@@ -191,7 +191,7 @@ Speaker notes: Helm is good for software someone else maintains; kustomize keeps
 
 Visual: PR → CI checks (4 green ticks) → merge → build → scan → GHCR (sha256:…) → bump PR → Minikube pulls by digest.
 
-Speaker notes: No image is built on the laptop: that saves CPU, disk and a second copy of every image, and it is the production flow. 35 merged PRs (#1–#37) went through this loop in Task 2.
+Speaker notes: No image is built on the laptop: that saves CPU, disk and a second copy of every image, and it is the production flow. Every change in Task 2 went through this loop (PRs #1–#43).
 
 ---
 # Part 2 — The stack of Task 2
@@ -416,7 +416,7 @@ Speaker notes: Everything in this deck can be rebuilt from Git and the two Excel
 # Part 4 — Errors
 
 ---
-# Slide 29 — Errors and fixes (grouped, E25–E52)
+# Slide 29 — Errors and fixes (grouped, E25–E55)
 
 | Theme | Errors | Lesson |
 |---|---|---|
@@ -426,6 +426,7 @@ Speaker notes: Everything in this deck can be rebuilt from Git and the two Excel
 | Secrets | E27 secret file not readable (fsGroup); E35 password in chart NOTES; E42 my test overwrote secrets; E43 token in chat | Files with the right group; never print; test in a scratch copy |
 | Recovery | E41 rollout killed validate; E46 Iceberg's 24 h orphan guard | Grace periods and one retry for interruptions; respect guard rails |
 | Readers and reports | E44 alert texts; E51 report read local logs after logs moved to S3 | Move every reader with the source of truth; an empty report must fail |
+| Operating after the tag | E53 kubectl without a context; E54 Secret name drift from an apply without kustomize; E55 merged before CI registered | Read the address in the error; apply `infra/k8s/` only with `-k`; wait until the checks exist |
 | Tooling | E26 quoting; E29 slow chart archive; E30 kubectl -A; E40 cluster stopped after sleep; E45 placeholder in a command; E48 requires_python; E50 old gh | Pin by checksum; check tool versions; commands without placeholders |
 
 Speaker notes: Full symptom → root cause → fix → theory for each is in 05_errors_and_fixes.md. Most errors were not in Spark or Iceberg anymore: they were in operating the platform around them.
@@ -483,6 +484,554 @@ Speaker notes: The rule was: take what is cheap in RAM and teaches a production 
 Speaker notes: Silver is required by the lab's Medallion design; Task 2's goal was the step-1 job on Kubernetes under Airflow, so it stops at Bronze.
 
 ---
+# Part 5 — Deep dive: questions from the stack review
+
+Full written answers with file references: `docs/task2/08_study_notes.md` (Q1–Q52).
+
+---
+# Slide 34 — Global view: one stack, six layers
+| Layer | Our pieces | Question topics | Slides |
+|---|---|---|---|
+| Host and runtime | Windows → WSL2 → Docker Desktop → Minikube node (containerd) | node access, drivers, dockershim and shims, namespaces, local vs cloud | 36–40 |
+| Kubernetes core | API server, controllers, StatefulSets, PVCs | objects, storage | 37, 41 |
+| Resources | requests, limits, Allocatable, QoS | OOM types, overcommit, VPA/HPA, node scaling | 42–45 |
+| Delivery | Helm, kustomize, GitHub Actions, GHCR | chart writing, revisions, values, rollback, Argo CD | 46–47 |
+| Compute | Spark 3.5.9 via Spark Operator 2.2.1 | memory model, driver ↔ API, operator, fault tolerance, joins, Trino, streaming | 48–53 |
+| Table and catalog | Iceberg 1.11.0 + HMS 3.1.3 on MinIO | commits, COW/MOR, catalogs, embedded vs external, snapshots, maintenance | 54–58 |
+| Orchestration | Airflow 3.3.2 (LocalExecutor) | components, executors, timetables, Jinja, 15 rules, idempotency, DAG delivery, upgrade | 59–66 |
+| Cross-cutting | drills, strategy | drills on a pipeline, should we change the strategy | 67–69 |
+
+- 52 questions; this deck gives the decision-level answer per question and ties it to Task 2 evidence (Q1–Q52 numbered in the order asked)
+- Q51 (Airflow → Trino/dbt → Iceberg/HMS layout): answered in the notes (§7); its slide comes with Task 3, when Trino exists
+
+Speaker notes: Each layer only talks to the one below it through an API: kubectl to the API server, Spark to the catalog and S3, Airflow to Kubernetes. Most of my errors happened where a layer made an assumption about the layer below (E25 memory, E38 intervals, E52 process count).
+
+---
+# Slide 35 — Global view: one day of data through every layer
+1. 00:00 UTC D+1: scheduler (data-interval timetable) creates run D; LocalExecutor worker process inside the scheduler pod starts check_landing
+2. check_landing → S3 LIST on MinIO (user airflow-landing)
+3. bronze → SparkKubernetesOperator POSTs a SparkApplication to the API server → etcd
+4. Spark Operator controller sees it → spark-submit → driver pod; mutating webhook injects Secrets/volumes
+5. kube-scheduler places the driver by its requests → kubelet → containerd → containerd-shim → runc
+6. Driver (ServiceAccount token) asks the API server for an executor pod
+7. Executors read landing, write Parquet to MinIO; driver commits: new manifests → manifest list → metadata.json → HMS swaps the pointer (CAS)
+8. Operator streams status; Airflow streams the driver log, marks success → validate → notify; logs to s3://airflow-logs
+
+Visual: one vertical swimlane per layer, numbered arrows 1–8.
+
+Speaker notes: When something breaks, I locate the step number first. Drill 1 broke step 6–7, drill 3 broke step 1, drill 6 broke step 7's catalog.
+
+---
+# Slide 36 — Getting inside the node; drivers (Q1)
+| Level | What it is | How to enter |
+|---|---|---|
+| WSL2 VM | Linux VM running Docker Desktop's engine | `wsl` |
+| Node | Docker container `minikube` (kicbase) | `minikube ssh` (= `docker exec -it minikube bash`) |
+| Containers on the node | managed by containerd, not Docker | inside the node: `sudo crictl pods`, `sudo crictl ps`, `crictl stats` |
+| Pod / container | pause container + app containers sharing net namespace | `kubectl exec -it <pod> -c <container> -- sh` |
+| Node from the API | debug pod with host namespaces | `kubectl debug node/minikube -it --image=busybox` |
+
+- `--driver=docker`: node = container, shares the WSL2 kernel; light and fast, but the kubelet read the VM's memory (10.7 GiB), not the 8 GiB container cap → E25
+- VM drivers (Hyper-V, VirtualBox, KVM, QEMU): node = VM with its own kernel and RAM → capacity is real; heavier, needs hypervisor access from the host OS
+- Production: several Linux VMs or bare-metal nodes (kubeadm, or a managed service), HA control plane with 3 etcd members
+- Docker Desktop's own Kubernetes: kubeadm mode runs pods on Docker Desktop's engine (one shared image store, no node container); kind mode runs nodes as containers, like Minikube
+
+Speaker notes: "Minikube ssh" is just entering the node container. The useful habit is knowing which tool sees which level: docker sees the node, crictl sees pods, kubectl sees API objects.
+
+---
+# Slide 37 — How objects come alive (Q2 + controllers)
+- `kubectl apply` → API server: authN → authZ (RBAC) → mutating webhooks → schema validation → validating webhooks → stored in etcd. Nothing runs yet
+- Controllers react through watches (the reconcile loop):
+  - Deployment controller → ReplicaSet → ReplicaSet controller → Pods (no node yet)
+  - kube-scheduler binds each Pod to a node (requests vs Allocatable)
+  - kubelet on that node starts the containers
+  - Service: EndpointSlice controller lists ready pod IPs matching the selector; kube-proxy programs iptables; CoreDNS answers `minio.lake.svc.cluster.local`
+  - Headless Service (`clusterIP: None`, our postgres): DNS returns pod IPs directly, needed for StatefulSet pod names
+- Custom resources follow the same path; only the controller is third-party (Spark Operator instead of kube-controller-manager)
+- `kubectl get deployments`: desired vs ready vs up-to-date replicas → is the rollout done
+- `kubectl get secrets`: names, type, number of keys; values only base64 in `-o yaml` (not encryption). Our names end with a content hash from kustomize (`postgres-credentials-m864d4fd7f`); applying one file with `-f` loses that hash (E54)
+
+Speaker notes: The API server never starts anything itself. Every visible effect is a controller noticing a difference between desired and actual state.
+
+---
+# Slide 38 — Runtimes: why no dockershim, and what a shim is (Q4, Q21)
+- Kubelet talks to runtimes through CRI (gRPC). Docker Engine never implemented CRI, so the kubelet carried an adapter, dockershim: kubelet → dockershim → dockerd → containerd → runc
+- Deprecated in 1.20, removed in 1.24 (2022): one fewer hop, no Docker-only code in the kubelet, Docker features the kubelet never used (build, swarm, its own network) left out
+- Now: kubelet → CRI → containerd (ours, 2.3.4) or CRI-O → runc. Docker-built images still run: they are OCI images. Teams that need dockerd use cri-dockerd (Mirantis, outside Kubernetes)
+
+| | dockershim | containerd-shim (e.g. containerd-shim-runc-v2) |
+|---|---|---|
+| Where | inside the kubelet (old) | one small process per pod/container on the node |
+| Job | translate CRI calls into Docker API calls | parent of the container process: keeps stdio, reports the exit code, lets containerd restart without killing containers |
+| Today | removed | in every containerd and Docker installation |
+
+Speaker notes: Same word, two layers: dockershim was an API translator in Kubernetes; a containerd shim is a process supervisor under the runtime. Docker itself uses containerd and its shim.
+
+---
+# Slide 39 — Four kinds of "namespace" (Q19)
+| Namespace | Layer | What it isolates | Ours |
+|---|---|---|---|
+| Linux namespaces (what Docker uses) | kernel | process view: pid, net, mount, uts, ipc, user | each container has its own; pods share net |
+| Kubernetes namespace | API | names, RBAC, quotas; NOT a network or security boundary by itself | lake, spark-operator, spark-jobs, airflow |
+| Spark | config + SQL | `spark.kubernetes.namespace` = where pods go; in SQL `catalog.namespace.table` = Iceberg namespace | pods in spark-jobs; table `lake.bronze.chatlog` |
+| Iceberg namespace | catalog | a group of tables (= Hive database) | `bronze` (→ `bronze.db/` in the warehouse path) |
+
+Speaker notes: In one command I use three of them: the driver pod runs in K8s namespace spark-jobs, inside Linux namespaces, and writes Iceberg namespace bronze.
+
+---
+# Slide 40 — Local vs cloud Kubernetes (Q3)
+| Concern | Minikube (ours) | Managed cloud (EKS, GKE, AKS) |
+|---|---|---|
+| Control plane | one pod each, on the same node | run by the provider, HA, upgrades handled |
+| Nodes | 1 container, 8 GiB | node pools, autoscaled, mixed on-demand / spot |
+| Storage | hostPath provisioner, lost on `minikube delete` | CSI cloud disks with snapshots; object store as S3 |
+| Network | kindnet (no NetworkPolicy), port-forward | VPC CNI, LoadBalancer Services, Ingress |
+| Identity to storage | static MinIO keys in Secrets | workload identity (IRSA, GKE WI): pod gets a cloud role, no keys |
+| Registry pull | ghcr-pull Secret | same, or the cloud registry with node IAM |
+| Cost model | laptop | pay per node-hour → requests drive cost |
+| Same in both | manifests, Helm charts, RBAC, CRDs, operators | |
+
+Speaker notes: Everything written for Task 2 is portable; what changes in the cloud is who runs the control plane, where data persists, and that over-sized requests cost money.
+
+---
+# Slide 41 — StatefulSet, PVC, PV, StorageClass (Q31)
+- StatefulSet postgres: stable name `postgres-0`, `volumeClaimTemplates` → creates PVC `data-postgres-0` (2 Gi, RWO)
+- PVC = request for storage; StorageClass `standard` (provisioner `k8s.io/minikube-hostpath`) creates a PV dynamically and binds it
+- PV = the actual storage; here a directory inside the node container
+- Lifecycle: delete the pod → same PVC re-attached (E54: `minio-0` deleted, data kept); delete the StatefulSet → PVC stays (we deleted `data-postgres-0` by hand to reset passwords, E27); reclaim policy Delete removes the PV when the PVC goes
+- Deployment + PVC would share one volume between replicas; StatefulSet gives each replica its own
+
+| | Network/native (CSI: cloud disks, Ceph, Longhorn) | Host-based (hostPath, local PV) |
+|---|---|---|
+| Survives node loss | yes, re-attaches on another node (same zone) | no, data is on that node |
+| Speed / cost | network latency, paid | local disk speed, free |
+| Use | databases in production, catalog DB | single-node labs, caches, data already replicated by the app (MinIO erasure sets, Kafka) |
+
+Speaker notes: Our backup lived on a hostPath PV of the same node, which is why `minikube delete` erased it (slide 24).
+
+---
+# Slide 42 — Requests, usage, limits (Q43)
+- kube-scheduler only adds requests: a pod fits if Σ requests on the node + its request ≤ Allocatable. It never looks at real usage
+- Usage (metrics-server, `kubectl top`) is what the kernel sees; limits are what the kernel enforces
+- Our node, idle (measured 10-27/10-28): requests **4,036 Mi (55 %)**, usage 3,312–4,393 Mi (45–60 %), limits **7,516 Mi (103 %)** of 7,268 Mi Allocatable; a bronze run adds +3,200 Mi of requests → 7,236 Mi
+- Set requests from usage over time, not one sample: p95 across a full backfill including the 07-24 peak (12,970 rows), per component
+- Request = protects scheduling (my pod gets room); limit = protects the neighbours (my pod cannot take theirs)
+- Memory is incompressible (over → kill); CPU is compressible (over → throttled)
+
+Visual: three bars for the node: requests, usage, limits against the Allocatable line.
+
+Speaker notes: Usage above requests is legal and common (Burstable). It becomes a problem only when many pods burst together and the node itself runs out, which triggers eviction.
+
+---
+# Slide 43 — Pod deleted vs container OOMKilled; reserved memory; overcommit (Q44)
+| | Pod deleted / evicted | Container OOMKilled |
+|---|---|---|
+| Who | API (kubectl delete, drain, preemption) or kubelet eviction under node pressure | kernel, container's cgroup over its limit |
+| Effect | pod object gone; a controller creates a new pod (new name/UID) | same pod; container restarted; RESTARTS +1; Last State OOMKilled, 137 |
+| Ours | drill 1 (driver), drill 2 (executor), E54 (forced rollback) | E52 scheduler, 9 restarts |
+
+- Eviction order under node pressure: BestEffort first, then pods using most above their request; Guaranteed last
+- kube-reserved = kubelet + container runtime; system-reserved = OS daemons; plus eviction threshold → Allocatable. Control-plane pods (apiserver 379 Mi, etcd) on Minikube are ordinary pods and take Allocatable too
+- Limiting Spark: `spark.executor.instances` or dynamic allocation `maxExecutors`; memory + overhead → request = limit; and a ResourceQuota on spark-jobs
+- Overcommit: Σ limits > Allocatable is allowed (ours 103 %); fine for CPU, risky for memory because bursts coincide (backfill + maintenance + CLI)
+
+Speaker notes: Two very different failures look similar in a status column. Restarts in place mean "your limit is too small"; new pods mean "something removed you".
+
+---
+# Slide 44 — Two kinds of OOM, tmpfs, how to observe (Q46)
+| | JVM OutOfMemoryError | Kubernetes OOMKilled |
+|---|---|---|
+| Trigger | heap above `-Xmx` (= spark.executor.memory) | whole container RSS above the cgroup limit |
+| Counts | heap objects only | heap + metaspace + direct buffers + thread stacks + Python workers + memory-backed tmpfs |
+| Signal | Java exception, stack trace, Spark task failure | SIGKILL, exit 137, log stops mid-line |
+| Fix | more heap, less data per task, spill | more overhead / limit, fewer processes |
+
+- cgroup v2 (Kubernetes ≥ 1.28): `memory.oom.group` = 1 → one OOM kills every process in the container → E52's `container not found ("scheduler")`
+- tmpfs: RAM-backed filesystem; an `emptyDir` with `medium: Memory` (and /dev/shm) counts against the container's memory limit. `spark.kubernetes.local.dirs.tmpfs=true` puts Spark's spill directory in RAM → spill can itself cause OOMKilled
+- Observe: `kubectl describe pod` (Last State, Reason), events, `kubectl top` (working set), `crictl stats`, cgroup `memory.events` (oom_kill counter), process view (our psutil), Spark UI executor peak memory metrics
+
+Speaker notes: E52 was the second kind: no Java error anywhere, only exit codes, which is why I measured processes inside the container instead of reading logs.
+
+---
+# Slide 45 — Scaling: VPA/HPA, quotas, nodes, headroom (Q45, Q32)
+- HPA: more replicas from CPU/memory/custom metrics → stateless (api-server, Trino workers)
+- VPA: rewrites requests from observed usage; recommend-only mode is safe for stateful pods. In-place pod resize is GA since K8s 1.35, VPA `InPlaceOrRecreate` is beta; JVM and Python do not resize their heap without a restart. Do not run HPA and VPA on the same metric
+- LimitRange: per-container default/min/max in a namespace (a pod without requests gets defaults). ResourceQuota: total requests/limits/pods per namespace (e.g. cap spark-jobs so a backfill cannot starve airflow/lake)
+- Utilization = requests/Allocatable (what you pay for) and usage/Allocatable (what you use); the gap is waste
+- Headroom: keep 10–20 % free, or low-priority placeholder pods that get preempted when real pods need space
+- Node scaling: Cluster Autoscaler (node groups; adds a node when pods are Pending; removes empty ones) vs Karpenter (picks an instance type per pending pods, consolidates). Both react to requests, not usage
+- Node sizing: few large nodes = better bin-packing, less per-node overhead, larger blast radius; many small = the opposite
+- Minikube: no autoscaling; `minikube start --nodes 2` is the way to test multi-node behaviour
+
+Speaker notes: Spark is the classic consumer of node autoscaling: executor pods go Pending, nodes are added, and removed after the job. On one laptop the equivalent control is a namespace quota.
+
+---
+# Slide 46 — Writing and publishing a Helm chart (Q5, Q25)
+- Layout: `Chart.yaml` (name, version, appVersion) · `values.yaml` + `values.schema.json` · `templates/` (Deployment, Service, ConfigMap, HPA, `_helpers.tpl`, `NOTES.txt`) · `crds/` · `charts/` (dependencies)
+- Standard practice: values are the only interface; image by digest; resources and probes in values; schema validation; `helm lint` + `helm template` in CI; chart version bumped on every change
+- Example for a model-serving setup: one chart, values = model image digest, model URI (s3://…), replicas, resources, HPA thresholds; one values file per environment
+- Release = one installed instance; each upgrade = revision; stored as Secrets `sh.helm.release.v1.<name>.v<n>` in the release namespace
+- Publishing: `helm package` → static repo (`index.yaml`, e.g. GitHub Pages: that is `kubeflow.github.io/spark-operator`) or OCI registry (`helm push … oci://ghcr.io/<user>/charts`)
+- "Airflow chart" = the Apache Airflow project's Helm chart (1.22.0); Spark Operator chart = Kubeflow's chart that installs the controller, webhook, CRDs and RBAC. Both are just Helm charts
+- Airflow is not "run by Helm": Helm renders and applies the objects once; Kubernetes runs them
+
+Speaker notes: Helm tracks versions of configuration. It does not track the software's runtime; that is the controllers' job.
+
+---
+# Slide 47 — Helm in CI/CD, values, rollback, Argo CD (Q7, Q8, Q29)
+- CI: `helm lint`, `helm template | kubeconform`, `helm diff upgrade` in the PR; deploy job runs `helm upgrade --install --wait` with the reviewed values file
+- Revisions: `helm history airflow` (ours shows `git <sha>` per revision); `helm rollback airflow <rev>` creates a new revision with old values; `--history-max` caps stored revisions
+- Values on upgrade: `--reuse-values` merges with the last release's values (hidden drift); `--reset-values` starts from chart defaults; `--reset-then-reuse-values` (Helm ≥ 3.14) = new chart defaults + previous overrides. Ours: always `-f values-local.yaml` + `--set` → fully reproducible from Git
+- Rollback on failure: `--atomic` (Helm 3) is renamed `--rollback-on-failure` in Helm 4 (Nov 2025; old name still works with a deprecation warning, a later minor turns it into an error; `--force` → `--force-replace`). Helm 3 security patches end 2027-02-10. CRDs in `crds/` are never upgraded or deleted by Helm
+- Argo CD (GitOps): a controller in the cluster watches a Git path or chart + values, diffs live vs Git, syncs, prunes and reverts manual drift; rollback = git revert. It renders charts with `helm template`, so there is no Helm release history
+- For us: the digest bump PR already is the GitOps change; Argo CD would replace `make airflow-install` and would have reverted the drift behind E54
+
+Speaker notes: The rule I follow already matches GitOps: only merged main is deployed and the release records the SHA. Argo CD would make the cluster pull instead of me pushing.
+
+---
+# Slide 48 — Spark memory model and Tungsten (Q10)
+- Executor heap (`spark.executor.memory`):
+  - Reserved: 300 MB fixed
+  - Unified memory = (heap − 300 MB) × `spark.memory.fraction` 0.6: execution (shuffle, join, sort, agg buffers) + storage (cache, broadcast); soft boundary 50 % (`storageFraction`), execution can evict cached blocks
+  - User memory: the remaining 40 %: UDF objects, user data structures, Spark internal metadata
+  - Ours, 768 m executor: unified (768 − 300) × 0.6 ≈ 281 MB, user ≈ 187 MB
+- Outside the heap: `memoryOverhead` = max(384 MiB, factor × heap); factor 0.1 for JVM jobs, 0.4 for PySpark on K8s; plus optional off-heap (`spark.memory.offHeap`)
+- Tungsten: rows as compact binary (UnsafeRow) managed by Spark, not Java objects → less GC, exact size accounting
+  - Cache-aware sort: sort arrays of (key prefix, pointer) that stay in CPU cache instead of chasing objects
+  - Whole-stage code generation (last phase of Catalyst): fuses a stage's operators into one Java loop
+- Columnar: Parquet stores each column contiguously → read only needed columns, compress well, sequential memory access the CPU can prefetch; vectorized reader works on column batches
+
+Speaker notes: Spark's memory settings only govern the heap; Kubernetes governs the whole container. Sizing needs both numbers.
+
+---
+# Slide 49 — How the driver creates executor pods (Q11, Q6)
+- The API is real HTTPS REST: driver uses the fabric8 Kubernetes client against `https://kubernetes.default.svc`
+- Identity: ServiceAccount `spark-operator-spark`; token + CA mounted at `/var/run/secrets/kubernetes.io/serviceaccount/`
+- Authorization: Role in spark-jobs (pods create/get/list/watch/delete, services, configmaps, PVCs) + RoleBinding to that ServiceAccount; nothing outside the namespace
+- Flow: driver POSTs executor pods → watches them → executors connect back through a headless driver Service → driver assigns tasks → at the end deletes executors; executors carry an ownerReference to the driver pod so garbage collection removes them if the driver dies
+- CRD registration: the chart applies the CustomResourceDefinition → API server serves `/apis/sparkoperator.k8s.io/v1beta2/.../sparkapplications`, validates with its OpenAPI schema, stores in etcd
+- Any client with RBAC can use it: Airflow (our Role), kubectl, Argo Workflows; ScheduledSparkApplication (same CRD group) adds cron inside the operator
+- Three different SAs, three Roles: Airflow creates SparkApplications; the operator creates drivers; the driver creates executors
+
+Visual: Airflow SA → SparkApplication → operator SA → driver pod → driver SA → executor pods; each arrow labelled with its RoleBinding.
+
+Speaker notes: `kubectl get --raw /api/v1/namespaces/spark-jobs/pods` makes the same call the driver makes; that is a good way to show the API is just HTTP.
+
+---
+# Slide 50 — Spark Operator, history and observability (Q6, Q23, Q27, Q28)
+- History: Kubeflow started at Google (2017) to run ML jobs on Kubernetes; the Spark Operator began as GoogleCloudPlatform/spark-on-k8s-operator and moved to the Kubeflow organization in 2024. Apache also started its own spark-kubernetes-operator (0.x)
+- Dependencies: the operator runs its own spark-submit (3.5.5 in 2.2.1); the application image only needs a compatible Spark + K8s entrypoint (ours vnpt-lake-spark-job). Airflow is optional: any client creating the CR works
+- Where history lives (Helm does not keep runs):
+
+| What | Where | Lifetime |
+|---|---|---|
+| Desired job + state | SparkApplication `.status` | until deleted / timeToLiveSeconds |
+| Driver output | Completed driver pod log | until the pod is cleaned |
+| Kubernetes events | Event objects | ~1 h default |
+| Task attempts | Airflow metadata DB + s3://airflow-logs | permanent |
+| Spark stages/tasks | event log → History Server | not set up (gap) |
+
+- How Airflow knows what happens: SparkKubernetesOperator creates the CR, polls its status, follows the driver pod log into the task log, and on restart re-finds the pod by labels (reattach). In deferrable mode the waiting moves to the triggerer (check support in provider 10.22.0 before relying on it)
+- Spark UI: live on driver port 4040 → `kubectl -n spark-jobs port-forward pod/<driver> 4040:4040`; after the job: History Server reading `spark.eventLog.dir=s3a://…`
+
+Speaker notes: Airflow keeps the "what and when", Spark's event log keeps the "how". We only have the first today.
+
+---
+# Slide 51 — Fault tolerance, spill, sizing and cost (Q22, Q47)
+- Spark: task retry (`spark.task.maxFailures` 4) → stage retry on lost shuffle → recompute from lineage; executor decommissioning moves blocks before a planned loss; the driver is a single point of failure (Airflow retries it)
+- MinIO: erasure coding spreads data + parity over drives/nodes and survives losing up to the parity count; bitrot check and healing; bucket/site replication. Ours: 1 node, 1 drive → no redundancy (lab only)
+- Spill: when execution memory is full, sort/agg/shuffle buffers are written to local dirs and merged → protects the JVM heap, costs disk I/O. Does not protect the container if local dirs are tmpfs or if memory is outside the heap
+- Cleanup: shuffle files go with the application; local dirs are emptyDir, deleted with the pod; operator TTL removes old SparkApplications; failed Iceberg writes leave orphan files → `remove_orphan_files`
+- Static sizing breaks on skew: 07-03 has 2 rows, 07-24 has 12,970; one size either wastes or OOMs. Dynamic allocation on K8s needs `shuffleTracking` (no external shuffle service)
+- Cutting Spark-on-K8s cost (the "up to 80 %" figure is a best case from combining these; the saving depends on how wasteful the start was; Notion reports 60–90 % on Spark compute):
+  1. Right-size requests from measured usage (requests are what you pay for)
+  2. Spot/preemptible nodes for executors, on-demand for drivers; graceful decommissioning
+  3. Scale to zero: dynamic allocation + node autoscaling (Karpenter consolidation / bin-packing)
+  4. Separate node pools per workload, ARM instances where images allow
+  5. Cheaper data: compaction + partition pruning + columnar formats read less; schedule heavy jobs off-peak
+
+Speaker notes: Cost and reliability pull in opposite directions on Spark: spot nodes are cheap, but losing many executors at once loses shuffle data. Notion's answer was a per-job spot/on-demand ratio.
+
+---
+# Slide 52 — Joins, engines and two meanings of "DAG" (Q49, Q18, Q25)
+| | Broadcast hash join | Sort-merge join |
+|---|---|---|
+| When | one side small (< `autoBroadcastJoinThreshold`, 10 MB default) | both sides large |
+| How | small side sent to every executor, hash table in memory | shuffle both sides by key, sort, merge |
+| Cost | no shuffle of the big side; memory on driver + every executor | network + disk; spills safely |
+| Risk | OOM if the "small" side is not small | skew on hot keys (AQE splits skewed partitions) |
+
+| | Spark | Trino |
+|---|---|---|
+| Model | stages split at shuffles, shuffle written to disk | MPP, pipelined in memory between stages |
+| Strength | ETL, long jobs, Python, streaming | interactive SQL, many users, low latency |
+| Failure | retries tasks/stages | query fails unless fault-tolerant execution (spooling) is on |
+| Lab role | writes Bronze/Silver | queries Iceberg (Task 3) |
+
+- Spark DAG: the plan of one application (stages, tasks), lives for seconds/minutes, recovered by lineage
+- Airflow DAG: the workflow across systems and days, state in the metadata DB, retried per task. Our Airflow task `bronze` contains one Spark application, which has its own DAG
+
+Speaker notes: AQE can switch a sort-merge join to broadcast at runtime when the real size turns out small.
+
+---
+# Slide 53 — Batch and stream into Iceberg (Q30)
+| | Batch (ours) | Structured Streaming |
+|---|---|---|
+| Unit | one day = one run = one partition overwrite | one micro-batch = one Iceberg commit |
+| Runs as | SparkApplication per run, started by Airflow | long-running SparkApplication (restart policy OnFailure) |
+| Exactly-once | idempotent overwrite + retry | checkpoint + atomic Iceberg commit |
+| Table impact | ~1 snapshot/day | trigger 1 min → ~1,440 snapshots/day, many small files |
+| Airflow's role | the scheduler | not the runner: maintenance, health checks, downstream batch via Assets |
+
+- Streaming makes maintenance mandatory and frequent (compaction, expiry)
+- Choose by latency need; our consumers need data by early morning → batch is enough
+
+Speaker notes: A stream into Iceberg works, but every commit is a snapshot, so the maintenance DAG becomes part of the streaming design, not an extra.
+
+---
+# Slide 54 — Iceberg commit anatomy; COW vs MOR; schema evolution (Q13)
+- A commit never edits a file. It writes: new data files → new manifest(s) only for changed files (old manifests reused) → new manifest list (the snapshot) → new metadata.json → catalog swaps one pointer (compare-and-swap with the expected old location)
+- Why the root is easy and data is not: data = many large immutable files; root = one pointer, one atomic operation. Readers see old or new table, never a mix
+- Copy-on-write: update/delete rewrites affected data files → fast reads, slower writes; fits batch overwrite (ours replaces whole partitions anyway)
+- Merge-on-read: writes delete files (position deletes; deletion vectors in format v3) → fast writes, reads merge, needs compaction; fits frequent row-level updates/CDC. Set per operation: `write.delete.mode`, `write.update.mode`, `write.merge.mode`
+- Schema evolution by column ID, not by name or position: add, drop, rename, reorder, widen (int→long, float→double, decimal precision) are metadata-only; old files read missing columns as null
+- Partition evolution: new spec applies to new data; old files keep the old spec, queries handle both
+- Challenges: incompatible type changes need a rewrite; readers on old engine/HMS versions; downstream jobs that select by position. Bronze keeps raw strings → least exposed
+
+Speaker notes: This is why drill 7 worked: the newest metadata.json fully describes the table, so re-pointing the catalog restores everything.
+
+---
+# Slide 55 — What the catalog really does; embedded vs external (Q16, Q20)
+- Old Hive-format tables: directory = table, folder = partition, the metastore lists partitions → no atomic multi-partition change, slow S3 listing at scale, users must filter on physical partition columns, `MSCK REPAIR` and small-file chores
+- Iceberg moves table state into the metadata tree: file lists + column statistics (no listing), hidden partitioning (`days(ts)`), snapshots. The catalog keeps only: name → current metadata.json, changed by CAS
+- So the catalog provides the transactional guarantee by being the single atomic pointer; performance and partitioning come from Iceberg metadata; operations become table maintenance
+- External vs embedded = at which level an engine reaches the data:
+
+| | External (ours) | Embedded |
+|---|---|---|
+| Shape | Spark → HMS (Thrift) + Postgres for metadata; Spark → MinIO (S3) separately for files | the object store itself serves the Iceberg REST catalog: one endpoint for both storage (S3) and catalog |
+| Examples | HMS, Polaris/Lakekeeper over any S3 | MinIO AIStor Tables (GA Feb 2026), AWS S3 Tables |
+| Pros | vendor-neutral, any storage, mature | one system, one auth model, no catalog DB to run or back up |
+| Cons | two systems to operate and back up (drills 6–7) | tied to that storage product; AIStor is commercial |
+
+Speaker notes: Our drills 6 and 7 are exactly the cost of the external model: the catalog database is a second thing to lose.
+
+---
+# Slide 56 — Catalog choices and trade-off criteria (Q17)
+| Catalog | Commit mechanism | Strengths | Weaknesses | Fits |
+|---|---|---|---|---|
+| Hadoop | atomic rename of metadata file | no service | unsafe on S3 (no atomic rename) | local tests only |
+| Hive (ours) | lock + CAS on `metadata_location` | universal engine support | HMS + DB to run; Thrift; version pins (HMS 3.1.3 / Hive 2.3 client) | existing Hadoop shops |
+| JDBC | UPDATE … WHERE old pointer | just a database | per-engine config, no REST features | small teams |
+| REST (spec) | server-side commit | any engine, credential vending, server-side features | needs a server implementation | the standard target |
+| Nessie | Git-like refs | branches/tags across tables, multi-table commits | extra concepts | data-as-code workflows |
+| Apache Polaris | REST | top-level Apache project (Feb 2026), RBAC, vended credentials, multi-engine | Java service + DB | vendor-neutral REST catalog |
+| Lakekeeper | REST | Rust, light, fine-grained authz, change events | smaller community | lightweight self-hosted REST |
+| Apache Gravitino | REST + federation | one view over many catalogs (Hive, Iceberg, JDBC, Kafka, files) | broader and heavier | many metadata sources |
+| Snowflake Horizon | managed REST (Apache Polaris integrated) | external engines (Spark, Trino) read and write Snowflake-managed Iceberg v2/v3 tables; vended credentials | no tags/branches or table registration from external engines; S3-compatible non-AWS storage (e.g. MinIO) not supported; API calls billed | Snowflake-centric teams |
+
+- Criteria: commit safety on object storage · multi-engine (REST) · multi-table transactions · governance and credential vending · ops footprint (RAM, DB, backups) · lock-in
+
+Speaker notes: For a Spark + Trino lake the decision is really "HMS, which both already speak, vs a REST catalog, which is where the ecosystem is going".
+
+---
+# Slide 57 — Snapshots: time travel, tags, branches, recovery window (Q15, Q50)
+- Time travel: `SELECT … FROM t VERSION AS OF <snapshot_id>` or `TIMESTAMP AS OF '…'`; inspect with `t.snapshots`, `t.history`, `t.files`; rollback with `CALL lake.system.rollback_to_snapshot(...)`
+- Uses: audit "what did the table look like at 08:00", reproduce a model's training data, undo a bad load
+- Challenges: only as far as retention (our oldest snapshot gone after maintenance, by design); old snapshots keep their files → storage cost; schema at that snapshot is used; reads of very old snapshots can be slow before compaction
+- Tag: named, immutable pointer to a snapshot with its own retention (`max-ref-age`); expire_snapshots keeps it → e.g. month-end release
+- Branch: movable named line of snapshots → Write-Audit-Publish: write to `audit` branch, validate, fast-forward `main` (our open gap, slide 32)
+- Recovery window = snapshot retention (7 days, keep ≥ 5) for logical mistakes + catalog backup (daily, RPO ≤ 24 h) + `register_table` from the newest metadata.json for catalog loss; files deleted by maintenance are not recoverable from Iceberg itself
+
+Speaker notes: Retention is a business number: how far back must we be able to undo? Today it is 7 days because nobody asked; it should be agreed.
+
+---
+# Slide 58 — Maintenance: the 4 operations, automation, compaction (Q47, Q48)
+| Operation | Pros | Cons |
+|---|---|---|
+| rewrite_data_files (compaction) | fewer, larger files → faster scans | heavy Spark job; conflicts with concurrent writes |
+| expire_snapshots | removes old metadata and unreferenced files | ends time travel for those snapshots |
+| remove_orphan_files | frees files no snapshot references (failed writes) | dangerous if too recent (24 h guard, E46); lists storage |
+| rewrite_manifests | faster planning (fewer, clustered manifests) | one more commit/snapshot |
+
+- Compaction strategies: binpack (just merge files, cheapest) · sort (cluster rows by columns → better pruning, needs shuffle) · z-order (multi-column clustering, most expensive)
+- Keeping compaction from OOMing executors: limit `max-file-group-size-bytes` and `max-concurrent-file-group-rewrites`, enable `partial-progress`, compact by partition filter (recent days only), run it as its own SparkApplication with its own sizing, not concurrently with loads
+
+| Automation | Pros | Cons |
+|---|---|---|
+| Manual (`make maintenance`) | full control | forgotten |
+| Scheduled (ours, Sunday 02:00) | simple, predictable | runs even if nothing changed; late if tables churn fast |
+| Event-driven (thresholds on file count, snapshot count, small-file ratio from metadata tables) | runs when needed | more logic to own |
+| Managed / autonomous (S3 Tables, vendor catalogs) | no ops | opaque decisions, cost, lock-in |
+
+Speaker notes: With one load per day, weekly scheduling is right. A stream or many small commits would push us to event-driven triggers.
+
+---
+# Slide 59 — Airflow 3 roles: dag-processor, triggerer, deferral, JWT (Q35, Q36, Q37)
+- dag-processor (mandatory separate process in Airflow 3): runs DAG files, stores serialized DAGs. The scheduler never executes user code; it reads serialized DAGs and decides what runs
+- Scheduler, triggerer, dag-processor write heartbeats to the `job` table; the scheduler's liveness probe is `airflow jobs check --job-type SchedulerJob --local` (seen in our pod)
+- Deferral (true in Airflow 3): worker runs the task → task raises defer(trigger) → state `deferred`, worker slot freed → triggerer runs the async trigger with many others in one event loop → event fires → scheduler queues the task again → a worker resumes it
+- Advantage: waiting costs a coroutine instead of a worker process (~263 MiB each, measured in E52). Our DeadlineAlert callback already runs in the triggerer
+- JWT: every task talks to the Task Execution API with a JWT issued for that task instance, signed with one shared secret (our AIRFLOW_JWT_SECRET). Mismatched secrets across pods → tasks cannot report state. It is not a memory cost: memory grows with worker processes (`parallelism`), not tokens
+- SubDAGs removed in Airflow 3: a DAG inside an operator held a worker slot, deadlocked pools, scheduled separately
+  - TaskGroups: grouping inside one DAG (UI and structure only)
+  - Assets (formerly Datasets): a DAG runs when another DAG updates an asset → data-aware cross-DAG scheduling
+- Separate in production: api-server (UI + task API), scheduler (≥ 2 for HA), dag-processor (scale with file count), triggerer (HA), workers (by executor)
+
+Speaker notes: The Airflow 3 split moves user code away from the scheduler and the database. That improves security and stability, and it is why our tasks needed the JWT secret.
+
+---
+# Slide 60 — LocalExecutor and scaling executors (Q40, Q42)
+- LocalExecutor runs inside the scheduler process: it forks `parallelism` worker processes (`airflow worker -- LocalExecutor`) in the scheduler container; each runs a task supervisor + the task
+- Measured: 4 workers × ~263 MiB idle → parallelism 2 (E52). parallelism also caps concurrent tasks globally
+
+| Executor | Where tasks run | Good for | Cost |
+|---|---|---|---|
+| Local | processes in the scheduler pod | small installs, tasks that only orchestrate | one machine; scheduler pod = worker |
+| Celery | long-lived worker pods via a broker (Redis/RabbitMQ) | many short tasks, low latency | broker + always-on workers |
+| Kubernetes | one pod per task | isolation, per-task resources, scale to zero | pod start latency, API server load |
+| Multiple executors | per task choice | mixed workloads | more config |
+
+- Bottlenecks at scale: metadata DB connections (PgBouncer) · DAG parsing (dag-processor replicas, file count, light top-level code) · scheduler loop (several schedulers with row locks) · logs (remote logging, done) · K8s API pressure with KubernetesExecutor · broker for Celery
+
+Speaker notes: LocalExecutor stays right for us because the heavy work is in Spark pods. With deferrable waits it could also run more Spark jobs at once without more worker processes.
+
+---
+# Slide 61 — Timetables, catchup, current_date, backfill and clear (Q33, Q34)
+- CronDataIntervalTimetable("0 0 * * *"): run D covers [D, D+1), starts after D+1 00:00. `ds` = D; the run_id is named after `run_after` = D+1 (seen 10-27: `backfill__2024-07-25` loaded 07-24)
+- `catchup=False` (Airflow 3 default): unpausing does not create every run since `start_date`; history is filled on purpose with `airflow backfill create` (throttled with `--max-active-runs`, `--reprocess-behavior none|failed|completed`)
+- `start_date` fixed: it anchors the first interval; a moving start date makes runs appear and disappear
+- Lakehouse history: idempotent partition overwrite makes backfill a normal operation, not a migration
+- Clear vs trigger: a (DAG, logical date) pair exists once (E49) → rerun a day with `airflow tasks clear chatbot_bronze -s D -e D` or Clear in the UI; same run id, new try number
+- `current_date` / `now()` inside a job: wrong for backfill and retries (2024-07-24 processed in 2026); the job takes the day from `ds` only
+- Trigger vs interval matters: trigger timetables give zero-length intervals (E38); a manual run may have no logical date (E47); a job reading "yesterday" relative to the run time would be off by one day
+
+Speaker notes: The interval is the contract; the trigger time is only when the work happens. Mixing them up gives correct-looking runs that processed the wrong day.
+
+---
+# Slide 62 — Jinja and the DAG definition file (Q12)
+- DAG file = Python executed by the dag-processor on every parse (default every ~30 s): top-level code runs each time → keep it cheap, no network/DB calls
+- Templates are rendered at task run time on the worker, only in the operator's `template_fields`; files with `template_ext` (our `.yaml` application_file) are read and rendered whole
+- Context: `{{ ds }}`, `{{ data_interval_start }}`, `{{ params.x }}`, `{{ var.value.spark_job_image }}`, `{{ conn.x }}`, macros
+- Strict undefined: a missing variable fails the task (E47: no `ds` in a run without a logical date)
+- Check before deploy: `airflow tasks render <dag> <task> <date>`; our CI renders every template with and without a logical date
+- Pitfall found by CI: after DagBag loads, `application_file` already holds the file content, not the path
+
+Speaker notes: Two different times: parse time (every 30 s, no context) and run time (once per task, with context). Jinja belongs only to run time.
+
+---
+# Slide 63 — DataVidhya's 15 production DAG rules vs chatbot_bronze (Q14)
+| # | Rule | Ours | Note |
+|---|---|---|---|
+| 1 | Idempotent tasks | ✓ | partition overwrite |
+| 2 | Atomic tasks | ✓ | check / load / validate / notify; one Iceberg commit |
+| 3 | Simple DAGs | ✓ | 4 tasks; maintenance is its own DAG |
+| 4 | No heavy processing in operators | ✓ | Spark pods do the work |
+| 5 | Connections, no hardcoded credentials | ✓ | `AIRFLOW_CONN_*` from Secrets |
+| 6 | Always retries + delay | partly, on purpose | 0 for deterministic checks (E47 lesson); no exponential backoff |
+| 7 | execution_timeout | ✓ | 20 min |
+| 8 | Tags | ✓ | `["task2", "lake", "bronze"]`; CI requires tags |
+| 9 | catchup=False | ✓ | default in Airflow 3; backfill explicit |
+| 10 | Static start_date | ✓ | timezone-aware, checked in CI |
+| 11 | TaskFlow for Python tasks | ✓ | check_landing, notify |
+| 12 | Fast parsing | ✓ | checked in CI DAG integrity |
+| 13 | Test before deploy | ✓ | import + rules + template render in CI |
+| 14 | Meaningful names | ✓ | |
+| 15 | doc_md | ✗ | module docstring only; `doc_md` not set (small fix, Task 3) |
+
+- What the list misses (learned in Task 2): use a data-interval timetable (E38); separate deterministic from transient failures; `max_active_runs` for runs sharing a table; failure + deadline alerts; data validation as a task; acceptance from zero
+- One dated detail: its idempotency example uses `execution_date`, removed in Airflow 3 → `logical_date` / `ds`
+
+Speaker notes: The rules are a good checklist; the gaps are exactly the Airflow 3 and operations lessons from this task.
+
+---
+# Slide 64 — Process-level and write-level deduplication; data audit (Q38, Q39)
+- Process-level deduplication: running the task again leaves the same state (no double side effects: emails, external calls). Write-level deduplication: the write itself cannot create duplicates
+  - Partition overwrite (ours): replace exactly D's partition; needs partition grain = run grain
+  - MERGE/upsert on a key: idempotent if the source is deduplicated and deterministic; handles late updates
+  - Windowed: recompute the last N days every run and overwrite them; absorbs late data, costs N× compute
+- Partition deleted by hand after a successful run: Airflow does not notice. Run state records that the task ran, not that data exists. Detection needs a check that runs later (audit job, Asset checks, scheduled reconcile); repair = clear the run → idempotent rerun restores it
+
+| Principle | In our pipeline |
+|---|---|
+| Reframe: "produce the state of interval D", not "append new rows" | load reads only dt=D |
+| Idempotency | overwritePartitions |
+| Scope: what one run owns | one partition of two tables |
+| Isolation and throttle | max_active_runs 1, backfill `--max-active-runs 1` |
+| Seams and reconcile: check counts where data crosses systems | landing count = rows read = rows written = expected |
+| Resumability: restart from the failed step | clear failed task only; Iceberg commit is all-or-nothing |
+| Audit trail | `_ingest_date`, `_batch_id`, Iceberg snapshot summary, Airflow run/try logs in S3 |
+
+Speaker notes: Airflow is the record of execution; Iceberg snapshots are the record of data changes. An audit needs both.
+
+---
+# Slide 65 — Getting DAGs into Airflow; private repos (Q26)
+| | Baked into the image (ours) | git-sync sidecar | DAG bundles (Airflow 3) |
+|---|---|---|---|
+| Change | build + digest bump PR | push to branch | versioned bundle (e.g. Git) |
+| Reproducible | exactly the reviewed digest | whatever the branch says now | version recorded per run |
+| Speed | minutes | seconds | seconds |
+
+- Private repo with git-sync: generate an SSH key pair; public key → repo Settings → Deploy keys (read-only); private key → Kubernetes Secret referenced by the chart's `dags.gitSync.sshKeySecret`; pin `known_hosts`
+- Ours needs no Git credentials in the cluster: CI builds DAGs into the image and only a read-only registry token is stored
+
+Speaker notes: Baked images trade deploy speed for certainty. For a daily batch pipeline that is the right trade.
+
+---
+# Slide 66 — Airflow 2 → 3 upgrade (Q24, Q41)
+1. Prepare: be on 2.7+ (ideally latest 2.x), supported Python
+2. Clean and back up: `airflow db clean` trims old XCom/logs so schema migration is fast; back up the metadata DB with Airflow stopped (consistent backup); a failed migration without backup leaves a half-migrated DB
+3. DAG authors (people writing DAG code): `ruff check dags/ --select AIR301,AIR302` (breaking: AIR301 = removed in 3.0, AIR302 = moved to provider packages) and AIR311/AIR312 (deprecated, still work through a compatibility layer), `--fix`; move imports to `airflow.sdk`; no direct DB access in tasks
+4. Deployment manager (platform owner): new image + chart → `airflow db migrate` (the chart's migration Job, seen in our install) → start api-server (replaces webserver) and dag-processor separately; update config (`airflow config update`)
+- Behaviour changes that bit us: timetable defaults (E38), no logical date for manual runs (E47), DagBag API (E34), SLA → DeadlineAlert
+- Automate: CI runs ruff AIR rules + DAG import + template render inside the new image (our DAG integrity job), then a staging install from a DB copy before production
+
+Speaker notes: Our CI already does step 3 continuously, so a future 3.x → 4 upgrade would start from a tested baseline.
+
+---
+# Slide 67 — Drills on a data pipeline (Q9)
+- Method: hypothesis → inject one fault → observe (recovery time, data correctness, alert) → fix → keep it as a `make drill-*` target
+
+| Layer | Done in Task 2 | Worth adding |
+|---|---|---|
+| Compute | 1 kill driver, 2 delete executor | node pressure / eviction mid-job |
+| Orchestrator | 3 scheduler restart (E41 found) | metadata DB restart |
+| Data | 4 backfill twice | malformed file, new column, late file (rerun day), half export |
+| Alerts | 5 failure + deadline | alert channel down |
+| Catalog | 6 lose catalog, 7 newer commit than backup | HMS down during commit |
+| Platform | from-zero rebuild (found E51, E52); config drift by a non-kustomize apply (E54, unplanned) | expired GHCR token, disk full, MinIO down mid-write |
+
+Speaker notes: Every drill that failed taught more than every one that passed. The next useful ones are data faults, because so far all drills broke infrastructure.
+
+---
+# Slide 68 — Should we change the strategy? (1) the cluster (Q52)
+| | docker driver (ours) | VM driver | Production cluster |
+|---|---|---|---|
+| Node | container sharing the WSL2 kernel | own VM, own kernel | VMs/bare metal, several nodes |
+| Memory accounting | wrong until fixed (E25) | real | real |
+| Start / RAM cost | fast, light | slower, RAM split from WSL | n/a |
+| Failure realism | node container stops on sleep (E40) | closer to a real node | HA control plane, node loss handled |
+| Storage | hostPath in the container | hostPath in the VM | network volumes |
+
+- Recommendation: keep the docker driver for the lab (E25 is fixed by config; switching costs time and RAM on a 16 GB laptop). Run the VM driver once as a comparison experiment, and try `--nodes 2` to see scheduling and storage behaviour across nodes. Not now
+
+Speaker notes: The main lesson of the comparison is not "VMs are better" but "know what the kubelet believes about the node", which E25 already taught.
+
+---
+# Slide 69 — Should we change the strategy? (2) resource management (Q52)
+- Problem: a limit is also a failure source. E52 was not a leak; the limit was guessed and the process count was not measured
+- Proposed strategy:
+  1. Measure before setting: usage over a full backfill (`kubectl top`) + processes inside the container (psutil) → requests = p95, per component
+  2. Derive limits from structure, not guesses: scheduler = workers × ~263 MiB + scheduler 194 + serve-logs 152 + one running task (~300) → 1.5 Gi
+  3. Per workload type: Spark (heap fixed by `-Xmx`) → request = limit, overhead sized for Python; multi-process Python (Airflow) → limit above request with measured margin; no CPU limits, CPU requests only
+  4. Protect the node, not each guess: namespace ResourceQuota on spark-jobs, Allocatable fixed (E25)
+  5. Detect: restarts and OOMKilled fail the acceptance test (done) and should alert like a task failure
+  6. Revisit when parallelism, data volume or images change; VPA in recommend-only mode on a real cluster
+- Why yes: cheap, uses tools we have, prevents the next E52. Why not more: removing limits on one node risks the control plane; autoscaling needs a real cluster
+
+Speaker notes: My answer to "should we change the strategy" is: keep the platform, change how numbers are chosen, from estimates to measurements with a test that fails when they are wrong.
+
+---
 # Appendix A1 — Versions and the compatibility chain
 
 | Component | Version | Reason |
@@ -509,54 +1058,15 @@ Chain: Spark Operator 2.2.1 (spark-submit 3.5.5) → driver Spark 3.5.9 → Iceb
 Speaker notes: Stop the Task 1 Compose stack first; both share the 10 GiB WSL VM. `minikube stop` keeps the data; `minikube delete` removes it.
 
 ---
-# Appendix A3 — Study notes: the stack in three rules
-
-Full answers to 52 study questions: `docs/task2/08_study_notes.md` (global view, then Kubernetes · Helm/GitOps · Spark · Airflow · idempotency · Iceberg/catalogs · query engines)
-
-- **Desired state, reconciled:** Kubernetes, the Spark Operator, Helm and Airflow store what should be and loop until reality matches (E54: a StatefulSet waits forever for a pod that never becomes Ready)
-- **A run is identified by its data, not its clock:** day D = `ds`; each run overwrites exactly its partition, so reruns and backfills are safe (E38, E49)
-- **Size from measurement:** the kubelet, the JVM and Airflow each believe something different about memory; requests, limits and heaps must agree (E25, E52)
-
-Visual: three columns, one icon each (loop arrows · calendar · gauge).
-
-Speaker notes: These three ideas explain most of the 55 errors across Tasks 1–2. The notes file maps each of Bee's questions to the place in the repo where it shows up.
-
----
-# Appendix A4 — Kubernetes and memory, end to end
-
-- `kubectl apply` → API server (authn → RBAC → admission webhook) → etcd → controller → scheduler (requests vs Allocatable) → kubelet → containerd → runc; no dockershim since K8s 1.24
-- Allocatable = Capacity − kube-reserved − system-reserved − eviction threshold (ours 7,268 Mi, E25)
-- Spark pod limit = heap (`memory`) + `memoryOverhead`; heap = 300 MB reserved + 60 % unified (execution ⇄ storage) + 40 % user
-- JVM `OutOfMemoryError` = heap full · Kubernetes `OOMKilled` (exit 137) = whole container over its limit (heap + off-heap + Python + tmpfs)
-- Requests decide placement, limits decide death; usage only shows in `top`, sampled too slowly for 20 s Spark pods
-
-Visual: a stacked bar: node capacity → reserved → Allocatable → requests (Airflow, lake, driver 2 Gi, executor 1.1 Gi).
-
-Speaker notes: Our pandas-on-driver read lives in memoryOverhead, not in the heap; that is why the driver is 1g + 1g.
-
----
-# Appendix A5 — Airflow 3 roles and idempotency
-
-| Component | Job |
-|---|---|
-| dag-processor | parse DAG files (untrusted code) → serialized DAGs |
-| scheduler | create runs per data interval, queue ready tasks, detect dead tasks by heartbeat |
-| executor (Local: inside the scheduler pod) | run tasks; `parallelism` = worker processes (E52) |
-| triggerer | async waits for deferred tasks, frees worker slots |
-| api-server | UI, REST, Task Execution API (JWT) |
-
-- Idempotency: partition overwrite (ours) · MERGE on a stable key · windowed recompute for late data
-- Airflow records task state, not data: a deleted partition after a green run is found only by data checks
-
-Speaker notes: Separating parsing, scheduling, execution and waiting is the main architectural change from Airflow 2.
-
----
-# Appendix A6 — Iceberg catalogs: where we are, where it goes
-
-- Commit = new files + CAS swap of the metadata pointer in the catalog; COW for batch overwrites (ours), MOR for frequent upserts
-- Ours: HMS (thrift) for metadata + static S3 keys in every engine
-- Next generation: REST catalog (Polaris, Lakekeeper, Gravitino, Nessie) that also vends short-lived storage credentials
-- Maintenance: expire · compact · rewrite manifests · remove orphans; scheduled now, event-driven later
-- Strategy: keep the lab stack (lab doc, verified); for production replace the platform layer, keep the jobs, DAGs and CI
-
-Speaker notes: The catalog is the single point that makes Iceberg transactional; choosing it is choosing your engines, security model and operations load.
+# Appendix A3 — Sources for Part 5
+- DataVidhya, "Best Practices: 15 Rules Every Production DAG Should Follow": https://datavidhya.com/learn/production-airflow/production/best-practices/
+- Apache Airflow, "Upgrading to Airflow 3": https://airflow.apache.org/docs/apache-airflow/stable/installation/upgrading_to_airflow3.html
+- Kubernetes blog, "In-Place Pod Resize Graduates to Stable" (v1.35): https://kubernetes.io/blog/2025/12/19/kubernetes-v1-35-in-place-pod-resize-ga/
+- Kubernetes blog, "The Shift to cgroup v2 in Kubernetes" (memory.oom.group): https://kubernetes.io/blog/2026/10/06/kubernetes-cgroups-v2-shift/
+- Notion, "Balancing cost and reliability for Spark on Kubernetes": https://www.notion.com/blog/balancing-cost-and-reliability-for-spark-on-kubernetes
+- Apache Polaris graduation (Feb 2026): https://polaris.apache.org/blog/2026/02/19/apache-polaris-graduates-to-top-level-project/
+- MinIO AIStor Tables GA (Feb 2026): https://www.businesswire.com/news/home/20260203064684/en
+- Snowflake, "Access Apache Iceberg tables with an external engine through Snowflake Horizon Catalog": https://docs.snowflake.com/en/user-guide/tables-iceberg-access-using-external-query-engine-snowflake-horizon
+- Helm 4 migration guide (flag renames, Helm 3 EOL): https://dev.to/amareswer/helm-4-migration-guide-what-breaks-and-how-to-fix-it-before-eol-4p99
+- Ruff AIR rule numbering (AIR301/302/311/312): https://gist.github.com/Dev-iL/3ee77257fff578b884a0f7492d082093
+- Project evidence: `docs/task2/08_study_notes.md` (Q1–Q52), `05_errors_and_fixes.md` (E25–E55), `04_process.md`, `06_validation.md`

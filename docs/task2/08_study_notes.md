@@ -1,6 +1,6 @@
 # Task 1–2 study notes: Bee's 52 questions
 
-Written 2026-11-06 after Bee's research on the whole stack of Tasks 1–2. Format: **global view first**, then one section per stack. Each answer = the concept, **how it shows up in our project** (file, E-number, measured number), and a reference where the claim depends on a version. `[interpreted]` = the question refers to a source Claude has not seen; the answer uses the most likely meaning, correct it if the source meant something else. Q-numbers follow Bee's list; the index at the end maps them to sections.
+Written 2026-11-06 after Bee's research on the whole stack of Tasks 1–2. Format: **global view first**, then one section per stack. Each answer = the concept, **how it shows up in our project** (file, E-number, measured number), and a reference where the claim depends on a version. `[interpreted]` = the question refers to a source Claude has not seen; the answer uses the most likely meaning, correct it if the source meant something else. Q-numbers follow Bee's list; the index at the end maps them to sections. The presentation version is `slides.md` Part 5 (slides 34–69, sources in appendix A3). Updated 2026-11-06 with Bee's answers on the `[interpreted]` items.
 
 ---
 
@@ -43,14 +43,14 @@ Three layers of control, each fixing what it can and escalating the rest (drill 
 | K8s architecture, CRs vs built-ins, controllers | everything is a desired state reconciled by a controller | SparkApplication CR + operator controller |
 | Airflow scaling bottlenecks | metadata DB, DAG parsing, logs, executor choice | LocalExecutor `parallelism: 2` (E52), remote logs (E51) |
 | Node allocation | Allocatable = Capacity − kube-reserved − system-reserved − eviction threshold; QoS classes | E25: 11217116Ki → 7268 Mi with `system-reserved=3686Mi` |
-| Catalog access patterns ("embedded vs external") | REST catalog can also hand out storage credentials | we use HMS (thrift) + S3 keys in the engine (Q20) |
+| Catalog access level ("embedded vs external") | embedded = the object store serves the Iceberg REST catalog itself (storage + catalog in one) | ours is external: HMS (thrift) + MinIO separately (Q20) |
 | SparkKubernetesOperator | creates the CR, follows the driver pod, streams logs, deletes on end | `dags/chatbot_bronze.py:62-70`, RBAC `rbac-airflow.yaml` (Q11, Q27) |
 | Volume, PVC, PV, StatefulSet | stable identity + its own disk per replica | `minio-0`, `postgres-0`, PVCs `data-*-0` (Q31) |
 | Timetable, data interval, triggerer, start_date | interval = what data a run covers; trigger = when it starts | `CronDataIntervalTimetable` (E38), `start_date` 2024-07-02, `catchup=False` (Q33, Q34) |
 
 ### 0.3 Three rules that explain most of Tasks 1–2
 
-1. **Desired state, reconciled.** Kubernetes, the Spark Operator, Helm and Airflow all store *what should be* and loop until reality matches. Debugging = find which loop is stuck (E54: the StatefulSet loop waits for a pod that never becomes Ready).
+1. **Desired state, reconciled (reconciliation controllers).** Kubernetes, the Spark Operator, Helm and Airflow all store *what should be* and loop until reality matches. Debugging = find which loop is stuck (E54: the StatefulSet loop waits for a pod that never becomes Ready).
 2. **A run is identified by its data, not by its clock.** Day D = `ds` = logical date; jobs overwrite exactly that partition, so reruns and backfills are safe (E38, E49).
 3. **Size from measurement, not from belief.** The kubelet, the JVM and Airflow each have their own idea of memory; requests, limits and heaps must agree (E25, E52, driver 1g + 1g overhead).
 
@@ -123,13 +123,10 @@ StatefulSet minio (replicas 1) ──volumeClaimTemplates──▶ PVC data-mini
 - Our numbers: idle requests 4,036 Mi; bronze run +3,200 Mi (driver 2048 + executor 1152) = 7,236 of 7,268 Mi; limits 103 % = overcommitted (allowed).
 - Rule of thumb: request ≈ steady usage (p50–p90), limit ≈ peak + margin; for JVMs request = limit for memory is common (predictable heap).
 
-### Q44. Pod deleted vs container OOMKilled; limiting executors; kube/system-reserved; overcommit
-- **OOMKilled:** the kernel kills a container that exceeds its memory limit (`Last State: OOMKilled, exit 137`, E52). The pod object stays; the kubelet restarts the container per `restartPolicy` (ours: Spark `Never` → the driver sees the executor lost and asks for a new one).
-- **Pod deleted/evicted:** the whole pod object goes (kubectl delete, node pressure eviction, preemption). A controller creates a replacement (drill 2: Spark replaced the executor).
-- **Limiting Spark executors:** `spark.executor.instances`, `spark.executor.memory` + `memoryOverhead` (→ pod requests/limits), dynamic allocation max; plus namespace **ResourceQuota** so Spark can't take the whole node.
-- **kube-reserved / system-reserved:** memory kept away from pods for the kubelet/container runtime and the OS. We used `system-reserved=3686Mi` because the kubelet saw the WSL VM's 10.7 GiB, not the 8 GiB cap (E25).
-- **Overcommit:** sum of *limits* > Allocatable is allowed; sum of *requests* can't exceed it. Overcommit is safe while not every pod peaks at once.
-- "Is a K8s application more than a resource?" `[interpreted]`: a pod's cost = its containers + the kubelet/runtime overhead + sidecars (log groomers in Airflow pods: 32Mi requests each).
+### Q44. Pod deleted vs container OOMKilled; limiting executors; reserved memory; overcommit
+- **OOMKilled:** the kernel kills a container over its memory limit; same pod, RESTARTS +1, exit 137 (E52). **Deleted/evicted:** the pod object goes; a controller makes a new one (drills 1–2, E54).
+- **Limit Spark:** `spark.executor.instances` / dynamic allocation max, `memory` + `memoryOverhead` (= pod request = limit), plus a ResourceQuota on `spark-jobs`.
+- **kube-/system-reserved:** memory kept from pods for kubelet/runtime and the OS (ours `system-reserved=3686Mi`, E25). **Overcommit:** Σ limits > Allocatable is allowed (ours 103 %), Σ requests is not. Slide 43.
 
 ### Q45. Stateful vs stateless with HPA/VPA; node sizing; LimitRange/ResourceQuota; utilisation; headroom
 - **HPA** scales replica count on metrics; fits stateless services (api-server). **VPA** adjusts requests; fits stateful/single-replica services (Postgres, HMS), usually in recommendation mode, because applying it restarts the pod.
@@ -156,16 +153,9 @@ StatefulSet minio (replicas 1) ──volumeClaimTemplates──▶ PVC data-mini
 ## 2. Helm, CI/CD and GitOps
 
 ### Q5. How to write a standard Helm chart; using it for our own setup; releases and repositories
-```
-mychart/
-  Chart.yaml          name, version (chart, SemVer), appVersion (the app), dependencies
-  values.yaml         defaults; values.schema.json validates them
-  templates/          *.yaml with Go templates; _helpers.tpl (names, labels); NOTES.txt
-  charts/             vendored dependencies
-```
-- Standard habits: labels `app.kubernetes.io/*`, resources/probes/securityContext configurable, no secrets in values (reference existing Secrets: we do `metadataSecretName`, `jwtSecretName`), `helm lint`, `helm template | kubeconform`, chart-testing (`ct`) in CI.
-- **Our own setup** `[interpreted: "model set up" = packaging our lake components]`: `infra/k8s/` could become a chart (`lake/` with values for sizes, images, buckets). We chose **kustomize** because nothing needs templating logic and the secretGenerator fits our file-based secrets (slide 12).
-- **Release** = one installed instance (`airflow` in ns `airflow`); **chart version** tracks the package, **appVersion** the software inside. **Repository** = an `index.yaml` over HTTPS or an **OCI registry** (`helm push mychart-0.1.0.tgz oci://ghcr.io/<owner>/charts`). Pinning `--version` + checksum = reproducible installs (E29: chart 1.22.0 + SHA-512).
+- Layout: `Chart.yaml` (chart `version` + `appVersion`), `values.yaml` (+ `values.schema.json`), `templates/` (+ `_helpers.tpl`, `NOTES.txt`), `crds/`, `charts/`. Values are the only interface; image by digest; no secrets in values (reference existing Secrets, as our Airflow values do); `helm lint` + `helm template` in CI.
+- Own setup: `infra/k8s/` could be a chart; we use **kustomize** because nothing needs templating and secretGenerator fits our files (slide 12). A model-serving chart = values for model image digest, model URI, replicas, HPA.
+- **Release** = an installed instance with revisions; **repository** = `index.yaml` over HTTPS or an OCI registry (`helm push … oci://ghcr.io/<owner>/charts`); pin `--version` + checksum (E29). Slide 46.
 
 ### Q7. CI/CD with Helm; revisions
 - CI: `helm lint`, `helm template` + schema validation, render diff on PR; CD: `helm upgrade --install` from the pipeline, or a GitOps tool (Q29) that renders the chart itself.
@@ -173,8 +163,9 @@ mychart/
 - Ours: `make airflow-install` (deploy-guard → clean `main` only, E39), image by digest from `images.env`; CI renders kustomize and checks DAGs, Helm values are checked by deploying.
 
 ### Q8. Reusing/resetting values; rollback on a failed upgrade
-- `--reuse-values` merges the last release's values with your new `--set`s (can carry stale values forward); `--reset-values` uses only the chart defaults + what you pass; `--reset-then-reuse-values` (Helm ≥ 3.14) = chart defaults, then last values, then yours. Safest: always pass the full values file (`-f values-local.yaml`) like `make airflow-install`.
-- Rollback: `helm rollback <release> <revision>`; `--atomic` (Helm 3; called `--rollback-on-failure` in Helm 4) rolls back automatically if the upgrade fails/times out. A rollback does **not** undo database migrations (Airflow), so back up the metadata DB first (Q24).
+- `--reuse-values` merges the last release's values with your new `--set`s (stale values carry forward); `--reset-values` = chart defaults + what you pass; `--reset-then-reuse-values` (Helm ≥ 3.14) = new chart defaults, then last values, then yours. Safest: always pass the full values file (`-f values-local.yaml`), as `make airflow-install` does.
+- Rollback: `helm rollback <release> <revision>` (creates a new revision). Automatic: `--atomic` in Helm 3, renamed **`--rollback-on-failure` in Helm 4** (Nov 2025; the old name still works with a deprecation warning and a later minor version turns it into an error; `--force` → `--force-replace`). Helm 3 stops getting security patches on **2027-02-10**.
+- A rollback does **not** undo database migrations (Airflow), so back up the metadata DB first (Q24). CRDs in `crds/` are never upgraded or deleted by Helm. Slide 47.
 
 ### Q25. Spark DAG vs Airflow DAG; is Airflow run by Helm; Airflow chart vs Helm chart; Spark Operator chart
 - **Spark DAG** = the plan of *one job*: stages split at shuffles, tasks per partition, built by Catalyst/DAGScheduler, lives seconds-minutes inside the driver. **Airflow DAG** = a *workflow* of tasks across systems, scheduled per data interval, lives in Python files and the metadata DB.
@@ -233,7 +224,12 @@ usable × 0.4 = user memory (your objects, UDF data structures)
 - **Spill:** when execution memory is full, sorts/aggregations write sorted runs to local disk (`spark.local.dir` = emptyDir) and merge them later. Slower, but it is how Spark *avoids* OOM. Watch "Spill (memory/disk)" in the Spark UI.
 - **Cleanup of previous runs:** the operator deletes the CR + driver after `timeToLiveSeconds`; Airflow deletes on termination; emptyDirs go with the pod; failed writes leave orphan files → `remove_orphan_files` (72 h guard, E46).
 - **Static executor sizing** fails when data grows (OOM/spill) or wastes nodes when it shrinks. On K8s, dynamic allocation needs `spark.dynamicAllocation.shuffleTracking.enabled=true` (no external shuffle service).
-- **"Cut K8s costs by 80 %"** `[interpreted]`: such claims usually combine right-sizing requests, autoscaling to zero, spot nodes for executors, and bin-packing. The number depends on how wasteful the start was; measure requests vs usage first (Q45).
+- **Cutting Spark-on-K8s cost (the "80 %" recommendation):** a best case from combining several methods; the saving depends on how wasteful the starting point was (Notion reports 60–90 % on Spark compute):
+  1. right-size requests from measured usage (requests are what you pay for, Q43/Q45);
+  2. spot/preemptible nodes for executors, on-demand for drivers, graceful decommissioning;
+  3. scale to zero: dynamic allocation + node autoscaling (Karpenter consolidation, bin-packing);
+  4. separate node pools per workload, ARM instances where images allow;
+  5. read less data: compaction, partition pruning, columnar formats; heavy jobs off-peak.
 - **Executor OOM vs compaction:** `rewrite_data_files` reads and rewrites many files in one job; bound it with `max-file-group-size-bytes`, `partial-progress.enabled`, per-partition filters, and run it when nothing else runs (Sunday 02:00 after the 00:00 load).
 
 | Method | Pros | Cons |
@@ -257,24 +253,25 @@ usable × 0.4 = user memory (your objects, UDF data structures)
 - **Templated fields** are rendered with Jinja **at run time**, per task instance, from the context (`{{ ds }}`, `{{ data_interval_start }}`, `{{ var.value.x }}`, `{{ params.x }}`). Ours: the SparkApplication YAML is a template (`application_file`, `.yaml` in `template_ext`), so `{{ ds }}` becomes `--ingest-date 2024-07-24`.
 - Airflow 3 renders with **StrictUndefined**: a missing variable is an error, not an empty string (E47). CI renders every template with and without a date.
 
-### Q14. "15 rules of DAG production" `[interpreted: Bee's list not seen; this is the common set, with our status]`
+### Q14. DataVidhya's "15 rules every production DAG should follow" vs `chatbot_bronze`
 | # | Rule | Ours |
 |---|---|---|
-| 1 | No heavy work / network calls at top level (parse speed) | ✅ DAG integrity test imports in CI |
-| 2 | Idempotent tasks: same interval → same result | ✅ `overwritePartitions` per day |
-| 3 | Use the data interval, never `now()` | ✅ `ds` / `CronDataIntervalTimetable` (E38) |
-| 4 | Static, timezone-aware `start_date` | ✅ 2024-07-02 UTC, checked in CI |
-| 5 | `catchup` decided on purpose | ✅ False + explicit backfill |
-| 6 | Retries with delay, sized per failure type | ✅ bronze 2×5 min, validate ≤ 1 (E41) |
-| 7 | `execution_timeout` on every task, `dagrun_timeout` | ✅ 20 min / 3 h |
-| 8 | Alert on failure + SLA replacement (Deadline) | ✅ Telegram + 2 h DeadlineAlert |
-| 9 | Heavy compute outside Airflow workers | ✅ Spark pods |
-| 10 | No secrets in code; Connections/Secrets backend | ✅ env from K8s Secrets |
-| 11 | Small XComs only (metadata, not data) | ✅ none used for data |
-| 12 | `max_active_runs` / pools to protect shared targets | ✅ 1 run at a time |
-| 13 | Tags, owners, docs | ✅ tags; `doc_md` partly |
-| 14 | Tests: import, structure, template render | ✅ CI DAG integrity |
-| 15 | Data checks inside the DAG (fail the run) | ✅ validate, 23 checks |
+| 1 | Idempotent tasks | ✅ partition overwrite |
+| 2 | Atomic tasks | ✅ check / load / validate / notify; one Iceberg commit |
+| 3 | Simple DAGs | ✅ 4 tasks; maintenance is its own DAG |
+| 4 | No heavy processing in operators | ✅ Spark pods do the work |
+| 5 | Connections, no hardcoded credentials | ✅ `AIRFLOW_CONN_*` from Secrets |
+| 6 | Always retries + delay | partly, on purpose: 0 for deterministic checks (E47), no exponential backoff |
+| 7 | `execution_timeout` | ✅ 20 min |
+| 8 | Tags | ✅ `["task2", "lake", "bronze"]`, required by CI |
+| 9 | `catchup=False` | ✅ backfill explicit |
+| 10 | Static `start_date` | ✅ timezone-aware, checked in CI |
+| 11 | TaskFlow for Python tasks | ✅ check_landing, notify |
+| 12 | Fast parsing | ✅ CI DAG integrity |
+| 13 | Test before deploy | ✅ import + rules + template render in CI |
+| 14 | Meaningful names | ✅ |
+| 15 | `doc_md` | ❌ module docstring only (`dags/chatbot_bronze.py:1`); add `doc_md` in Task 3 |
+Missing from the list (Task 2 lessons): data-interval timetable (E38), deterministic vs transient failures, `max_active_runs` for shared tables, failure + deadline alerts, validation as a task, from-zero acceptance. Its idempotency example uses `execution_date`, removed in Airflow 3 → `logical_date`/`ds`. Slide 63.
 
 ### Q24. Clean up and back up an existing Airflow instance; DAG authors; deployment managers
 - Before an **upgrade**: back up the metadata DB (migrations are one-way; Helm rollback won't undo them), and **`airflow db clean`** old rows (task instances, logs, XComs) so migrations run fast and the DB stays small (a scaling bottleneck).
@@ -295,9 +292,9 @@ usable × 0.4 = user memory (your objects, UDF data structures)
 - Separate: parsing (untrusted DAG code) from scheduling (critical loop) from execution (workers) from waiting (triggerer) from UI/API. Each scales and fails independently.
 - **SubDAGs** were removed (they ran a whole DAG inside a task: deadlocks, slots wasted). **TaskGroups** = visual grouping only, same DAG. **Assets** (formerly Datasets) = data-aware scheduling: DAG B runs when DAG A updates `asset("s3://lakehouse/bronze/chatlog")`. That's the clean way to trigger Silver/Gold on new Bronze (option A, Task 3).
 
-### Q36. "JWT problem for memory parallelism" `[interpreted]`
+### Q36. JWT and memory/parallelism in Airflow 3
 - In Airflow 3, workers no longer write to the metadata DB directly; each task talks to the **Task Execution API** on the api-server with a short-lived **JWT**. All components must share the same signing secret (our Secret `airflow-jwt-secret`); a mismatch → tasks fail with 401/403 after an upgrade or secret change.
-- Link to memory/parallelism: each LocalExecutor worker process holds an API client + token (~260 MiB RSS per worker, E52), so `parallelism` multiplies memory; long tasks rely on token refresh. If your source meant something else, send it and I'll update.
+- It is **not a memory cost**: memory grows with worker processes (`parallelism`, ~263 MiB each, E52), not with tokens. Slide 59.
 
 ### Q37. Scheduler heartbeat and the deferrable path; is it true; why split roles
 - **True.** The scheduler detects dead tasks by missed **heartbeats** (in Airflow 3 the task supervisor heartbeats through the API) and fails/retries them. A **deferrable** operator runs on a worker, hits a wait, **defers** (frees the slot), the **triggerer** waits asynchronously, then the scheduler re-queues the task on a worker to finish.
@@ -308,7 +305,7 @@ usable × 0.4 = user memory (your objects, UDF data structures)
 - Consequence: a scheduler restart kills running tasks (E41 → 120 s grace + validate retry). KubernetesExecutor would put each task in its own pod.
 
 ### Q41. Upgrading Airflow 2 → 3: old code, chart, security, migration, automatic checks
-- **Code:** run **ruff's `AIR3xx` rules** (`ruff check --select AIR301,AIR302,AIR311,AIR312 dags/`): flags removed/moved imports and parameters (`schedule_interval` → `schedule`, `airflow.operators.*` → providers/`airflow.sdk`, SubDAGs, `execution_date` → `logical_date`, direct DB access from tasks).
+- **Code:** run **ruff's AIR rules** (`ruff check --select AIR301,AIR302,AIR311,AIR312 dags/ --fix`): **AIR301** = removed in 3.0, **AIR302** = moved to provider packages (both breaking); **AIR311/AIR312** = deprecated but still working through a compatibility layer. They flag removed/moved imports and parameters (`schedule_interval` → `schedule`, `airflow.operators.*` → providers/`airflow.sdk`, SubDAGs, `execution_date` → `logical_date`, direct DB access from tasks).
 - **Config:** `airflow config lint` / `airflow config update` for renamed/removed options.
 - **Chart/infra:** new components (dag-processor mandatory, api-server replaces webserver), JWT secret, Execution API.
 - **DB:** back up, `airflow db clean`, then `airflow db migrate` (the chart's migration job).
@@ -331,14 +328,14 @@ Bottlenecks in order of pain: **metadata DB** (connections → PgBouncer, row co
 
 ## 5. Idempotency, auditability, data operations
 
-### Q38. Process-level vs write-level idempotency; overwrite, MERGE, windowed; deleted output but a successful run
-- `[interpreted]` **Process-level** = running the *task* twice is harmless (no duplicate side effects: alerts, API calls). **Write-level** = the *data written* is the same after one or many runs.
-- **Partition overwrite** (ours): replace partition D entirely → write-level idempotent for append-style daily data. **MERGE/upsert**: match on a key, update or insert → idempotent if the key is stable and the source is deterministic. **Windowed**: recompute a sliding window (e.g. last 3 days) to catch late data, each run overwriting the window.
-- If someone **deletes the output partition** after a successful run, **Airflow does not notice**: it records *task state*, not data. Detection needs data checks (rerun `validate`, a reconciliation DAG, or Asset checks). Repair = clear the run (idempotent job rewrites it).
+### Q38. Process-level vs write-level deduplication; overwrite, MERGE, windowed; deleted output but a successful run
+- **Process-level deduplication:** running the *task* twice has no double side effects (alerts, API calls, emails). **Write-level deduplication:** the *write* itself cannot create duplicate rows, however often it runs.
+- **Partition overwrite** (ours): replace partition D entirely. **MERGE/upsert**: match on a key, update or insert; safe if the source is deduplicated and deterministic. **Windowed**: recompute the last N days each run and overwrite them; absorbs late data at N× compute.
+- If someone **deletes the output partition** after a successful run, **Airflow does not notice**: it records *task state*, not data. Detection needs a later data check (audit job, Asset checks, reconcile DAG); repair = clear the run (the idempotent job rewrites it). Slide 64.
 
-### Q39. Data audit and the facets of idempotency
-- **Audit:** who/what/when for every row: our Bronze has `_ingest_date`, `_ingested_at`, `_source_file`, `_batch_id`; Iceberg snapshots record each commit (operation, summary, timestamp); Airflow keeps runs/tries; logs in S3.
-- `[interpreted]` facets: **re-run** (same input → same output), **scope** (a run touches only its interval's partition), **isolation + throttle** (`max_active_runs=1`, pools: concurrent runs don't collide), **seam + reconcile** (check counts at the boundary between systems: rows read = rows written, Bronze = landing), **resumability** (a failed run restarts from its first unfinished task: clear the failed task only).
+### Q39. Data audit and the principles of idempotency
+- **Audit trail:** Bronze has `_ingest_date`, `_ingested_at`, `_source_file`, `_batch_id`; Iceberg snapshots record each commit (operation, summary, time); Airflow keeps runs/tries; task logs in S3. Execution record (Airflow) + data-change record (Iceberg) together = an audit.
+- Principles: **reframe** ("produce the state of interval D", not "append new rows") · **idempotency** (overwritePartitions) · **scope** (one run owns one partition of two tables) · **isolation + throttle** (`max_active_runs=1`, backfill `--max-active-runs 1`) · **seams + reconcile** (landing count = rows read = rows written = expected) · **resumability** (clear only the failed task; the Iceberg commit is all-or-nothing). Slide 64.
 
 ---
 
@@ -375,13 +372,13 @@ catalog pointer ──▶ metadata.json (schemas, partition specs, snapshots, cu
 | **Apache Polaris** | REST implementation | open governance, RBAC, credential vending; Snowflake Open Catalog is managed Polaris | young project |
 | **Lakekeeper** | REST implementation (Rust) | lightweight, OIDC/authz, single binary | smaller ecosystem |
 | **Apache Gravitino** | metadata federation over many sources (Iceberg REST, Hive, JDBC DBs, files) | one catalog of catalogs | broader scope = more to run |
-| **Snowflake** (Horizon / Open Catalog) | Snowflake-managed | managed, integrated with Snowflake | vendor coupling; external engines get read or REST access depending on the product |
+| **Snowflake Horizon** | managed Iceberg REST API (Apache Polaris integrated) | external engines (Spark, Trino) **read and write** Snowflake-managed Iceberg v2/v3 tables; vended credentials | external engines can't use tags, branches or table registration; S3-compatible non-AWS storage (MinIO) not supported; API calls billed |
 Criteria: engines that must read/write it, auth and multi-tenant needs, transactions across tables, operations you can afford, vendor lock-in. For our lab, HMS was chosen for engine compatibility (Trino 483, StarRocks 3.5 support it); REST is the forward-looking option (Q52).
 
-### Q20. "Embedded vs external" approach `[interpreted]`
-- What we run (Bee's "external/old"): the engine gets **two** things separately: table metadata from **HMS** (thrift) and **its own static S3 keys** to read/write files (`s3-credentials`). Every engine must hold storage keys.
-- Newer pattern (Bee's "embedded/new"): the engine asks a **REST catalog** for the table; the catalog returns the metadata **and temporary, scoped storage credentials** (credential vending). One service governs both catalog and storage access; engines never hold long-lived keys.
-- Trade-off: much better security/governance; needs a REST catalog (Polaris, Lakekeeper, Gravitino) and engine support.
+### Q20. "External vs embedded": the level at which an engine reaches the data
+- **External (ours):** catalog and storage are two systems. Spark asks **HMS** (thrift, backed by Postgres) for the table's metadata pointer, then reads/writes files on **MinIO** directly with its own S3 keys (`s3-credentials`). Two services to run, secure and back up (drills 6–7).
+- **Embedded (new):** the object store itself **serves the Iceberg REST catalog**: one endpoint gives both the S3 API and the catalog (e.g. MinIO AIStor Tables, GA Feb 2026; AWS S3 Tables). No separate catalog DB; one auth model.
+- Trade-off: embedded = less to operate, but tied to that storage product (AIStor is commercial); external = vendor-neutral and mature, more moving parts. Slide 55.
 
 ### Q48. Automating Iceberg maintenance: manual, CronJob, event-driven, AI/autonomous
 | Way | Pros | Cons |
@@ -449,4 +446,4 @@ Airflow ──▶ dbt ──(SQL)──▶ Trino ──▶ Iceberg connector ─
 | 17 | 6 | 35 | 4 | | |
 | 18 | 7 | 36 | 4 | | |
 
-`[interpreted]` items to confirm with Bee's sources: Q5 ("model set up"), Q14 (15 rules), Q20 (embedded/external), Q36 (JWT), Q38–Q39 (facet names), Q44 (last part), Q47 (80 % cost claim), and "Repartition Controllers" in the learned list (read as reconciliation controllers, §0.3 rule 1).
+All `[interpreted]` items were confirmed or corrected by Bee on 2026-11-06 (Q14 DataVidhya list, Q20 access level, Q36, Q38–Q39 deduplication levels, Q47 cost methods, reconciliation controllers; Q5 and Q44 shortened; Helm 4 flags, ruff AIR numbers and the Snowflake row verified).
