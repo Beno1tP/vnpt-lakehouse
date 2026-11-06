@@ -88,6 +88,14 @@ docs/task3/01 … 07, README.md                    ➕
 
 ---
 
+## I. Integration with Task 2's demo tooling and lifecycle (2026-11-06, branch `task2/demo-lifecycle`, slides 70–71)
+
+- **Modes reuse the Task 2 targets:** `mode-pipeline` = `make airflow-resume` + Trino to 0; `mode-query` / `mode-serving` = `make airflow-pause` (it refuses while a SparkApplication exists) + Trino/StarRocks/Superset up. Every mode first deletes `spark-history` if it runs (512 Mi request).
+- **Silver gets event logs for free:** `silver_sparkapp.yaml` must copy the `spark.eventLog.*` + `spark-events` volume block from `bronze_sparkapp.yaml` (unit test `test_sparkapp_writes_event_log` should list it).
+- **Open decision for step 3.7 (Bee):** the lifecycle (Q53) keeps results until the final presentation, while 3.7 starts with `minikube delete`. Options: (a) `make evidence` + screenshots, then from zero as planned (results are rebuilt, Airflow history / event logs / drill evidence are lost); (b) move the from-zero acceptance to the end of Task 5, once, after the final presentation. To decide at 3.7.
+
+---
+
 ## R. Review of the input plan (2026-11-06)
 
 Checked against the repo and Task 1–2 measurements. Kept: Silver content and flags, three Silver tables, Trino 483 single node, catalog file, metadata/time-travel/EXPLAIN demos, risks table, read-only MinIO user, leader questions.
