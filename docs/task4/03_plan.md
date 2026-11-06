@@ -92,6 +92,14 @@ docs/task4/01 … 07, README.md                ➕
 
 ---
 
+## I. Integration with Task 2's demo tooling and lifecycle (2026-11-06, slides 70–71 of Task 2)
+
+- **Modes reuse the Task 2 targets:** `mode-gold` = `make airflow-pause` only if Airflow must give way to StarRocks (otherwise keep it, since `gold_build` runs in Airflow); `mode-pipeline` = `make airflow-resume` + StarRocks to 0. Every mode first deletes `spark-history` if it runs (512 Mi).
+- **No Spark event logs for dbt:** dbt runs SQL in StarRocks, not Spark; its evidence = `dbt` run results + `dbt docs` lineage, kept with `make evidence`-style files outside Git.
+- **Keep results:** StarRocks FE/BE scaled to 0 keep their PVCs; never `minikube delete` before the final presentation (Q53).
+
+---
+
 ## R. Review of the input plan (2026-11-06)
 
 Kept: StarRocks architecture, table types, bitmap reasoning, stable `sender_key` via incremental `dim_sender`, external catalog properties, raw-view fallback for 3-part names, seeds as expected values, Kimball 4 steps, flags as dimensions, risks, repo layout.
