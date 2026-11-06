@@ -62,9 +62,9 @@ The deadline is tight for "learn K8s + 8 tools". **Learn K8s just-in-time while 
 |---|---|---|---|
 | 1 | MinIO + Spark → Iceberg (Docker Compose) | `docs/task1/` | ✅ 10-18 (Bronze validated, idempotent, from-zero tested, failure drills, README); presented 10-23; Silver deferred (Bronze only for now) |
 | 2 | Minikube + Airflow running the Spark job | `docs/task2/` | ✅ 10-27 (`task2-v1`): Bronze on K8s under Airflow 3.3.2, CI → GHCR by digest, 24 daily runs (18 load / 6 skip, 23/23 checks), drills 1–7, backup/restore, maintenance DAG, Telegram alerts + 2 h deadline, remote logs, from zero `make k8s-up && make k8s-demo` with 0 restarts; E25–E53; summary `docs/task2/README.md` |
-| 3 | Trino querying Iceberg (starts with Silver, D6) | `docs/task3/` | ⬜ next |
-| 4 | StarRocks Gold via SQL/dbt | `docs/task4/` | ⬜ |
-| 5 | Superset dashboard UC4–UC8 | `docs/task5/` | ⬜ |
+| 3 | Trino querying Iceberg (starts with Silver, D6) | `docs/task3/` | ⬜ next; plan + review written 11-06 (`03_plan.md` §R, proposed D7–D12) |
+| 4 | StarRocks Gold via SQL/dbt | `docs/task4/` | ⬜ plan written 11-06 (D13–D18) |
+| 5 | Superset dashboard UC4–UC8 | `docs/task5/` | ⬜ plan written 11-06 (D19–D22) |
 
 ## 4b. Day plan (10-15) and actual outcome
 
