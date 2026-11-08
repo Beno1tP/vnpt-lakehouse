@@ -19,7 +19,7 @@ What Task 2 implements:
 - 24 calendar days (2024-07-02 → 07-25): 18 load, 6 have no export and are skipped
 - Same Bronze tables and rules as Task 1 (raw strings + load metadata), now partitioned by the data day
 
-Agenda: Knowledge (Kubernetes, Minikube, operators, Spark on K8s, Airflow 3, Helm, CI/CD) · Stack of this task · Running it (intervals, backfill, drills, backup, maintenance, sizing) · Errors · Deep dive: 52 questions from the stack review, one global view + per-stack answers
+Agenda: Knowledge (Kubernetes, Minikube, operators, Spark on K8s, Airflow 3, Helm, CI/CD) · Kubernetes in depth (K1–K18, with a chatbot-platform use case) · Stack of this task · Running it (intervals, backfill, drills, backup, maintenance, sizing) · Errors · Deep dive: 52 questions from the stack review, one global view + per-stack answers
 
 Visual: left "s3://landing/…/dt=2024-07-24/x.xlsx" → Airflow box (check → bronze → validate → notify) → Kubernetes box (driver pod + executor pod) → "Bronze: Iceberg on MinIO"; a Telegram icon under Airflow.
 
@@ -192,6 +192,296 @@ Speaker notes: Helm is good for software someone else maintains; kustomize keeps
 Visual: PR → CI checks (4 green ticks) → merge → build → scan → GHCR (sha256:…) → bump PR → Minikube pulls by digest.
 
 Speaker notes: No image is built on the laptop: that saves CPU, disk and a second copy of every image, and it is the production flow. Every change in Task 2 went through this loop (PRs #1–#43).
+
+---
+# Part 1b — Kubernetes in depth
+
+Numbered K1–K18 so slides 14–69 keep their numbers. Structure follows the Viblo "Kubernetes Series" (19 articles, after *Kubernetes in Action*), each topic tied to what Task 2 runs. K1–K12 = concepts, K13–K18 = one real-life use case (6 slides).
+
+---
+# Slide K1 — The map: Kubernetes topics → our cluster
+| Topic (series article) | Object / mechanism | Where it is in Task 2 |
+|---|---|---|
+| Pod (2), Pod internals (12) | pause container, init containers, probes | HMS `schema-init` initContainer; MinIO readiness probe |
+| Controllers (4), Deployment (5) | ReplicaSet, Deployment, Job, CronJob, DaemonSet | Airflow ×4, HMS, operator; bucket-init; pg-backup; kindnet |
+| Services (4) | ClusterIP, headless, DNS | `minio.lake.svc.cluster.local:9000`, headless postgres |
+| Volume (6), PVC (7) | emptyDir, PVC, StorageClass | Spark local dirs, `data-minio-0`, `standard` hostPath |
+| ConfigMap/Secret (8) | env vs files, hash names | secretGenerator (E54), Secrets as files (E27) |
+| StatefulSet (9) | ordinal identity, volumeClaimTemplates | `minio-0`, `postgres-0` |
+| Downward API (10) | pod metadata into env/files | Spark driver binds to `status.podIP` |
+| Internals (11) | API server, etcd, watch, controllers | every drill (slide 23) |
+| RBAC (13) | ServiceAccount, Role, RoleBinding | Airflow → SparkApplications only |
+| Pod/Network security (14) | Pod Security Admission, NetworkPolicy | fsGroup, non-root; NetworkPolicy not enforced (kindnet) |
+| Resources (15), autoscaling (16) | requests/limits, QoS, HPA/VPA/CA | E25, E52; slides 6, 42–45 |
+| Scheduling (17–18) | taints, affinity | not needed on 1 node; use case K14 |
+| Custom resources (19) | CRD + controller | SparkApplication (slide 8) |
+
+Speaker notes: Ingress is the one big topic the series skips; the use case (K13) covers it.
+
+---
+# Slide K2 — Inside a Pod
+- A Pod = one network namespace + shared volumes for 1..n containers. The hidden **pause** container holds the namespace; app containers join it → they talk over `localhost`, share the pod IP
+- **Init containers** run first, in order, each to completion → our HMS `schema-init` runs `schematool` before the metastore starts
+- **Sidecars** (native since 1.29: init container with `restartPolicy: Always`) run beside the app → Airflow's log-groomer sidecars
+- **Probes:** startup (slow boot), readiness (in or out of the Service), liveness (restart if stuck). Readiness ≠ liveness: a not-ready pod gets no traffic but is not killed
+- **Phases:** Pending → Running → Succeeded/Failed (Unknown = node lost, E40). `restartPolicy` Always / OnFailure / Never decides what the kubelet does on exit
+- **Termination:** SIGTERM → `terminationGracePeriodSeconds` → SIGKILL; preStop hooks run first. Too short a grace killed `validate` in E41 (10 s → 120 s)
+
+Visual: one pod box: pause container in the middle, app + sidecar around it, shared volume at the bottom, pod IP on the edge.
+
+Speaker notes: Everything the kubelet does to a pod is driven by these few fields; most "mysterious" restarts are a probe or a grace period.
+
+---
+# Slide K3 — Controllers: who keeps what alive
+| Controller | Keeps | Pod identity | Typical use | Ours |
+|---|---|---|---|---|
+| ReplicationController | N pods (legacy, equality selectors) | interchangeable | replaced by ReplicaSet | — |
+| ReplicaSet | N pods matching a label selector | interchangeable | only via a Deployment | under every Deployment |
+| Deployment | ReplicaSets across versions | interchangeable | stateless apps, rolling updates | Airflow, HMS, operator |
+| StatefulSet | N pods with ordinal names + own PVCs | stable (`-0`, `-1`) | databases, brokers | MinIO, Postgres |
+| DaemonSet | one pod per (matching) node | per node | node agents: CNI, logs, metrics | kindnet, kube-proxy |
+| Job | pods until N completions | run to completion | batch, migrations | bucket-init, minio-users, Airflow migrations |
+| CronJob | a Job per schedule | per run | periodic batch | pg-backup 01:00 UTC |
+
+- All use the same loop: **watch** desired objects + their pods → compare counts/specs → create/delete pods. Pods point back with `ownerReferences` → deleting the owner garbage-collects them
+- Labels are the glue: a ReplicaSet "owns" whatever matches its selector; a hand-made pod with matching labels would be adopted (and maybe deleted)
+
+Speaker notes: Picking the controller is picking the failure behaviour. Our E54 is a StatefulSet property: it will not replace a pod that never became Ready.
+
+---
+# Slide K4 — Example: stateless app + replicas = ReplicaSet
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: chat-api, namespace: bot }
+spec:
+  replicas: 3
+  selector: { matchLabels: { app: chat-api } }
+  strategy: { rollingUpdate: { maxSurge: 1, maxUnavailable: 0 } }
+  template:
+    metadata: { labels: { app: chat-api } }
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/org/chat-api@sha256:…
+          resources: { requests: { cpu: 250m, memory: 256Mi }, limits: { memory: 512Mi } }
+          readinessProbe: { httpGet: { path: /ready, port: 8080 } }
+```
+- Deployment → creates ReplicaSet `chat-api-7d9f…` (hash of the pod template) → 3 pods `chat-api-7d9f…-xxxxx`
+- Kill a pod → ReplicaSet sees 2 ≠ 3 → new pod (new name, new IP); the Service keeps routing to ready ones
+- `kubectl scale --replicas=5` → 2 more pods; scheduler spreads them by requests
+- New image → a **second** ReplicaSet grows 0 → 3 while the old one shrinks 3 → 0 (maxSurge 1, maxUnavailable 0 = never below 3 ready); the old ReplicaSet is kept at 0 for `rollout undo`
+- Works because the app is **stateless**: any replica can answer any request; state lives in a database or cache outside the pod
+
+Visual: Deployment → ReplicaSet v1 (3 pods) and ReplicaSet v2 (0 → 3) side by side with arrows during a rollout.
+
+Speaker notes: Our Airflow api-server is the same shape with replicas 1. If two pods needed different data or a stable name, this pattern would be wrong; that is the StatefulSet case.
+
+---
+# Slide K5 — Rollouts: Deployment vs StatefulSet
+| | Deployment | StatefulSet |
+|---|---|---|
+| Strategy | RollingUpdate (maxSurge, maxUnavailable) or Recreate | RollingUpdate (one pod at a time, highest ordinal first, optional `partition`) or OnDelete |
+| New pod before old dies? | yes with maxSurge > 0 | no: same name, so old must go first |
+| History / undo | old ReplicaSets → `kubectl rollout undo` | ControllerRevisions; `rollout undo` too, but a pod that never became Ready must be deleted by hand (E54) |
+| Readiness gate | waits for new pods Ready before continuing | waits for each pod Ready before the next |
+| Disruption guard | PodDisruptionBudget limits voluntary evictions (drain, upgrades) | same; critical for quorum systems |
+
+- Our cases: scheduler rollout killed a running task (E41) → longer grace; MinIO stuck on a bad template (E54) → re-apply with `-k`, delete the pod
+- `kubectl rollout status` = the command every make target waits on
+
+Speaker notes: A rollout is only as safe as the readiness probe: without one, Kubernetes declares success as soon as the container starts.
+
+---
+# Slide K6 — Services and networking
+| Type | Reachable from | Use |
+|---|---|---|
+| ClusterIP (default) | inside the cluster, virtual IP | MinIO, HMS, Postgres, Airflow api-server |
+| Headless (`clusterIP: None`) | DNS returns pod IPs | StatefulSet pod names, Spark driver ↔ executors |
+| NodePort | every node's IP:30000–32767 | quick tests |
+| LoadBalancer | cloud load balancer IP | public entry in the cloud |
+| ExternalName | DNS alias to an outside name | managed DB behind a stable in-cluster name |
+
+- Path of a request: client → `minio.lake.svc.cluster.local` (CoreDNS) → ClusterIP → kube-proxy rules (iptables/IPVS, or eBPF with Cilium) → one **ready** pod from the EndpointSlice
+- Readiness controls membership: a pod failing readiness leaves the EndpointSlice; no traffic, no restart
+- L7 entry: **Ingress** (or the newer Gateway API) = host/path routing + TLS in front of ClusterIP Services; we use `kubectl port-forward` instead (one user, laptop)
+- Pod network: every pod gets a routable IP (CNI: kindnet here, Calico/Cilium in production); NetworkPolicy needs a CNI that enforces it
+
+Speaker notes: E37 was a networking lesson: pod hostnames are not in DNS, pod IPs are, so the Airflow UI fetches logs by IP.
+
+---
+# Slide K7 — Storage: Volume, PV, PVC, StorageClass
+| Volume | Lifetime | Ours |
+|---|---|---|
+| emptyDir (disk or `medium: Memory`) | the pod | Spark local dirs, landing simulator `/work`, HMS `/home/hive` (E28) |
+| configMap / secret / projected | the pod (content from the API) | core-site.xml, hive-site.xml, MinIO keys |
+| hostPath | the node | minikube's `standard` provisioner under the hood |
+| persistentVolumeClaim | independent of the pod | `data-minio-0` 5 Gi, `data-postgres-0` 2 Gi |
+
+- Decoupling (article 7): the developer asks for "5 Gi, RWO" (PVC); the cluster's StorageClass provisions a PV; the pod only names the claim → same manifest on Minikube and in the cloud
+- Access modes: RWO (one node), ROX, RWX (many nodes, needs NFS/CephFS/EFS), RWOP (one pod)
+- Reclaim policy: Delete (PV goes with the PVC) vs Retain (keep the disk for manual recovery) → production databases: Retain
+- Binding modes: `WaitForFirstConsumer` creates the disk in the zone where the pod is scheduled
+
+Speaker notes: The storage abstraction is why `minikube delete` is the only command that loses our data: pods and StatefulSets come and go, the claims stay.
+
+---
+# Slide K8 — Configuration: ConfigMap, Secret, Downward API
+- **ConfigMap** = non-secret config; **Secret** = base64 (not encrypted) values, encrypted at rest only if the API server is configured to; both injected as **env** or **files**
+- Env is read once at start; mounted files are updated in place (~1 min) unless `subPath` is used → a config change via env needs a pod restart
+- **Generated names with a content hash** (kustomize): a changed config = a new name = the referencing pods roll automatically. Trap: applying one file without kustomize points the pod at a name that doesn't exist (E54)
+- `immutable: true` protects big ConfigMaps/Secrets from edits and saves API watch load
+- **Downward API:** a pod's own metadata (name, namespace, labels, IP, resource limits) as env or files without talking to the API → Spark's driver gets its bind address from `status.podIP`
+- Security: Secrets as files with `defaultMode` 0440 + `fsGroup` (E27), never in images, Helm values (E35) or logs
+
+Speaker notes: In production, Secrets usually come from an external store (Vault, cloud secret manager) through the External Secrets operator; the pod side stays the same.
+
+---
+# Slide K9 — Internals: one request, every component
+`kubectl apply -f deployment.yaml` (3 replicas):
+1. **kubectl** → HTTPS → **kube-apiserver**: authenticate (cert/token) → authorize (RBAC) → admission (mutating webhooks, defaults, validating) → write Deployment to **etcd**
+2. **Deployment controller** (in kube-controller-manager) is *watching* Deployments → creates a ReplicaSet (another write through the API server)
+3. **ReplicaSet controller** watches ReplicaSets → creates 3 Pods with `nodeName` empty
+4. **kube-scheduler** watches unscheduled Pods → filters nodes (requests vs Allocatable, taints, affinity) → scores → writes a **Binding**
+5. **kubelet** on that node watches Pods bound to it → pulls the image (CRI → containerd) → starts the pause + app containers → reports status
+6. **EndpointSlice controller** adds ready pod IPs → **kube-proxy** on every node programs the Service rules → **CoreDNS** answers the name
+
+- Only the API server talks to etcd; every component is a client that watches and reacts. No component calls another directly
+- `kubectl get events -w` shows these steps live (Scheduled, Pulling, Pulled, Created, Started)
+
+Speaker notes: This chain explains debugging: Pending = step 4, ImagePullBackOff = step 5, Running but no traffic = step 6.
+
+---
+# Slide K10 — Authority matrix: who may do what, and why
+| Component | Identity | May change (authority) | Scope | Why limited |
+|---|---|---|---|---|
+| kube-apiserver | serving cert | the only writer to etcd; enforces authn/authz/admission for everyone | cluster | single gate = single audit point |
+| etcd | peer/client certs | stores everything; accepts only the API server | cluster data | whoever reads etcd reads every Secret |
+| kube-scheduler | `system:kube-scheduler` | pod **bindings** (+ events); cannot create pods | cluster | decides placement, nothing else |
+| kube-controller-manager | one SA per controller | the objects its controllers own (ReplicaSets, Pods, EndpointSlices, Jobs…) | cluster | each loop limited to its resources |
+| kubelet | `system:node:<name>` (Node authorizer + NodeRestriction) | its own Node object and pods bound to it; reads only Secrets/ConfigMaps those pods use | **one node** | a compromised node cannot read other nodes' Secrets |
+| kube-proxy | `system:kube-proxy` | nothing in the API (read Services/EndpointSlices); writes local iptables | node | dataplane only |
+| CoreDNS | its SA | read Services/EndpointSlices | cluster read | answers names only |
+| Spark Operator controller | `spark-operator` SA | SparkApplications, driver pods in `spark-jobs` (`jobNamespaces`) | namespace(s) | runs spark-submit |
+| Spark Operator webhook | webhook SA + TLS | mutates driver/executor pods at admission | `spark-jobs` pods | `failurePolicy: Fail` |
+| Airflow scheduler | `airflow-scheduler` SA | create/watch/delete SparkApplications; read pods + logs | `spark-jobs` only | cannot read Secrets or touch `lake` |
+| Spark driver | `spark-operator-spark` SA | create/delete executor pods, services, configmaps | `spark-jobs` | executors only |
+| MinIO, Postgres, HMS | default SA | **no API rights** needed | — | improvement: `automountServiceAccountToken: false` |
+
+Check any line: `kubectl auth can-i create pods -n spark-jobs --as=system:serviceaccount:airflow:airflow-scheduler` → `no`
+
+Speaker notes: The pattern is least privilege by scope: cluster components get exactly their loop's resources, apps get one namespace, and data services get nothing from the API.
+
+---
+# Slide K11 — RBAC and ServiceAccounts in practice
+- Subjects: **users** (certs/OIDC, outside the cluster), **groups**, **ServiceAccounts** (in-cluster identities, one per app)
+- A pod's SA token is projected into `/var/run/secrets/kubernetes.io/serviceaccount/` — short-lived, audience-bound, rotated by the kubelet (no long-lived token Secrets since 1.24)
+- **Role** (namespaced) / **ClusterRole** (cluster-wide or reusable) = list of (apiGroup, resource, verb); **RoleBinding** / **ClusterRoleBinding** = who gets it, where
+- Subresources are separate: `pods/log`, `pods/exec`, `sparkapplications/status` → our Airflow Role allows `pods/log get` but not `pods/exec`
+- Verbs: get, list, watch (read) · create, update, patch, delete (write) · escalate, bind, impersonate (dangerous)
+- Aggregated ClusterRoles: `view`, `edit`, `admin` grow automatically when CRDs add rules
+- Ours: `infra/k8s/spark-jobs/rbac-airflow.yaml` (Role + RoleBinding across namespaces: subject in `airflow`, rights in `spark-jobs`)
+
+Speaker notes: RBAC is additive only: there is no "deny" rule. Safety comes from granting little, per namespace, to one identity per app.
+
+---
+# Slide K12 — Pod and network security
+- **Pod Security Admission** (replaced PodSecurityPolicy, removed in 1.25): namespace labels `pod-security.kubernetes.io/enforce=baseline|restricted`. `restricted` requires non-root, no privilege escalation, dropped capabilities, seccomp
+- **securityContext** per pod/container: `runAsNonRoot`, `runAsUser`, `fsGroup` (volume group ownership, E27), `readOnlyRootFilesystem`, `capabilities.drop: [ALL]`
+- **NetworkPolicy**: default allow-all; a policy selecting a pod turns it into default-deny for that direction; allow lists by pod/namespace labels and ports. Example: only `spark-jobs` and `lake` may reach MinIO :9000; only HMS may reach Postgres :5432
+- Enforced by the CNI only: kindnet ignores NetworkPolicy → in our lab it is documentation; Calico/Cilium enforce it
+- Images: by digest, non-root base (Chainguard MinIO), scanned in CI (Trivy)
+
+Speaker notes: RBAC protects the API; Pod Security protects the node from the pod; NetworkPolicy protects pods from each other. Our lab has the first fully, the second partly, the third only on paper.
+
+---
+# Slide K13 — Use case (1/6): a chatbot platform on Kubernetes
+Scenario (illustrative, sized for discussion, not measured): the chatbot whose logs we load, run on Kubernetes for several provinces.
+
+| Need | Number (assumed) | Kubernetes consequence |
+|---|---|---|
+| Chat API traffic | ~200 req/s peak at 9–11 h, 10× lower at night | stateless Deployment + HPA |
+| NLU model inference | 50–150 ms per call, CPU-bound | separate Deployment, own node pool, HPA on CPU |
+| Sessions / conversation state | must survive pod restarts | Redis (StatefulSet or managed) |
+| Chat log storage | durable, backed up | Postgres/Oracle outside the app pods |
+| Daily analytics | the lakehouse of Tasks 1–5 | Spark Operator + Airflow, batch node pool |
+| Availability | 99.9 % for the API | ≥ 2 replicas, spread across zones, PDBs |
+| Teams | bot team, data team, platform team | namespaces + RBAC + quotas |
+
+Speaker notes: The point is not the numbers but how each requirement maps to an object type; the next five slides do the mapping.
+
+---
+# Slide K14 — Use case (2/6): namespaces, workloads, scheduling
+| Namespace | Workload | Object | Scheduling |
+|---|---|---|---|
+| `bot` | chat-api | Deployment 3–20 replicas + HPA + PDB `minAvailable: 2` | general pool; topologySpreadConstraints across zones |
+| `bot` | nlu-serving | Deployment 2–10 + HPA | **node affinity** to `pool=inference`; pod anti-affinity (not 2 on one node) |
+| `bot` | redis | StatefulSet 3 (primary + replicas) or managed | anti-affinity, PVC per pod, Retain |
+| `data` | Airflow | Deployments (api-server ×2, scheduler ×2, dag-processor, triggerer), KubernetesExecutor | general pool |
+| `data` | Spark jobs | SparkApplications | **taint** `pool=batch:NoSchedule` on spot nodes + **toleration** in executors; drivers on on-demand |
+| `platform` | ingress controller, cert-manager, monitoring | Deployments + DaemonSets (log/metrics agents) | every node (DaemonSet) |
+
+- Taints keep everyone else **off** expensive or unstable nodes; affinity pulls a workload **onto** the right nodes (articles 17–18)
+- PriorityClass: chat-api > nlu > Airflow > Spark executors → under pressure, batch is preempted first
+
+Speaker notes: Our lab is the `data` namespace of this picture on one node; the scheduling features only matter once there is more than one kind of node.
+
+---
+# Slide K15 — Use case (3/6): the stateless tier end to end
+- Entry: DNS → cloud LoadBalancer → **Ingress** (TLS by cert-manager, host `chat.example.vn`, path `/api`) → Service `chat-api` (ClusterIP) → ready pods
+- chat-api: Deployment (K4 shape), readiness `/ready` checks Redis + NLU reachability, liveness `/healthz` checks only the process
+- Scaling: **HPA** on CPU 60 % (and requests-per-second from Prometheus Adapter) → more pods → Pending → **Cluster Autoscaler/Karpenter** adds nodes (~1–2 min) → headroom pods hide that delay
+- Release: new digest via GitOps (Argo CD) → RollingUpdate maxSurge 25 %, maxUnavailable 0 → readiness gates each step → PDB protects during node drains; canary = a second Deployment with 5 % of traffic at the Ingress
+- Config: ConfigMap for thresholds (NLU_THRESHOLD lives here, not in code), Secrets from External Secrets; config hash in a pod annotation → change = rollout
+- Same rules as our lab: requests from measurements, limits on memory, images by digest, one SA per app with no API rights
+
+Visual: request path left to right, with HPA and autoscaler arrows below the pods.
+
+Speaker notes: Everything here is the K4 example plus four additions: Ingress, HPA, PDB, GitOps.
+
+---
+# Slide K16 — Use case (4/6): permissions, scope and authority per team
+| Who | Identity | Granted | Scope | Cannot |
+|---|---|---|---|---|
+| Bot developers | OIDC group `bot-dev` | `edit` ClusterRole via RoleBinding | `bot` | read Secrets in `data`; touch nodes; change RBAC |
+| Data engineers (us) | `data-eng` | `edit` | `data` | change `bot`; exec into chat-api pods |
+| Platform team | `platform-admin` | `cluster-admin` (break-glass, audited) | cluster | — |
+| CI/CD (Argo CD) | SA `argocd-application-controller` | apply manifests | the namespaces it manages | read app data |
+| chat-api pods | SA `chat-api`, token not mounted | none in the API; DB/Redis credentials only | its own Secrets | call the Kubernetes API |
+| Airflow scheduler | SA | SparkApplications + pod logs | `data` | Secrets, other namespaces |
+| Spark driver | SA | executor pods | `data` | anything else |
+
+- Quotas per namespace (ResourceQuota + LimitRange): `data` capped so a backfill cannot starve the chat API
+- NetworkPolicy default-deny per namespace, then allow: Ingress → chat-api; chat-api → nlu, redis; Spark → object store, catalog
+- Pod Security `restricted` on `bot`, `baseline` on `data` (Spark images need some extra rights)
+
+Speaker notes: Authority follows ownership: teams own namespaces, apps own one SA each, and only the platform team holds cluster-wide rights, through an audited path.
+
+---
+# Slide K17 — Use case (5/6): stateful tier and the data platform
+- Databases: production choice = **managed** (RDS/Cloud SQL) or an operator (CloudNativePG, Zalando) running a StatefulSet with replicas, failover and backups; never a single `postgres-0` like our lab
+- Redis: StatefulSet with headless Service + Sentinel/Cluster mode, or managed; PVCs with `Retain`
+- StatefulSet + node loss: pods on a dead node stay `Terminating` until the node is confirmed gone (the controller cannot risk two pods with the same identity) → out-of-service taint or node deletion lets them move
+- Data platform (our Tasks 1–5): Iceberg on object storage, a catalog service, Spark Operator for batch, Airflow for scheduling, Trino/StarRocks for queries, Superset for dashboards → mostly stateless compute on top of two stateful services (object store, catalog DB)
+- That ratio is the design goal: keep state in few, well-protected places; make everything else replaceable
+
+Speaker notes: Our lab already has this shape. The production difference is who runs the two stateful pieces and how many copies they have.
+
+---
+# Slide K18 — Use case (6/6): failure walkthrough at peak
+| Time | Event | Who reacts | Result |
+|---|---|---|---|
+| t0 | node with 2 chat-api + 1 nlu pod loses power | — | traffic to those pods fails |
+| +0–10 s | readiness/endpoint updates as kubelet heartbeats stop | — | — |
+| +~40–50 s | node-lifecycle controller marks the node `NotReady`, adds taint `node.kubernetes.io/unreachable` | controller-manager | EndpointSlices drop its pods → traffic only to healthy pods (other replicas carry it, HPA may add pods) |
+| +300 s | pods' default toleration `unreachable … for 300s` expires (seen in our `describe pod`) | taint eviction | ReplicaSets create replacements on other nodes |
+| +1–2 min after | new node from the autoscaler if capacity is short | Cluster Autoscaler | capacity restored |
+| StatefulSet pod (redis-1) on that node | not replaced automatically | operator/human | out-of-service taint → replacement with the same PVC |
+
+- Bad release instead of a dead node: new pods fail readiness → rollout stops (maxUnavailable 0) → old ReplicaSet still serves → `kubectl rollout undo` / Git revert
+- What makes this work: ≥ 2 replicas spread across nodes, readiness probes, PDBs, requests honest enough for the scheduler to place replacements
+
+Speaker notes: Shorten the 300 s with `tolerationSeconds` on stateless pods if faster failover is worth more eviction churn. Our drills 1–3 are this table on one node.
 
 ---
 # Part 2 — The stack of Task 2
@@ -493,7 +783,7 @@ Full written answers with file references: `docs/task2/08_study_notes.md` (Q1–
 | Layer | Our pieces | Question topics | Slides |
 |---|---|---|---|
 | Host and runtime | Windows → WSL2 → Docker Desktop → Minikube node (containerd) | node access, drivers, dockershim and shims, namespaces, local vs cloud | 36–40 |
-| Kubernetes core | API server, controllers, StatefulSets, PVCs | objects, storage | 37, 41 |
+| Kubernetes core | API server, controllers, StatefulSets, PVCs | objects, storage, authority, use case | 37, 41; K1–K18 |
 | Resources | requests, limits, Allocatable, QoS | OOM types, overcommit, VPA/HPA, node scaling | 42–45 |
 | Delivery | Helm, kustomize, GitHub Actions, GHCR | chart writing, revisions, values, rollback, Argo CD | 46–47 |
 | Compute | Spark 3.5.9 via Spark Operator 2.2.1 | memory model, driver ↔ API, operator, fault tolerance, joins, Trino, streaming | 48–53 |
