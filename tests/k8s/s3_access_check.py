@@ -9,6 +9,7 @@ import pyarrow.fs as pafs
 PROFILES = {  # operation -> expected result for each user
     "spark-jobs": {
         "read landing": True,
+        "read lakehouse": True,
         "write landing": False,
         "write+delete lakehouse": True,
         "create bucket": False,
@@ -16,6 +17,7 @@ PROFILES = {  # operation -> expected result for each user
     },
     "landing-writer": {
         "read landing": True,
+        "read lakehouse": False,
         "write landing": True,
         "write+delete lakehouse": False,
         "create bucket": False,
@@ -23,6 +25,15 @@ PROFILES = {  # operation -> expected result for each user
     },
     "demo-viewer": {  # demo console login (freeze plan step 1): read and list only, never backups
         "read landing": True,
+        "read lakehouse": True,
+        "write landing": False,
+        "write+delete lakehouse": False,
+        "create bucket": False,
+        "read backup": False,
+    },
+    "trino": {  # Task 3 (D11): Trino reads Iceberg files in lakehouse/ and nothing else
+        "read landing": False,
+        "read lakehouse": True,
         "write landing": False,
         "write+delete lakehouse": False,
         "create bucket": False,
@@ -40,6 +51,14 @@ def attempt(op: str) -> bool:
             files = [
                 i
                 for i in fs.get_file_info(pafs.FileSelector("landing", recursive=True))
+                if i.type == pafs.FileType.File
+            ]
+            with fs.open_input_stream(files[0].path) as f:
+                f.read(16)
+        elif op == "read lakehouse":
+            files = [
+                i
+                for i in fs.get_file_info(pafs.FileSelector("lakehouse/warehouse", recursive=True))
                 if i.type == pafs.FileType.File
             ]
             with fs.open_input_stream(files[0].path) as f:

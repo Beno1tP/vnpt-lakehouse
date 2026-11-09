@@ -18,6 +18,9 @@ AIRFLOW_CHART_SHA512 = 59a6b157949f37e96acd7351f795fd4347b2c4ac7f21d421542088b01
 # (asset created 2025-06-27T00:17Z, never updated); the chart index lists cf223b6c… because it was computed from a
 # second, non-byte-identical `helm package` 47 min later.
 SPARK_OPERATOR_CHART        = $(HOME)/.cache/vnpt-lake/charts/spark-operator-2.2.1.tgz
+# Trino chart 1.44.0 (appVersion 483): SHA-256 = GitHub asset digest = chart index digest (checked 2026-11-10)
+TRINO_CHART        = $(HOME)/.cache/vnpt-lake/charts/trino-1.44.0.tgz
+TRINO_CHART_SHA256 = ce3c2f6525d896513c5e20cac19a1260bf108f1d17f65188be45ccea9fb36caa
 SPARK_OPERATOR_CHART_SHA256 = 1c47c850c8d6ecc7eda4ede03e7932aa59f23fa6d186a10da3c8359df3671cf1
 include infra/k8s/images.env
 JOB_SRC              = jobs/ tests/ docker/spark-job/
@@ -40,7 +43,7 @@ SPARK_SUBMIT = $(COMPOSE) exec -T spark /opt/spark/bin/spark-submit --master $(S
 SPARK_SQL    = $(COMPOSE) exec -T spark /opt/spark/bin/spark-sql --master local[1]
 NOISE        = ^Time taken|^:: loading settings
 
-.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks ghcr-prune k8s-up k8s-demo airflow-viewer airflow-viewer-check minio-ui history-ui freeze freeze-check evidence evidence-export spark-operator-chart demo-task2 demo-pipeline demo-check
+.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks ghcr-prune k8s-up k8s-demo airflow-viewer airflow-viewer-check minio-ui history-ui freeze freeze-check evidence evidence-export spark-operator-chart demo-task2 demo-pipeline demo-check trino-chart trino-install trino-cli trino-ui mode-query mode-pipeline
 
 help:          ## list targets and variables
 	@awk -F':.*## ' '/^[a-zA-Z0-9_-]+:.*## /{printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -97,7 +100,7 @@ landing:       ## Task 2: split the Excel files by day -> s3://landing/<table>/d
 	  --expected /opt/tests/expected/bronze_daily.json
 s3-access-test: ## Task 2: prove least privilege of the MinIO users spark-jobs, landing-writer, demo-viewer (allowed AND denied ops)
 	kubectl -n spark-jobs create configmap s3-access-check --from-file=tests/k8s/s3_access_check.py --dry-run=client -o yaml | kubectl apply -f -
-	@set -e; rc=0; for p in spark-jobs:s3-credentials landing-writer:landing-writer-credentials demo-viewer:demo-viewer-credentials; do \
+	@set -e; rc=0; for p in spark-jobs:s3-credentials landing-writer:landing-writer-credentials demo-viewer:demo-viewer-credentials trino:trino-access-test-credentials; do \
 	  prof=$${p%%:*}; sec=$${p#*:}; \
 	  kubectl -n spark-jobs delete pod s3-access-test-$$prof --ignore-not-found >/dev/null; \
 	  sed -e "s|__PROFILE__|$$prof|g" -e "s|__SECRET__|$$sec|" -e 's|__IMAGE__|$(JOB_IMAGE)|' tests/k8s/s3-access-test-pod.yaml | kubectl apply -f - >/dev/null; \
@@ -131,6 +134,31 @@ spark-operator-chart: ## Task 2: download Spark Operator chart 2.2.1 once from G
 	mkdir -p $(dir $(SPARK_OPERATOR_CHART))
 	test -f $(SPARK_OPERATOR_CHART) || curl -fL --retry 3 -o $(SPARK_OPERATOR_CHART) https://github.com/kubeflow/spark-operator/releases/download/v2.2.1/spark-operator-2.2.1.tgz
 	echo "$(SPARK_OPERATOR_CHART_SHA256)  $(SPARK_OPERATOR_CHART)" | sha256sum --check
+trino-chart:   ## Task 3: download the Trino chart 1.44.0 once from GitHub Releases and check its SHA-256 (E58 pattern)
+	mkdir -p $(dir $(TRINO_CHART))
+	test -f $(TRINO_CHART) || curl -fL --retry 3 -o $(TRINO_CHART) https://github.com/trinodb/charts/releases/download/trino-1.44.0/trino-1.44.0.tgz
+	echo "$(TRINO_CHART_SHA256)  $(TRINO_CHART)" | sha256sum --check
+trino-install: trino-chart deploy-guard ## Task 3: helm upgrade --install Trino 483 (namespace trino); only in query mode (D12: Trino 2 Gi + Spark do not fit)
+	@r=$$(kubectl -n airflow get deploy/airflow-scheduler -o jsonpath='{.spec.replicas}'); test "$$r" = 0 || \
+	  { echo "refusing: Airflow scheduler is running (pipeline mode). Run make mode-query first (D12)"; exit 1; }
+	helm upgrade --install trino $(TRINO_CHART) -n trino -f infra/helm/trino/values-local.yaml \
+	  --description "git $$(git rev-parse --short HEAD)" --wait --timeout 15m
+trino-cli:     ## Task 3: interactive Trino SQL on catalog lake (exit with quit; read-only)
+	kubectl -n trino exec -it deploy/trino-coordinator -- trino --catalog lake
+trino-ui:      ## Task 3: Trino web UI on http://localhost:8081 (8080 is Airflow's; Ctrl+C to stop)
+	kubectl -n trino port-forward svc/trino 8081:8080
+mode-query:    ## Task 3 (D12): query mode. Refuses while a run is active; Airflow scheduler/dag-processor/triggerer + History Server -> 0; Trino -> 1
+	@! kubectl -n spark-jobs get sparkapplications --no-headers -o custom-columns=S:.status.applicationState.state | grep -vE '^(COMPLETED|FAILED)$$' | grep -q . || \
+	  { echo "refusing: a SparkApplication is not finished; wait for it"; exit 1; }
+	@! $(AF) airflow dags list-runs chatbot_bronze --state running -o plain 2>/dev/null | grep -q chatbot_bronze || { echo "refusing: a chatbot_bronze run is running; wait for it"; exit 1; }
+	kubectl -n airflow scale $(DEMO_STOP) --replicas=0
+	kubectl -n spark-jobs scale deploy/spark-history --replicas=0
+	@if kubectl -n trino get deploy/trino-coordinator >/dev/null 2>&1; then \
+	  kubectl -n trino scale deploy/trino-coordinator --replicas=1 && kubectl -n trino rollout status deploy/trino-coordinator --timeout=600s; \
+	else echo "Trino not installed yet: make trino-install"; fi
+mode-pipeline: ## Task 3 (D12): pipeline mode. Trino -> 0, then Airflow scheduler/dag-processor/triggerer -> 1 (Spark can run)
+	-kubectl -n trino scale deploy/trino-coordinator --replicas=0
+	$(MAKE) --no-print-directory demo-pipeline
 airflow-install: airflow-chart deploy-guard ## Task 2: helm upgrade --install Airflow 3.3.2 (chart 1.22.0); image = AIRFLOW_IMAGE_REF in images.env
 	@test -n "$(AIRFLOW_IMAGE_REF)" || { echo "AIRFLOW_IMAGE_REF missing in infra/k8s/images.env (bump it after the images run)"; exit 1; }
 	helm upgrade --install airflow $(AIRFLOW_CHART) -n airflow \

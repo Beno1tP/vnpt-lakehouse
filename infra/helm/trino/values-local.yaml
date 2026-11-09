@@ -1,0 +1,48 @@
+# Trino 483 on chart 1.44.0 (Task 3 step 3.3). Chart from GitHub Releases, cached + SHA-256 (make trino-chart, E58).
+# One node: the coordinator also runs the work (workers 0). Read-only twice (D11): MinIO user "trino" can only read
+# lakehouse/, and iceberg.security=read_only refuses writes before they reach HMS (HMS has no auth). S3 keys come from
+# the Secret trino-s3-credentials as environment variables (${ENV:…}), never in these values (E35).
+# Memory (docs/task3/02_config.md §2): request = limit = 2 Gi (Guaranteed), heap 1.5 GiB (75 %),
+# query memory 600 MB + default headroom 30 % of heap (~460 MB) = ~1,060 MB < heap.
+image:
+  repository: trinodb/trino
+  tag: "483"
+  digest: sha256:db58cc93e593a2706553745f276bb119c9810e69918be56ecde088ba7ccb0534   # multi-arch index (Docker Hub)
+  pullPolicy: IfNotPresent
+
+server:
+  workers: 0
+  node:
+    environment: lab
+  config:
+    query:
+      maxMemory: "600MB"
+
+coordinator:
+  jvm:
+    maxHeapSize: "1536M"
+  config:
+    nodeScheduler:
+      includeCoordinator: true          # single node: coordinator schedules tasks on itself
+    query:
+      maxMemoryPerNode: "600MB"
+  resources:
+    requests: { memory: 2Gi, cpu: 500m }
+    limits:   { memory: 2Gi }
+
+catalogs:
+  lake: |
+    connector.name=iceberg
+    iceberg.catalog.type=hive_metastore
+    hive.metastore.uri=thrift://hive-metastore.lake.svc.cluster.local:9083
+    iceberg.security=read_only
+    fs.native-s3.enabled=true
+    s3.endpoint=http://minio.lake.svc.cluster.local:9000
+    s3.path-style-access=true
+    s3.region=us-east-1
+    s3.aws-access-key=${ENV:TRINO_S3_ACCESS_KEY}
+    s3.aws-secret-key=${ENV:TRINO_S3_SECRET_KEY}
+
+envFrom:
+  - secretRef:
+      name: trino-s3-credentials        # rendered by infra/k8s/render-secrets.py, kustomize secretGenerator (no hash)

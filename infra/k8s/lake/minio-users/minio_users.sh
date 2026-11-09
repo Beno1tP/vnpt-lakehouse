@@ -33,4 +33,5 @@ ensure_user airflow-landing MINIO_AIRFLOW_LANDING_SECRET lake-landing-reader
 ensure_user airflow-logs    MINIO_AIRFLOW_LOGS_SECRET    lake-airflow-logs
 ensure_user backup-writer   MINIO_BACKUP_SECRET          lake-backup
 ensure_user demo-viewer     MINIO_DEMO_VIEWER_SECRET     lake-demo-viewer     # demo console login: list + read, no backup
+ensure_user trino           MINIO_TRINO_SECRET           lake-trino-read      # Task 3: Trino reads lakehouse/ only
 echo "minio users ok"

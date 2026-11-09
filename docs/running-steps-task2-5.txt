@@ -112,11 +112,14 @@ changed) -> make k8s-up -> run -> verify. New errors from E56.
     make sparkapp APP=silver DATE=2024-07-24       (one day by hand first)
     make backfill REPROCESS=completed              (bronze -> validate -> silver -> validate_silver for 24 days)
     make dag-report
-3.3 Trino                                                                       [PLANNED]
-    make mode-query                                (Airflow paused, Trino up; never together with a Spark run)
-    make trino-chart && make trino-install
-    make trino-cli                                 (SELECT count(*) FROM lake.silver.user_message;)
-    make trino-ui                                  -> http://localhost:8080 (stop airflow-ui first: same port)
+3.3 Trino                                                                       [PLANNED: branch task3/3.3-trino]
+    make k8s-up                                    (namespace trino, user trino, its Secrets)
+    make s3-access-test                            (4 profiles; trino: read lakehouse only)
+    make mode-query                                (Airflow scheduler/dag-processor/triggerer 0; never with a Spark run)
+    make trino-install                             (chart 1.44.0 cached + SHA-256; refuses in pipeline mode)
+    make trino-cli                                 (SHOW SCHEMAS FROM lake; SELECT count(*) FROM silver.user_message;)
+    make trino-ui                                  -> http://localhost:8081
+    make mode-pipeline                             (back: Trino 0, Airflow up)
 3.4 Reconcile                                                                   [PLANNED]
     make trino-check                               (Trino = Spark = expected on every number)
 3.5 Explore + explain                                                           [PLANNED]

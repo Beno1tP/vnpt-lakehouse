@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-11-10 — 3.3 Trino prepared
+Checked (Claude, public reads): chart index → 1.43.0 and 1.44.0 = Trino 483, 1.45.0 = 484 → **1.44.0**; its SHA-256 equals GitHub's asset digest and the index digest (unlike E58); `trinodb/trino:483` index digest `sha256:db58cc93…0534` (Docker Hub). Chart facts: release `trino` → `deploy/trino-coordinator`, `svc/trino`; `server.workers: 0` removes the worker Deployment; catalogs as properties with `${ENV:…}`.
+Prepared (branch `task3/3.3-trino`): namespace `trino`; MinIO user `trino` (`lake-trino-read.json`: list + read `lakehouse/` only) + Secrets `trino-s3-credentials` (namespace trino) and `trino-access-test-credentials` (AWS names, for the access test); `infra/helm/trino/values-local.yaml` (single node, heap 1536M, query 600 MB, 2 Gi Guaranteed, catalog `lake` with `iceberg.security=read_only`); make `trino-chart`, `trino-install` (refuses unless in query mode), `trino-cli`, `trino-ui` (port 8081), `mode-query`, `mode-pipeline`; `s3-access-test` gets a positive op "read lakehouse" and profile `trino`; tests. Predicted: lint clean, tests pass, recipes `bash -n` OK, kustomize render with dummy secrets OK (my local runs).
+Next (Bee): `make all` → PR → merge → `make k8s-up` → `make s3-access-test` → `make mode-query` → `make trino-install` → `make trino-cli`.
+
 ### 2026-11-10 — 3.2 done: Silver in the DAG, validated, idempotent (E63)
 Did (Bee): PR #63 → images run 42600394002 → bump PR #64 (airflow `a46867a0…`, spark-job `fe695b8d…`) → `make k8s-up` (10:29 UTC = 17:29 ICT) → `make sparkapp APP=validate_silver` for 07-09 and 07-25 (16:02–16:03 UTC = 23:02–23:03 ICT) → overnight `nohup bash tools/backfill_twice.sh` (laptop awake): pass 1 16:13 → ~16:43 UTC, pass 2 → 17:15 UTC (00:15 ICT).
 Observed: validate_silver 28/28 on both hand days, `event_ts` = `timestamp_ntz` in all 3 tables; both passes 0 failed backfill runs, `validate_silver 28/28` on all 18 data days, scheduler 0 restarts; the script's verdict said DIFFERENT because it compared log noise (E63); comparing only data lines: 155 = 155, identical.
