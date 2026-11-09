@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-11-09 — freeze step 1 deployed; E56 (backup caught up before DNS was ready)
+Did (Bee): PR #50 merged (`d28cf2b`), images run 42561599191 (airflow `sha256:822ed12a…`; spark-job rebuilt with the same content, not promoted), bump PR #51 (`837176a`), `make k8s-up`.
+Observed: secrets generated (`MINIO_DEMO_VIEWER_SECRET`, `AIRFLOW_VIEWER_PASSWORD`); created PVC `spark-events`, Deployment/Service `spark-history` (0 replicas), Secret `demo-viewer-credentials`, Job `minio-users`; Airflow rev 4 on the new image; all pods Running except `pg-backup-29903100` `Init:Error` ×2 → **E56**.
+Next: `make backup-now`; PR for E56; then the step-1 checks (viewer, access test, one run with an event log, History Server).
+
 ### 2026-11-09 — freeze step 1 prepared: event logs, History Server, read-only demo users
 Decided (Bee, 11-06): Claude Desktop's freeze plan (steps 1–4), event logs on a **PVC** (the Spark image has no hadoop-aws; s3a = +~280 MB rebuild avoided; lab-only because one node).
 Prepared (Claude, branch `task2/demo-lifecycle`): `spark.eventLog.*` + PVC mount in the 4 SparkApplication templates; PVC `spark-events` 1Gi; Deployment + Service `spark-history` (replicas 0, base Spark image by digest, 512Mi, read-only mount, cleaner 365 d); MinIO user `demo-viewer` (list + read landing/lakehouse/airflow-logs, never backup) + its negative test in `make s3-access-test` (new op "read backup" for every user); Airflow user `viewer` (Viewer role) + `make airflow-viewer-check` (harmless write attempts must return 403); make `minio-ui`, `history-ui`, `airflow-viewer`, `airflow-viewer-check`. Checks: lint, 57 unit tests, kustomize render with dummy secrets in a scratch copy (all images by digest). The existing wildcard policy test caught a first draft with `arn:aws:s3:::*`.
