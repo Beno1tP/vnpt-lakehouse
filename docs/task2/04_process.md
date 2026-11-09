@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-11-09 — B3 + B4 done: Task 2 frozen, presentable, cleaned (E61, E62)
+Did (Bee): PR #57 + fix #58 (E61) → `make demo-task2` → `make demo-check` → Allocated resources → `make demo-pipeline` → Allocated resources; `df -h /var`; `make ghcr-prune` (list) → 403 (E62) → scope added → `CONFIRM=yes` → scope removed; `crictl images` → `crictl rmi` of 2 old node images; `df -h /var`.
+Observed: demo-check ALL PASS (postgres, minio, hive-metastore, api-server, spark-history ready; Airflow health, MinIO console, History Server HTTP 200; tag task2_v1 = 21,224 / 10,729). Requests demo-task2 2,916 Mi (40 %), demo-pipeline 4,036 Mi (55 %) (`02_config.md` 2b). GHCR: 5 versions deleted (spark-job 05ff7b97, 92cc3f3a, d9e2fe94; airflow 0c7cc70c, 2c1e554d); kept deployed + rollback (spark-job da201e86 = same inputs as 05ff7b97; airflow cf03f5d3). Node: removed airflow cf03f5d3 and spark-job 05ff7b97; `/var` 18G of 1007G before and after (shared layers). Docker images/volumes not pruned (Task 1 images, lake data).
+Learned: a pre-flight check is only as good as the property it tests (E61); grant destructive scopes per job (E62). **Task 2 freeze B1–B4 complete**: code `task2-v1` + merged freeze PRs, data tag `task2_v1`, evidence in `~/data/vnpt-lab/evidence/task2-20261109/`, demo profile + check. Next: Task 3 (Silver first; decide the time-zone question before 3.1).
+
 ### 2026-11-09 — B3 prepared: demo profiles + demo-check; E60
 Prepared (Claude, branch `task2/b3-demo-profiles`): make `demo-task2` (refuses while a SparkApplication exists or a chatbot_bronze run is running; scheduler, dag-processor, triggerer → 0; History Server → 1), `demo-pipeline` (back; History Server → 0), `demo-check` (5 workloads ready; Airflow `/api/v2/monitor/health`, MinIO console, History Server answer 200 through temporary port-forwards on 28080/29001/28081; `freeze-check TASK=$(DEMO_TASK)`). Deviation from Claude Desktop's spec: the Spark Operator stays up in demo-task2 (webhook `failurePolicy: Fail` would reject matching pods, e.g. the freeze-check job; saving ~192 Mi). Recipes checked with `bash -n`; a first `make -n` executed the recipe (E60).
 Next (Bee): PR → merge → demo-task2 → demo-check → measure → demo-pipeline → measure.

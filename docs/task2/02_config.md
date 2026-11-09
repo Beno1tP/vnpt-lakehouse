@@ -48,6 +48,15 @@ Minikube runs as a container in Docker Desktop. Docker Desktop and Ubuntu share 
 
 Rules: stop the Task 1 Compose stack while Task 2 runs; `minikube addons enable metrics-server`; watch `kubectl top pods -A` during the first Spark run. Start with `--memory=8192 --cpus=6` only if `docker info` shows ≥ 9.5 GiB total and nothing else heavy runs.
 
+### 2b. Measured per demo profile (B3, 2026-11-09, `kubectl describe node` → Allocated resources)
+
+| Profile | Memory requests | Memory limits | CPU requests | Running |
+|---|---|---|---|---|
+| `make demo-task2` (view-only) | **2,916 Mi (40 %)** | 4,572 Mi (62 %) | 1,800m (22 %) | lake, Airflow api-server, History Server (512 Mi), Spark Operator |
+| `make demo-pipeline` (building) | **4,036 Mi (55 %)** | 7,516 Mi (103 %) | 2,130m (26 %) | everything = the Task 2 idle baseline |
+
+demo-task2 frees 1,120 Mi of requests (scheduler 1 Gi + dag-processor + triggerer 256 Mi each + log sidecars − History Server 512 Mi) → ~4.3 Gi of Allocatable free for a Task 3 demo (Trino ~2 Gi).
+
 ## 3. Disk budget
 
 Minikube (docker driver) stores its node and its own image store **inside Docker Desktop's `docker_data.vhdx`** (now 9.45 GB after the 10-25 compaction; C: 87.2 GB free).

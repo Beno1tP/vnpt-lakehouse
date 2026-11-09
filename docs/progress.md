@@ -184,7 +184,7 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 - Open: **E17** (confirm in HMS log; hadoop-aws 3.1.0), infra redesign toward pulled images + compose config, disk audit (setup used 30–50 GB).
 - Data reminder: trial/imaginary data, lab only; keep local.
 
-## 8. Status 2026-10-29 (end of Task 2)
+## 8. Status 2026-11-09 (Task 2 done and frozen)
 
 - Task 2 done, tag `task2-v1`; read `docs/task2/README.md` first (architecture, run, decisions, gaps closed/open, lessons).
 - Cluster state: Minikube running with the from-zero load (Bronze 18 days, Airflow history since 10-27, `chatbot_bronze` + `lake_maintenance` unpaused, `alert_smoke` paused). `minikube stop` to free RAM; `minikube start` before use (E40, E53).
@@ -192,5 +192,6 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 - 10-28: E54 (MinIO Secret name drift after a non-kustomize apply) fixed; 10-28 backup slot missed (cluster down).
 - 10-29: first scheduled `pg-backup` run ✅ (slot 01:00Z, ran 05:09Z after the laptop woke, within the 12 h deadline; 321.71 KiB) → all three automations proven (`docs/task2/06_validation.md` §3); the overnight plan (option 1) was not needed.
 - 10-29: E55 (PR #42 merged before CI registered; both runs verified green afterwards; procedure `sleep 15 && gh pr checks --watch`). **Task 2 closed** (PRs #39–#43).
-- Next: Task 3 = Silver Spark job (D6, confirm with the leader) → Trino, after the Task 2 freeze (2026-11). New errors from **E62**. Before starting: `minikube start` (E40/E53), check `kubectl get pods -A`.
+- 11-06 → 11-09: Task 2 freeze B1–B4 done (`docs/running-steps-task2-5.txt` B, PRs #50–#58): Spark event logs + History Server, read-only demo users (MinIO `demo-viewer`, Airflow `viewer`), Iceberg tag `task2_v1` (21,224 / 10,729), evidence copy outside Git, demo profiles + `demo-check` ALL PASS, GHCR/node clean-up. Errors E56–E62. Time convention: UTC with ICT.
+- Next: Task 3 = Silver Spark job (D6, confirm with the leader) → Trino; first decide the schedule time zone and Silver `event_ts` (docs/task3/03_plan.md §I). New errors from **E63**. Before starting: `minikube start` (E40/E53), check `kubectl get pods -A`.
 - Open questions for the leader: D6 Silver placement; public vs private GHCR images; off-cluster backup copy (backups live in the same MinIO).

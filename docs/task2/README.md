@@ -2,7 +2,7 @@
 
 The Task 1 Bronze job runs on **Minikube** through the **Kubeflow Spark Operator**, one run per day of data, scheduled, retried, validated and alerted by **Airflow 3.3.2**. Images are built by **GitHub Actions**, stored in **GHCR** and deployed **by digest**; every change went through a PR with green CI. The whole stack comes up from zero with two commands.
 
-Status (2026-10-27): ✅ done. From zero (`minikube delete` → `make k8s-up` → `make k8s-demo`): 24 daily runs, 18 days loaded with exact counts (23/23 checks each), 6 empty days skipped, 0 failed runs, 0 scheduler restarts. Tag `task2-v1`. Silver is the first step of Task 3 (decision D6).
+Status (2026-10-27): ✅ done; frozen 2026-11-09 (tag `task2_v1`, evidence copy, demo profile `make demo-task2` + `make demo-check`). From zero (`minikube delete` → `make k8s-up` → `make k8s-demo`): 24 daily runs, 18 days loaded with exact counts (23/23 checks each), 6 empty days skipped, 0 failed runs, 0 scheduler restarts. Tag `task2-v1`. Silver is the first step of Task 3 (decision D6).
 
 ## Architecture
 
@@ -123,7 +123,7 @@ Disk (Docker Desktop's `docker_data.vhdx`): Minikube node volume **8.3 GB** (nod
 | 11 | Ingestion | daily landing files, reprocess = clear the day | JDBC/CDC, late data |
 | 12 | Change management | branches + PRs (#1–#37), tags | branch protection (paid plan for private repos) |
 
-## Errors met and lessons (details: `05_errors_and_fixes.md`, E25–E61)
+## Errors met and lessons (details: `05_errors_and_fixes.md`, E25–E62)
 
 - **Resources are what the kubelet believes** (E25 Allocatable, E52 LocalExecutor workers): measure, then size; check restart counts, a green run can hide OOM kills.
 - **Airflow 3 changed defaults**: timedelta/cron schedules give zero-length intervals (E38), manual runs may have no logical date and templates render strictly (E47), one run per logical date (E49), DagBag API (E34), hostname for logs (E37).

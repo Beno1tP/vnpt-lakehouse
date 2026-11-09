@@ -69,3 +69,12 @@ Scheduling is proven by runs the scheduler (or the K8s CronJob controller) creat
 | `make freeze TASK=2` | tag `task2_v1` on both tables, rows VERSION AS OF tag = 21,224 / 10,729 | PASS / PASS (snapshots 4460393597214113888 / 3649899175837714746, retain 365 d) |
 | `make evidence-export` | copied files = manifest | 176 of 176 (airflow-logs 172, backup 4) + 39 Spark event logs, 21 MB |
 | History of `scheduled__2026-10-28` | explained | E59: laptop sleep + `dagrun_timeout`, all tasks skipped |
+
+## 6. Freeze steps 3–4 (2026-11-09)
+
+| Check | Expected | Actual |
+|---|---|---|
+| `make demo-check` in demo-task2 | all ready, 3 × HTTP 200, tag rows = expected | ALL PASS |
+| Requests demo-task2 / demo-pipeline | fits 7,268 Mi | 2,916 Mi (40 %) / 4,036 Mi (55 %) |
+| GHCR prune | only non-deployed, non-newest versions | 5 deleted, deployed + rollback kept |
+| Node images | only the 4 deployed digests left | 2 old removed; `/var` 18G of 1007G |
