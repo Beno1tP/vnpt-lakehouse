@@ -80,19 +80,22 @@ B2. Freeze step 2: Iceberg tags + evidence                                     [
     Later, after a Sunday maintenance (02:00 UTC = 09:00 ICT):
     make freeze-check TASK=2           (tag still reads the frozen rows)
 
-B3. Freeze step 3: demo profiles                                                [PLANNED: branch task2/b3-demo-profiles]
-    make demo-task2       (view-only: Airflow scheduler/dag-processor/triggerer = 0, api-server + History Server up;
-                           Spark Operator stays up: its webhook has failurePolicy Fail, saving was only ~192 Mi)
-    make demo-check       (workloads ready, Airflow/MinIO console/History answer HTTP 200, tag task2_v1 = frozen rows)
-    kubectl describe node minikube | grep -A8 "Allocated resources" ; kubectl top pods -A     (measure this profile)
-    make demo-pipeline    (scheduler/dag-processor/triggerer back, History Server 0)
-    kubectl describe node minikube | grep -A8 "Allocated resources" ; kubectl top pods -A     (measure this profile)
+B3. Freeze step 3: demo profiles                                                [DONE 2026-11-09: PR #57, fix #58]
+    make demo-task2   -> view-only (Airflow scheduler/dag-processor/triggerer 0; api-server + History Server up)
+    make demo-check   -> ALL PASS (5 ready, 3 x HTTP 200, tag task2_v1 = 21,224 / 10,729)
+    make demo-pipeline -> back to building
+    Measured requests: demo-task2 2,916 Mi (40 %), demo-pipeline 4,036 Mi (55 %) of 7,268 Mi (docs/task2/02_config.md 2b)
+    Before every presentation: minikube start ; make k8s-up ; make demo-task2 ; make demo-check
 
-B4. Freeze step 4: clean-up before Task 3                                       [WORKS NOW / partly PLANNED]
-    minikube ssh -- df -h /var
-    make ghcr-prune                     (list) ; make ghcr-prune CONFIRM=yes   (delete old versions)
-    minikube image ls | grep beno1tp    (old digests not in infra/k8s/images.env -> remove with Claude's list)
-    minikube ssh -- df -h /var          (record before/after)
+B4. Freeze step 4: clean-up before Task 3                                       [DONE 2026-11-09]
+    minikube ssh -- df -h /var                          -> 18G of 1007G (2 %) before and after
+    make ghcr-prune ; make ghcr-prune CONFIRM=yes       -> 5 old versions deleted (needs gh scope delete:packages
+                                                           added for the run, removed after: E62)
+    minikube ssh -- sudo crictl images --digests | grep -E "IMAGE|beno1tp"
+    minikube ssh -- sudo crictl rmi <old image ids>     -> airflow cf03f5d3, spark-job 05ff7b97 removed (shared
+                                                           layers: no visible change in df)
+    Not pruned on purpose: Docker images (Task 1 Compose images count as "reclaimable" only because that stack
+    is stopped) and Docker volumes (all lake data).
 
 =====================================================================================================
 C. TASK 3 - Silver on Spark + Trino (docs/task3/03_plan.md)
