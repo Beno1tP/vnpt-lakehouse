@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-11-10 — 3.2 done: Silver in the DAG, validated, idempotent (E63)
+Did (Bee): PR #63 → images run 42600394002 → bump PR #64 (airflow `a46867a0…`, spark-job `fe695b8d…`) → `make k8s-up` (10:29 UTC = 17:29 ICT) → `make sparkapp APP=validate_silver` for 07-09 and 07-25 (16:02–16:03 UTC = 23:02–23:03 ICT) → overnight `nohup bash tools/backfill_twice.sh` (laptop awake): pass 1 16:13 → ~16:43 UTC, pass 2 → 17:15 UTC (00:15 ICT).
+Observed: validate_silver 28/28 on both hand days, `event_ts` = `timestamp_ntz` in all 3 tables; both passes 0 failed backfill runs, `validate_silver 28/28` on all 18 data days, scheduler 0 restarts; the script's verdict said DIFFERENT because it compared log noise (E63); comparing only data lines: 155 = 155, identical.
+Learned: Silver now runs daily inside the same DAG (`check_landing → bronze → validate → silver → validate_silver → notify`) and is idempotent per day like Bronze. Next: 3.3 Trino (query mode).
+
 ### 2026-11-09 — 3.1 verified on Minikube; 3.2 prepared (validator + DAG)
 Did (Bee): `make all` (81 passed) → PR #61 → images run 42597542204 → bump PR #62 (spark-job `f55ebb2f…`) → `make k8s-up` → `make sparkapp APP=silver DATE=2024-07-09` (17:11:19–17:11:52 ICT = 10:11 UTC) and `DATE=2024-07-25` (17:14:58–17:15:19 ICT = 10:14–10:15 UTC).
 Observed: both summaries **identical** to `silver_daily.json` (07-09: 86/43/43, final_intent 6/18/19, internal 16 (8 client), /home 13; 07-25: 7,552/3,892/3,776, 116 without chat row). `make sparkapp` filtered the `[silver]` lines (fixed in 3.2: the grep knows silver/validate_silver).
