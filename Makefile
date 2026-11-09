@@ -14,6 +14,11 @@ K8S_ENV_FILE        ?= infra/k8s/secrets.env
 K8S_RAW_DIR         ?= $(HOME)/data/vnpt-lab
 AIRFLOW_CHART        = $(HOME)/.cache/vnpt-lake/charts/airflow-1.22.0.tgz
 AIRFLOW_CHART_SHA512 = 59a6b157949f37e96acd7351f795fd4347b2c4ac7f21d421542088b019874b202a80740389b71e0e9494fe6827674e596272297b493c419b03b263abb1a71c70
+# Spark Operator chart 2.2.1 cached once (E58: GitHub Releases 504 broke make k8s-up). SHA-256 = GitHub's own asset digest
+# (asset created 2025-06-27T00:17Z, never updated); the chart index lists cf223b6c… because it was computed from a
+# second, non-byte-identical `helm package` 47 min later.
+SPARK_OPERATOR_CHART        = $(HOME)/.cache/vnpt-lake/charts/spark-operator-2.2.1.tgz
+SPARK_OPERATOR_CHART_SHA256 = 1c47c850c8d6ecc7eda4ede03e7932aa59f23fa6d186a10da3c8359df3671cf1
 include infra/k8s/images.env
 JOB_SRC              = jobs/ tests/ docker/spark-job/
 JOB_TAG              = $(shell git log -1 --format=%h -- $(JOB_SRC))
@@ -35,7 +40,7 @@ SPARK_SUBMIT = $(COMPOSE) exec -T spark /opt/spark/bin/spark-submit --master $(S
 SPARK_SQL    = $(COMPOSE) exec -T spark /opt/spark/bin/spark-sql --master local[1]
 NOISE        = ^Time taken|^:: loading settings
 
-.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks ghcr-prune k8s-up k8s-demo airflow-viewer airflow-viewer-check minio-ui history-ui freeze freeze-check evidence evidence-export
+.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks ghcr-prune k8s-up k8s-demo airflow-viewer airflow-viewer-check minio-ui history-ui freeze freeze-check evidence evidence-export spark-operator-chart
 
 help:          ## list targets and variables
 	@awk -F':.*## ' '/^[a-zA-Z0-9_-]+:.*## /{printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -121,6 +126,10 @@ airflow-chart: ## Task 2: download Airflow chart 1.22.0 from the Apache CDN and 
 	mkdir -p $(dir $(AIRFLOW_CHART))
 	test -f $(AIRFLOW_CHART) || curl -fL --retry 3 -o $(AIRFLOW_CHART) https://dlcdn.apache.org/airflow/helm-chart/1.22.0/airflow-1.22.0.tgz
 	echo "$(AIRFLOW_CHART_SHA512)  $(AIRFLOW_CHART)" | sha512sum --check
+spark-operator-chart: ## Task 2: download Spark Operator chart 2.2.1 once from GitHub Releases and check its SHA-256 (E58: no GitHub needed afterwards)
+	mkdir -p $(dir $(SPARK_OPERATOR_CHART))
+	test -f $(SPARK_OPERATOR_CHART) || curl -fL --retry 3 -o $(SPARK_OPERATOR_CHART) https://github.com/kubeflow/spark-operator/releases/download/v2.2.1/spark-operator-2.2.1.tgz
+	echo "$(SPARK_OPERATOR_CHART_SHA256)  $(SPARK_OPERATOR_CHART)" | sha256sum --check
 airflow-install: airflow-chart deploy-guard ## Task 2: helm upgrade --install Airflow 3.3.2 (chart 1.22.0); image = AIRFLOW_IMAGE_REF in images.env
 	@test -n "$(AIRFLOW_IMAGE_REF)" || { echo "AIRFLOW_IMAGE_REF missing in infra/k8s/images.env (bump it after the images run)"; exit 1; }
 	helm upgrade --install airflow $(AIRFLOW_CHART) -n airflow \
@@ -289,8 +298,8 @@ k8s-up: deploy-guard ## Task 2: whole stack, idempotent (also from zero after mi
 	kubectl -n lake rollout status statefulset/minio --timeout=600s
 	kubectl -n lake wait --for=condition=complete job/bucket-init job/minio-users --timeout=600s
 	kubectl -n lake rollout status deploy/hive-metastore --timeout=900s
-	helm repo add spark-operator https://kubeflow.github.io/spark-operator --force-update >/dev/null
-	helm upgrade --install spark-operator spark-operator/spark-operator --version 2.2.1 -n spark-operator \
+	$(MAKE) --no-print-directory spark-operator-chart
+	helm upgrade --install spark-operator $(SPARK_OPERATOR_CHART) -n spark-operator \
 	  -f infra/helm/spark-operator/values-local.yaml --wait --timeout 10m
 	$(MAKE) --no-print-directory airflow-install
 	$(MAKE) --no-print-directory airflow-admin
