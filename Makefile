@@ -35,7 +35,7 @@ SPARK_SUBMIT = $(COMPOSE) exec -T spark /opt/spark/bin/spark-submit --master $(S
 SPARK_SQL    = $(COMPOSE) exec -T spark /opt/spark/bin/spark-sql --master local[1]
 NOISE        = ^Time taken|^:: loading settings
 
-.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks ghcr-prune k8s-up k8s-demo airflow-viewer airflow-viewer-check minio-ui history-ui
+.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks ghcr-prune k8s-up k8s-demo airflow-viewer airflow-viewer-check minio-ui history-ui freeze freeze-check evidence evidence-export
 
 help:          ## list targets and variables
 	@awk -F':.*## ' '/^[a-zA-Z0-9_-]+:.*## /{printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -202,13 +202,52 @@ restore-metastore: ## Task 2 2.5b: restore the metastore DB from backup TS (make
 	kubectl -n lake wait --for=condition=complete job/pg-restore-metastore --timeout=300s; kubectl -n lake logs job/pg-restore-metastore -c restore | tail -3
 	kubectl -n lake scale deploy/hive-metastore --replicas=1 && kubectl -n lake rollout status deploy/hive-metastore --timeout=300s
 	kubectl -n lake logs deploy/hive-metastore -c schema-init | tail -1
-catalog:       ## Task 2 2.5b drill 7: make catalog CMD=info|forget|register TABLE=bronze.chatlog [METADATA=s3a://…metadata.json]
+catalog:       ## Task 2 2.5b drill 7 + freeze: make catalog CMD=info|forget|register|tag|verify-tag TABLE=bronze.chatlog[,bronze.bot_predict] [METADATA=…] [TAG=task2_v1]
 	@n=catalog-$$(date -u +%H%M%S); \
-	  args=$$(python3 -c 'import json,sys; a=["$(CMD)","--table","$(TABLE)"]+(["--metadata","$(METADATA)"] if "$(METADATA)" else []); print(json.dumps(a))'); \
+	  args=$$(python3 -c 'import json; t=[x for x in "$(TABLE)".split(",") if x]; a=["$(CMD)"]+[y for x in t for y in ("--table",x)]+(["--metadata","$(METADATA)"] if "$(METADATA)" else [])+(["--tag","$(TAG)"] if "$(TAG)" else []); print(json.dumps(a))'); \
 	  sed -e "s|__NAME__|$$n|" -e 's|__IMAGE__|$(JOB_IMAGE)|' -e "s|__ARGS__|$$args|" infra/k8s/spark-jobs/catalog-sparkapp.yaml | kubectl apply -f - >/dev/null; \
 	  for i in $$(seq 1 120); do s=$$(kubectl -n spark-jobs get sparkapplication $$n -o jsonpath='{.status.applicationState.state}'); \
 	    case "$$s" in COMPLETED|FAILED|SUBMISSION_FAILED) break;; esac; sleep 5; done; echo "[catalog] $$n state=$$s"; \
 	  kubectl -n spark-jobs logs $$n-driver | grep -E "^\[catalog\]|Error|Exception" || true; test "$$s" = COMPLETED
+FREEZE_TABLES ?= bronze.chatlog,bronze.bot_predict
+freeze:        ## Freeze (B2): Iceberg tag task<TASK>_v1 on FREEZE_TABLES (RETAIN 365 DAYS, kept if it exists) + verify rows = expected: make freeze TASK=2
+	@test -n "$(TASK)" || { echo "set TASK= (e.g. make freeze TASK=2)"; exit 1; }
+	$(MAKE) --no-print-directory catalog CMD=tag TABLE=$(FREEZE_TABLES) TAG=task$(TASK)_v1
+freeze-check:  ## Freeze (B2): verify the tag still reads the frozen rows (run after maintenance): make freeze-check TASK=2
+	@test -n "$(TASK)" || { echo "set TASK= (e.g. make freeze-check TASK=2)"; exit 1; }
+	$(MAKE) --no-print-directory catalog CMD=verify-tag TABLE=$(FREEZE_TABLES) TAG=task$(TASK)_v1
+EVIDENCE_DIR ?= $(HOME)/data/vnpt-lab/evidence/task2-$(shell date -u +%Y%m%d)
+evidence:      ## Freeze (B2): save run states OUTSIDE Git to EVIDENCE_DIR (counts and states only, no rows)
+	mkdir -p $(EVIDENCE_DIR)
+	$(MAKE) --no-print-directory dag-runs   > $(EVIDENCE_DIR)/dag-runs.txt
+	$(MAKE) --no-print-directory dag-report > $(EVIDENCE_DIR)/dag-report.txt
+	kubectl get pods -A -o wide > $(EVIDENCE_DIR)/pods.txt
+	kubectl get pvc -A > $(EVIDENCE_DIR)/pvc.txt
+	kubectl describe node minikube | grep -A8 "Allocated resources" > $(EVIDENCE_DIR)/node-allocated.txt
+	helm history airflow -n airflow > $(EVIDENCE_DIR)/helm-airflow.txt
+	helm history spark-operator -n spark-operator > $(EVIDENCE_DIR)/helm-spark-operator.txt
+	kubectl -n lake get jobs,cronjobs > $(EVIDENCE_DIR)/lake-jobs.txt
+	@wc -l $(EVIDENCE_DIR)/*.txt
+evidence-export: ## Freeze (B2): copy airflow-logs + backup (MinIO) and Spark event logs (PVC) to EVIDENCE_DIR; checks the file count
+	mkdir -p $(EVIDENCE_DIR)
+	kubectl -n lake create configmap evidence-export --from-file=tools/evidence_export.py --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+	su=$$(kubectl -n lake get cronjob pg-backup -o jsonpath='{.spec.jobTemplate.spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name}'); \
+	  test -n "$$su" || { echo "cannot resolve the minio-service-users secret name from cronjob/pg-backup"; exit 1; }; \
+	  kubectl -n lake delete pod evidence-export --ignore-not-found >/dev/null; \
+	  sed -e 's|__IMAGE__|$(JOB_IMAGE)|' -e "s|__USERS_SECRET__|$$su|" infra/k8s/lake/evidence-export-pod.yaml | kubectl apply -f -
+	set -e; trap 'kubectl -n lake delete pod evidence-export --wait=false >/dev/null' EXIT; \
+	kubectl -n lake wait --for=condition=Ready pod/evidence-export --timeout=600s; \
+	kubectl -n lake exec evidence-export -- python3 /scripts/evidence_export.py /export; \
+	kubectl -n lake cp evidence-export:/export $(EVIDENCE_DIR)/s3 >/dev/null; \
+	want=$$(wc -l < $(EVIDENCE_DIR)/s3/manifest.tsv); got=$$(find $(EVIDENCE_DIR)/s3 -type f ! -name manifest.tsv | wc -l); \
+	echo "[evidence] copied $$got of $$want files"; test "$$got" = "$$want"
+	kubectl -n spark-jobs scale deploy/spark-history --replicas=1 >/dev/null
+	set -e; trap 'kubectl -n spark-jobs scale deploy/spark-history --replicas=0 >/dev/null' EXIT; \
+	kubectl -n spark-jobs rollout status deploy/spark-history --timeout=600s >/dev/null; \
+	pod=$$(kubectl -n spark-jobs get pod -l app=spark-history -o jsonpath='{.items[0].metadata.name}'); \
+	kubectl -n spark-jobs cp $$pod:/spark-events $(EVIDENCE_DIR)/spark-events >/dev/null; \
+	echo "[evidence] spark event logs: $$(find $(EVIDENCE_DIR)/spark-events -type f | wc -l) files"
+	@du -sh $(EVIDENCE_DIR)
 maintenance:   ## Task 2 2.5c: Iceberg maintenance now (same template as DAG lake_maintenance): [SNAP_HOURS=168] [RETAIN=5] [ORPHAN_HOURS=72] [DRY=yes]
 	@test $(or $(ORPHAN_HOURS),72) -ge 24 || { echo "refusing: ORPHAN_HOURS must be >= 24 (Iceberg guard against deleting files of a running write, E46)"; exit 1; }
 	kubectl -n spark-jobs delete sparkapplication maintenance-manual --ignore-not-found --wait=true

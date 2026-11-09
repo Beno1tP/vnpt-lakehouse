@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-11-09 — B2 prepared: Iceberg freeze tags + evidence export
+Prepared (Claude, branch `task2/b2-freeze`): `jobs/catalog_tool.py` commands `tag` (`ALTER TABLE … CREATE TAG IF NOT EXISTS task2_v1 RETAIN 365 DAYS`, tag names only `task[2-5]_vN`, retention 1–3650 days, validated before Spark starts) and `verify-tag` (tag exists in `.refs`, rows `VERSION AS OF` the tag = `tests/expected/bronze_daily.json` totals, exit 1 otherwise); `make catalog` accepts `TABLE=a,b` and `TAG=`; make `freeze`, `freeze-check`, `evidence`, `evidence-export`; `tools/evidence_export.py` + one-off pod `infra/k8s/lake/evidence-export-pod.yaml` (airflow-logs as demo-viewer, backup as backup-writer, secret name resolved at run time from cronjob/pg-backup to avoid E54; manifest vs copied file count; Spark event logs copied from the History Server pod); unit tests (64 pass).
+Next (Bee): PR → images run (catalog_tool is in the spark-job image) → bump spark-job digest → `make k8s-up` → `make freeze TASK=2`, `make evidence`, `make evidence-export`.
+
 ### 2026-11-09 — freeze step 1 verified (B1 checks); time-zone convention
 Did (Bee): `make airflow-viewer` + `airflow-viewer-check`; `make s3-access-test`; clear 2024-07-02; `make dag-runs`, `make dag-report`; `make history-ui`.
 Observed: viewer 4/4 (read 200, trigger/clear 403); access test 3 × 5/5 (demo-viewer: read landing only; write, create bucket, read backup denied). Rerun 07-02 started **06:46:53 UTC (13:46:53 ICT)**, success, 12/6 rows, 23/23 (second identical log file). History Server: bronze (8 jobs: namespace SQL, 2 × overwritePartitions, counts; driver 13:47:16 ICT, executor 13:47:19 ICT) and validate (46 jobs, 06:47:48–06:47:56 UTC); first event log written without permission problems. Storage memory driver 434.4 MiB = (1024 − 300) × 0.6 (slide 48); executor 265.5 MiB ≈ (768 − 300) × 0.6 minus JVM overhead. E57 (kubectl watch with two types).
