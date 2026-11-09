@@ -196,7 +196,7 @@ Speaker notes: No image is built on the laptop: that saves CPU, disk and a secon
 ---
 # Part 1b — Kubernetes in depth
 
-Numbered K1–K20 so slides 14–69 keep their numbers. Structure follows the Viblo "Kubernetes Series" (19 articles, after *Kubernetes in Action*), each topic tied to what Task 2 runs. K1–K12 = concepts, K13–K18 = one real-life use case (6 slides), K19–K20 = four published industrial cases and what changes at their scale.
+Numbered K1–K20 (K4 split into K4a–K4e) so slides 14–69 keep their numbers. Structure follows the Viblo "Kubernetes Series" (19 articles, after *Kubernetes in Action*), each topic tied to what Task 2 runs. K1–K12 = concepts, K13–K18 = one real-life use case (6 slides), K19–K20 = four published industrial cases and what changes at their scale.
 
 ---
 # Slide K1 — The map: Kubernetes topics → our cluster
@@ -249,7 +249,69 @@ Speaker notes: Everything the kubelet does to a pod is driven by these few field
 Speaker notes: Picking the controller is picking the failure behaviour. Our E54 is a StatefulSet property: it will not replace a pod that never became Ready.
 
 ---
-# Slide K4 — Example: stateless app + replicas = ReplicaSet
+# Slide K4a — Example: a stateless, scalable app (1/5): what it is, which objects
+A **stateless service**: a web API, a model-inference server or a worker that keeps no data inside itself. Any copy can answer any request, because all state lives *outside* the pods (database, cache, object storage).
+- Examples: a chatbot `chat-api`, an NLU inference service, Superset's web server, Trino workers
+- In our lab: the Hive Metastore is this kind of app; its state is in Postgres
+
+| Object | Job |
+|---|---|
+| **Deployment** | pod template + number of replicas; manages one **ReplicaSet** per template version (rolling update, rollback) |
+| ReplicaSet (created for you) | keeps exactly N identical pods alive |
+| **Service** (ClusterIP) | one stable DNS name + virtual IP, spreads traffic over the **ready** pods |
+| **Ingress** / Gateway | entry from outside: host/path routing, TLS |
+| **HorizontalPodAutoscaler** | changes `replicas` from metrics (CPU, memory, requests/s) |
+| **PodDisruptionBudget** | keeps ≥ N pods up during voluntary disruptions (node drain, upgrade) |
+| ConfigMap / Secret | config and credentials outside the image |
+| Probes | readiness = "send me traffic", liveness = "restart me if stuck" |
+
+Speaker notes: If each instance needed its own data (a database, Kafka) it would be a StatefulSet (K5, K7); if it ran to completion, a Job. Our Airflow api-server is this shape with replicas 1.
+
+---
+# Slide K4b — Example (2/5): deploy flow and request flow
+**Deploy (control path)**
+```
+git push → CI builds image → registry (by digest)
+  → kubectl apply / helm upgrade / Argo CD
+  → kube-apiserver (authN → RBAC → admission) → etcd
+  → Deployment controller creates ReplicaSet v1
+  → ReplicaSet controller creates N Pods (no node yet)
+  → kube-scheduler: requests ≤ Allocatable? taints/affinity? → binds each pod to a node
+  → kubelet → containerd pulls image → starts the containers
+  → readinessProbe passes → EndpointSlice adds the pod IP → Service sends it traffic
+```
+**Request (data path)**
+```
+client → DNS → cloud LoadBalancer → Ingress (TLS, host/path)
+  → Service chat-api (ClusterIP) → kube-proxy rules (iptables/IPVS) → one ready pod
+  → pod reads/writes state in Redis / Postgres / object storage → response back the same way
+```
+- New image → ReplicaSet v2 scales up while v1 scales down, step by step (`maxSurge`, `maxUnavailable`), waiting for readiness at each step; v1 stays at 0 replicas → `kubectl rollout undo` is instant
+- Kill a pod → the ReplicaSet sees 2 ≠ 3 → a new pod (new name, new IP); the Service keeps routing to the ready ones
+- A pod may die at any moment → **nothing important lives in the pod**: no sessions in memory, no files on its local disk
+
+Visual: one cluster diagram, two colours. Purple = control path: CI → API server → etcd; controller manager (Deployment → ReplicaSet → pods); scheduler → nodes; dashed purple arrow = each node's kubelet watching the API server, starting containers via containerd. Teal = data path: user → Ingress → Service (ready pods only) → kube-proxy → any `chat-api` pod → Redis/Postgres/S3 at the bottom. HPA box reading metrics-server, with a dashed "new pod (HPA)" box.
+
+Speaker notes: Same control-plane / data-plane split as the generic Kubernetes architecture picture (and K9, internals), but it shows which objects a stateless app uses and where its state lives. Kill any pod and no data is lost.
+
+---
+# Slide K4c — Example (3/5): scaling up and down
+```
+metrics-server (or Prometheus Adapter) → HPA every ~15 s:
+  desired = ceil(current replicas × current metric / target)
+  e.g. 3 pods at 90 % CPU, target 60 % → ceil(3 × 90/60) = 5
+→ Deployment replicas 3 → 5 → scheduler places 2 new pods
+→ no room on any node → pods Pending → Cluster Autoscaler / Karpenter adds a node
+→ new pods pass readiness → Service sends them traffic
+```
+- **Scale-down:** by default the HPA waits a **5-minute stabilization window** before removing pods (no flapping)
+- **Removing a pod:** it leaves the Service endpoints, `preStop` runs, then SIGTERM, the app finishes in-flight requests within `terminationGracePeriodSeconds`, then SIGKILL
+- **Prerequisite:** HPA on CPU % works only with **CPU requests**: utilisation is measured against the request
+
+Speaker notes: Manual `kubectl scale --replicas=5` does the same as the HPA's write; the HPA just does it from metrics. The node autoscaler is a separate component and takes ~1–2 min (K15).
+
+---
+# Slide K4d — Example (4/5): minimal manifests
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -261,21 +323,56 @@ spec:
   template:
     metadata: { labels: { app: chat-api } }
     spec:
+      terminationGracePeriodSeconds: 30
       containers:
         - name: api
-          image: ghcr.io/org/chat-api@sha256:…
-          resources: { requests: { cpu: 250m, memory: 256Mi }, limits: { memory: 512Mi } }
+          image: ghcr.io/org/chat-api@sha256:<digest>
+          ports: [{ containerPort: 8080 }]
+          envFrom: [{ configMapRef: { name: chat-api-config } }]
+          resources:
+            requests: { cpu: 250m, memory: 256Mi }
+            limits:   { memory: 512Mi }
           readinessProbe: { httpGet: { path: /ready, port: 8080 } }
+          livenessProbe:  { httpGet: { path: /healthz, port: 8080 }, initialDelaySeconds: 10 }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: chat-api, namespace: bot }
+spec:
+  selector: { app: chat-api }
+  ports: [{ port: 80, targetPort: 8080 }]
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: chat-api, namespace: bot }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: chat-api }
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 60 } }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: chat-api, namespace: bot }
+spec:
+  minAvailable: 2
+  selector: { matchLabels: { app: chat-api } }
 ```
-- Deployment → creates ReplicaSet `chat-api-7d9f…` (hash of the pod template) → 3 pods `chat-api-7d9f…-xxxxx`
-- Kill a pod → ReplicaSet sees 2 ≠ 3 → new pod (new name, new IP); the Service keeps routing to ready ones
-- `kubectl scale --replicas=5` → 2 more pods; scheduler spreads them by requests
-- New image → a **second** ReplicaSet grows 0 → 3 while the old one shrinks 3 → 0 (maxSurge 1, maxUnavailable 0 = never below 3 ready); the old ReplicaSet is kept at 0 for `rollout undo`
-- Works because the app is **stateless**: any replica can answer any request; state lives in a database or cache outside the pod
 
-Visual: Deployment → ReplicaSet v1 (3 pods) and ReplicaSet v2 (0 → 3) side by side with arrows during a rollout.
+Speaker notes: The Deployment creates ReplicaSet `chat-api-7d9f…` (hash of the pod template) → pods `chat-api-7d9f…-xxxxx`. maxSurge 1 + maxUnavailable 0 = never fewer than 3 ready pods during a rollout. Memory limit but no CPU limit, as in our lab.
 
-Speaker notes: Our Airflow api-server is the same shape with replicas 1. If two pods needed different data or a stable name, this pattern would be wrong; that is the StatefulSet case.
+---
+# Slide K4e — Example (5/5): rules that make "stateless + scalable" work
+1. **State outside:** sessions in Redis, data in a database or object storage, uploads in S3, never on the pod's own disk
+2. **Fast, repeatable startup:** a new pod must be ready in seconds, or scaling arrives after the peak
+3. **Readiness ≠ liveness:** readiness checks dependencies (DB, cache); liveness checks only the process. Otherwise one database blip restarts every pod at once
+4. **Graceful shutdown:** handle SIGTERM, finish in-flight requests; our E41 (scheduler `terminationGracePeriodSeconds: 10` killed a running task → 120)
+5. **Requests from measurements:** they drive scheduling, HPA percentages and cost (E25, E52)
+6. **Spread replicas** across nodes/zones (`topologySpreadConstraints`) so one node failure cannot take all pods (K18)
+
+Speaker notes: Needs its own data per instance → StatefulSet; runs to completion → Job. Everything else in Part 1b builds on this example.
 
 ---
 # Slide K5 — Rollouts: Deployment vs StatefulSet
@@ -429,7 +526,7 @@ Speaker notes: Our lab is the `data` namespace of this picture on one node; the 
 ---
 # Slide K15 — Use case (3/6): the stateless tier end to end
 - Entry: DNS → cloud LoadBalancer → **Ingress** (TLS by cert-manager, host `chat.example.vn`, path `/api`) → Service `chat-api` (ClusterIP) → ready pods
-- chat-api: Deployment (K4 shape), readiness `/ready` checks Redis + NLU reachability, liveness `/healthz` checks only the process
+- chat-api: Deployment (K4a–K4e shape), readiness `/ready` checks Redis + NLU reachability, liveness `/healthz` checks only the process
 - Scaling: **HPA** on CPU 60 % (and requests-per-second from Prometheus Adapter) → more pods → Pending → **Cluster Autoscaler/Karpenter** adds nodes (~1–2 min) → headroom pods hide that delay
 - Release: new digest via GitOps (Argo CD) → RollingUpdate maxSurge 25 %, maxUnavailable 0 → readiness gates each step → PDB protects during node drains; canary = a second Deployment with 5 % of traffic at the Ingress
 - Config: ConfigMap for thresholds (NLU_THRESHOLD lives here, not in code), Secrets from External Secrets; config hash in a pod annotation → change = rollout
@@ -437,7 +534,7 @@ Speaker notes: Our lab is the `data` namespace of this picture on one node; the 
 
 Visual: request path left to right, with HPA and autoscaler arrows below the pods.
 
-Speaker notes: Everything here is the K4 example plus four additions: Ingress, HPA, PDB, GitOps.
+Speaker notes: Everything here is the K4a–K4e example plus GitOps, canary releases, External Secrets and the node autoscaler.
 
 ---
 # Slide K16 — Use case (4/6): permissions, scope and authority per team
