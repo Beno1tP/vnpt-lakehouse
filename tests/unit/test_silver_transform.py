@@ -43,3 +43,13 @@ def test_user_message_is_a_left_join_of_client_messages():
     assert "LEFT JOIN nlu_prediction p ON p.chat_id = c.id" in sql
     assert "WHERE c.is_client" in sql
     assert "has_prediction" in sql
+
+
+def test_summary_has_the_keys_of_the_expected_file():
+    import json
+    from pathlib import Path
+
+    day = json.loads((Path(__file__).resolve().parents[1] / "expected/silver_daily.json").read_text())["days"]
+    keys = set(next(iter(day.values())))
+    sql_keys = {line.split(" AS ")[-1].strip(",") for line in st.SUMMARY_SQL.splitlines() if " AS " in line}
+    assert sql_keys | {"final_intent"} == keys  # printed summary is comparable line by line

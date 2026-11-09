@@ -90,6 +90,27 @@ FROM chat_message c LEFT JOIN nlu_prediction p ON p.chat_id = c.id
 WHERE c.is_client"""
 
 
+SUMMARY_SQL = """
+SELECT
+  (SELECT count(*) FROM chat_message) AS chat_rows,
+  (SELECT count_if(is_client) FROM chat_message) AS client_rows,
+  (SELECT count_if(is_client AND is_home) FROM chat_message) AS client_home_rows,
+  (SELECT count_if(is_internal_sender) FROM chat_message) AS internal_sender_rows,
+  (SELECT count_if(is_internal_sender AND is_client) FROM chat_message) AS internal_sender_client_rows,
+  (SELECT count(*) FROM nlu_prediction) AS predict_rows,
+  (SELECT count_if(NOT has_chat_row) FROM nlu_prediction) AS predict_without_chat_row,
+  (SELECT count(*) FROM user_message) AS user_message_rows,
+  (SELECT count_if(has_prediction) FROM user_message) AS user_message_with_prediction"""
+
+
+def summary(spark) -> dict:
+    """Counts in the shape of tests/expected/silver_daily.json (tools/expected_silver.py counts())."""
+    out = spark.sql(SUMMARY_SQL).collect()[0].asDict()
+    rows = spark.sql("SELECT final_intent, count(*) FROM nlu_prediction GROUP BY final_intent").collect()
+    out["final_intent"] = {r[0]: r[1] for r in sorted(rows)}
+    return out
+
+
 def write(spark, df, table: str) -> None:
     full = f"lake.silver.{table}"
     if spark.catalog.tableExists(full):
@@ -132,6 +153,10 @@ def main() -> None:
     pred.createOrReplaceTempView("nlu_prediction")
     user = spark.sql(USER_MESSAGE_SQL)
 
+    user.createOrReplaceTempView("user_message")
+    import json
+
+    print(f"[silver] {day} summary {json.dumps(summary(spark), sort_keys=True)}", flush=True)  # = silver_daily.json
     for table, df in (("chat_message", chat), ("nlu_prediction", pred), ("user_message", user)):
         write(spark, df, table)
         n = spark.table(f"lake.silver.{table}").where(f"event_date = DATE '{day}'").count()
