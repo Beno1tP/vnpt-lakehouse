@@ -111,17 +111,18 @@ k8s-job-image: ## Task 2 FALLBACK (G6, CI blocked): build locally + load; then m
 	rm -rf $(HOME)/.minikube/cache/images
 	minikube image ls | grep vnpt-lake-spark-job
 	@echo "fallback image loaded: run make sparkapp JOB_IMAGE=$(LOCAL_JOB_IMAGE) DATE=..."
-sparkapp:      ## Task 2: run one SparkApplication by hand (same template as the DAG): make sparkapp [APP=bronze|validate] DATE=2024-07-24 [IDEMPOTENCY=yes]
-	kubectl -n spark-jobs delete sparkapplication $(APP)-$(DATE) --ignore-not-found --wait=true
+SPARKAPP_NAME = $(subst _,-,$(APP))-$(DATE)
+sparkapp:      ## Task 2: run one SparkApplication by hand (same template as the DAG): make sparkapp [APP=bronze|validate|silver|validate_silver] DATE=2024-07-24 [IDEMPOTENCY=yes]
+	kubectl -n spark-jobs delete sparkapplication $(SPARKAPP_NAME) --ignore-not-found --wait=true
 	sed -e 's/{{ ds }}/$(DATE)/g' -e 's|{{ var.value.spark_job_image }}|$(JOB_IMAGE)|' \
 	    $(if $(filter yes,$(IDEMPOTENCY)),$(IDEMPOTENCY_SED)) \
 	    dags/templates/$(APP)_sparkapp.yaml | kubectl apply -f -
 	@for i in $$(seq 1 120); do \
-	  s=$$(kubectl -n spark-jobs get sparkapplication $(APP)-$(DATE) -o jsonpath='{.status.applicationState.state}'); \
+	  s=$$(kubectl -n spark-jobs get sparkapplication $(SPARKAPP_NAME) -o jsonpath='{.status.applicationState.state}'); \
 	  echo "[sparkapp] $$(date +%T) state=$${s:-PENDING}"; \
 	  case "$$s" in COMPLETED) break;; FAILED|SUBMISSION_FAILED) break;; esac; sleep 5; done
-	kubectl -n spark-jobs logs $(APP)-$(DATE)-driver | grep -E "^\[(bronze|validate)\]|Error|Exception|Caused by" || true
-	@test "$$(kubectl -n spark-jobs get sparkapplication $(APP)-$(DATE) -o jsonpath='{.status.applicationState.state}')" = COMPLETED
+	kubectl -n spark-jobs logs $(SPARKAPP_NAME)-driver | grep -E "^\[(bronze|validate|silver|validate_silver)\]|Error|Exception|Caused by" || true
+	@test "$$(kubectl -n spark-jobs get sparkapplication $(SPARKAPP_NAME) -o jsonpath='{.status.applicationState.state}')" = COMPLETED
 airflow-chart: ## Task 2: download Airflow chart 1.22.0 from the Apache CDN and check its SHA-512 (E29: helm repo index -> slow archive)
 	mkdir -p $(dir $(AIRFLOW_CHART))
 	test -f $(AIRFLOW_CHART) || curl -fL --retry 3 -o $(AIRFLOW_CHART) https://dlcdn.apache.org/airflow/helm-chart/1.22.0/airflow-1.22.0.tgz

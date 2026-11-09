@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 FILL = {"{{ ds }}": "2024-07-02", "{{ var.value.spark_job_image }}": "img@sha256:x"}  # what make/Airflow render
 
 
-@pytest.mark.parametrize("app", ["bronze", "validate", "silver"])
+@pytest.mark.parametrize("app", ["bronze", "validate", "silver", "validate_silver"])
 def test_sparkapp_template(app):
     text = (ROOT / f"dags/templates/{app}_sparkapp.yaml").read_text()
     for key, value in FILL.items():
@@ -18,7 +18,8 @@ def test_sparkapp_template(app):
     doc = yaml.safe_load(text)
     spec = doc["spec"]
     assert doc["kind"] == "SparkApplication" and doc["metadata"]["namespace"] == "spark-jobs"
-    assert doc["metadata"]["name"] == f"{app}-2024-07-02" and spec["imagePullSecrets"] == ["ghcr-pull"]
+    name = app.replace("_", "-")  # K8s names allow no underscores; make sparkapp uses the same mapping
+    assert doc["metadata"]["name"] == f"{name}-2024-07-02" and spec["imagePullSecrets"] == ["ghcr-pull"]
     assert spec["restartPolicy"]["type"] == "Never"  # one retry layer: Airflow
     assert spec["driver"]["serviceAccount"] == "spark-operator-spark"
     for role in ("driver", "executor"):
@@ -96,6 +97,7 @@ def test_spark_operator_image_pinned_by_digest():
         "dags/templates/bronze_sparkapp.yaml",
         "dags/templates/validate_sparkapp.yaml",
         "dags/templates/silver_sparkapp.yaml",
+        "dags/templates/validate_silver_sparkapp.yaml",
         "dags/templates/maintenance_sparkapp.yaml",
         "infra/k8s/spark-jobs/catalog-sparkapp.yaml",
     ],

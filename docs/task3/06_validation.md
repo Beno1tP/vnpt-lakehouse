@@ -23,6 +23,8 @@ Generated 2026-11-09 by `.venv/bin/python tools/expected_silver.py` (Bee): `PASS
 
 | Check | Spark (validator) | Trino (`make trino-check`) | Expected | Status |
 |---|---|---|---|---|
+| 3.1 summary 2024-07-09 (job print, 11-09) | identical | — | `silver_daily.json` | ✅ |
+| 3.1 summary 2024-07-25 (job print, 11-09) | identical (116 without chat row) | — | `silver_daily.json` | ✅ |
 
 ## 3. Idempotency and backfill
 

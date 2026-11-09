@@ -13,6 +13,8 @@ PATTERN = re.compile(
     r"\[landing\] [0-9-]+: chatlog=[a-z]+, bot_predict=[a-z]+"
     r"|\[bronze\] bronze\.[a-z_]+: [0-9]+ rows read, [0-9]+ rows in partition [0-9-]+"
     r"|\[validate\] [0-9]+/[0-9]+ checks passed for _ingest_date=[0-9-]+"
+    r"|\[silver\] [a-z_]+: [0-9]+ rows in partition [0-9-]+"
+    r"|\[validate_silver\] [0-9]+/[0-9]+ checks passed for event_date=[0-9-]+"
 )
 
 dag_id = sys.argv[1] if len(sys.argv) > 1 else "chatbot_bronze"
