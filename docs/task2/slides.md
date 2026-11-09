@@ -19,7 +19,7 @@ What Task 2 implements:
 - 24 calendar days (2024-07-02 → 07-25): 18 load, 6 have no export and are skipped
 - Same Bronze tables and rules as Task 1 (raw strings + load metadata), now partitioned by the data day
 
-Agenda: Knowledge (Kubernetes, Minikube, operators, Spark on K8s, Airflow 3, Helm, CI/CD) · Kubernetes in depth (K1–K18, with a chatbot-platform use case) · Stack of this task · Running it (intervals, backfill, drills, backup, maintenance, sizing) · Errors · Deep dive: 52 questions from the stack review, one global view + per-stack answers
+Agenda: Knowledge (Kubernetes, Minikube, operators, Spark on K8s, Airflow 3, Helm, CI/CD) · Kubernetes in depth (K1–K20, with a chatbot-platform use case and four real-world cases) · Stack of this task · Running it (intervals, backfill, drills, backup, maintenance, sizing) · Errors · Deep dive: 52 questions from the stack review, one global view + per-stack answers
 
 Visual: left "s3://landing/…/dt=2024-07-24/x.xlsx" → Airflow box (check → bronze → validate → notify) → Kubernetes box (driver pod + executor pod) → "Bronze: Iceberg on MinIO"; a Telegram icon under Airflow.
 
@@ -196,7 +196,7 @@ Speaker notes: No image is built on the laptop: that saves CPU, disk and a secon
 ---
 # Part 1b — Kubernetes in depth
 
-Numbered K1–K18 so slides 14–69 keep their numbers. Structure follows the Viblo "Kubernetes Series" (19 articles, after *Kubernetes in Action*), each topic tied to what Task 2 runs. K1–K12 = concepts, K13–K18 = one real-life use case (6 slides).
+Numbered K1–K20 so slides 14–69 keep their numbers. Structure follows the Viblo "Kubernetes Series" (19 articles, after *Kubernetes in Action*), each topic tied to what Task 2 runs. K1–K12 = concepts, K13–K18 = one real-life use case (6 slides), K19–K20 = four published industrial cases and what changes at their scale.
 
 ---
 # Slide K1 — The map: Kubernetes topics → our cluster
@@ -482,6 +482,36 @@ Speaker notes: Our lab already has this shape. The production difference is who 
 - What makes this work: ≥ 2 replicas spread across nodes, readiness probes, PDBs, requests honest enough for the scheduler to place replacements
 
 Speaker notes: Shorten the 300 s with `tolerationSeconds` on stateless pods if faster failover is worth more eviction churn. Our drills 1–3 are this table on one node.
+
+---
+# Slide K19 — Real-world scale (1/2): four published cases
+K13–K18 is one invented app on one cluster. Published industrial cases, closest to VNPT first:
+
+| Case | Scale (as published) | Requirement | What they built or changed |
+|---|---|---|---|
+| **Deutsche Telekom, "Das Schiff"** (telco) | 2021 plan: > 10,000 clusters across 10 data centers + 10,000 edge sites; a dedicated SRE team of 10 | 5G network functions in the core and at the edge, incl. bare metal | Cluster-as-a-Service from Git: **Flux** keeps every cluster equal to Git (GitOps), **Cluster API** creates clusters; management clusters per site pull their tenants' folder |
+| **OpenAI** (AI training) | 7,500 nodes in one cluster; 5 API servers + 5 etcd nodes on dedicated machines, outside the cluster | GPU training (GPT-3, CLIP, DALL·E) | Flannel → native pod networking; **EndpointSlices cut watch load 1000×**; Events in their own etcd; gang-scheduling plugin; passive + active GPU health checks; "team taints" to split capacity |
+| **Uber** (stateless services) | > 50 clusters, 5,000–7,500 hosts each; 4,000 services, ~3 M cores; 1.5 M pod launches/day | Leave Mesos (deprecated 2021) without service owners noticing | Federation layer **Up** hides the cluster type; a K8s cluster added in every zone next to Mesos; cluster selection moved services automatically (done 07/2024, ~1.5 years); own controllers for batched scale-up, rollback at > 10 % restarting pods, 15-min reconcile |
+| **Notion** (Spark on K8s, 02/2026) | Spark jobs moving huge datasets between hundreds of workers | Cut cost without failing jobs | EMR on fixed EC2 → **EMR on EKS**; Karpenter (EKS Auto Mode) adds/removes nodes; spot-only jobs often failed → built **Spot Balancer** (spot/on-demand split per job) → 60–90 % lower cost |
+
+Speaker notes: Numbers are as each company published them, not verified by us; Telekom's are a 2021 projection. Telekom is the closest to VNPT (telco platform, edge), Notion the closest to our Spark-on-Kubernetes work.
+
+---
+# Slide K20 — Real-world scale (2/2): what changes beyond K13–K18
+| Dimension | K13–K18 (our use case) | At industrial scale | Case |
+|---|---|---|---|
+| Number of clusters | one | fleets; Git is the only way to keep them equal; federation picks the cluster per workload | Telekom, Uber |
+| Control plane | assumed to just work | API server, etcd and watch traffic become the bottleneck: dedicated nodes, split etcd, EndpointSlices | OpenAI |
+| Hardware | general + inference + batch pools | GPUs, bare metal, edge boxes: health checks that take bad nodes out, own pools | OpenAI, Telekom |
+| Organisation | 3 teams, RBAC per namespace (K16) | a small platform team serves many product teams; the platform is a product | Telekom, Uber |
+| Defaults | upstream Deployment/rollout behaviour | custom controllers where defaults are too slow or implicit (scale batches, rollback rule, reconcile period) | Uber |
+| Cost | node pools, quotas | spot + autoscaling decide the bill, with a reliability guard (spot/on-demand ratio) | Notion |
+
+- What stays the same: each requirement still maps to a Kubernetes object or controller, the K13–K18 method
+- What our lab already has on a small scale: Git as the source (PR + CI, deploy by digest), Spark Operator on K8s, one retry layer, requests from measurements
+- What VNPT would add first: GitOps controller (Flux/Argo CD) instead of `make k8s-up`, a spot/on-demand policy for Spark executors
+
+Speaker notes: Sources: Telekom: github.com/telekom/das-schiff, KubeCon EU 2021 keynote (Vuk Gojnic), The New Stack "How Deutsche Telekom manages edge infrastructure with GitOps", Telekom press release 2021-11-30. OpenAI: openai.com/index/scaling-kubernetes-to-7500-nodes (2021). Uber: uber.com/blog/migrating-ubers-compute-platform-to-kubernetes-a-technical-journey (2025-04-24), InfoQ 2025-05. Notion: notion.com/blog/balancing-cost-and-reliability-for-spark-on-kubernetes (2026-02-12).
 
 ---
 # Part 2 — The stack of Task 2
@@ -783,7 +813,7 @@ Full written answers with file references: `docs/task2/08_study_notes.md` (Q1–
 | Layer | Our pieces | Question topics | Slides |
 |---|---|---|---|
 | Host and runtime | Windows → WSL2 → Docker Desktop → Minikube node (containerd) | node access, drivers, dockershim and shims, namespaces, local vs cloud | 36–40 |
-| Kubernetes core | API server, controllers, StatefulSets, PVCs | objects, storage, authority, use case | 37, 41; K1–K18 |
+| Kubernetes core | API server, controllers, StatefulSets, PVCs | objects, storage, authority, use case | 37, 41; K1–K20 |
 | Resources | requests, limits, Allocatable, QoS | OOM types, overcommit, VPA/HPA, node scaling | 42–45 |
 | Delivery | Helm, kustomize, GitHub Actions, GHCR | chart writing, revisions, values, rollback, Argo CD | 46–47 |
 | Compute | Spark 3.5.9 via Spark Operator 2.2.1 | memory model, driver ↔ API, operator, fault tolerance, joins, Trino, streaming | 48–53 |
