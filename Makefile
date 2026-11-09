@@ -169,7 +169,8 @@ airflow-ui:    ## Task 2: open the Airflow UI on http://localhost:8080 (Ctrl+C t
 DEMO_STOP  = deploy/airflow-scheduler deploy/airflow-dag-processor deploy/airflow-triggerer
 DEMO_TASK ?= 2
 demo-task2:    ## Demo profile (B3): view-only. Scheduler, dag-processor, triggerer -> 0 (nothing can start a run); api-server + History Server up. Refuses while a run is active
-	@! kubectl -n spark-jobs get sparkapplications -o name | grep -q . || { echo "refusing: a SparkApplication exists (a run is active); wait for it"; exit 1; }
+	@! kubectl -n spark-jobs get sparkapplications --no-headers -o custom-columns=S:.status.applicationState.state | grep -vE '^(COMPLETED|FAILED)$$' | grep -q . || \
+	  { echo "refusing: a SparkApplication is not finished (state other than COMPLETED/FAILED); wait for it"; exit 1; }   # E61: finished apps stay until their TTL
 	@! $(AF) airflow dags list-runs chatbot_bronze --state running -o plain 2>/dev/null | grep -q chatbot_bronze || { echo "refusing: a chatbot_bronze run is running; wait for it"; exit 1; }
 	kubectl -n airflow scale $(DEMO_STOP) --replicas=0
 	kubectl -n spark-jobs scale deploy/spark-history --replicas=1
@@ -184,8 +185,9 @@ demo-check:    ## Demo (B3): before presenting. Workloads ready, UIs answer (tem
 	@set -u; fail=0; \
 	for w in lake:statefulset/postgres lake:statefulset/minio lake:deploy/hive-metastore airflow:deploy/airflow-api-server spark-jobs:deploy/spark-history; do \
 	  ns=$${w%%:*}; obj=$${w#*:}; \
-	  if kubectl -n $$ns rollout status $$obj --timeout=60s >/dev/null 2>&1; then echo "[demo-check] PASS ready  $$ns/$$obj"; \
-	  else echo "[demo-check] FAIL ready  $$ns/$$obj (in demo-task2 the History Server must be 1)"; fail=1; fi; \
+	  r=$$(kubectl -n $$ns get $$obj -o jsonpath='{.status.readyReplicas}' 2>/dev/null); \
+	  if [ "$${r:-0}" -ge 1 ]; then echo "[demo-check] PASS ready  $$ns/$$obj ($$r ready)"; \
+	  else echo "[demo-check] FAIL ready  $$ns/$$obj (0 ready; in demo-task2 the History Server must be 1)"; fail=1; fi; \
 	done; \
 	kubectl -n airflow port-forward svc/airflow-api-server 28080:8080 >/dev/null 2>&1 & p1=$$!; \
 	kubectl -n lake port-forward svc/minio 29001:9001 >/dev/null 2>&1 & p2=$$!; \

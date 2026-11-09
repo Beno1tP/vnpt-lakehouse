@@ -123,7 +123,7 @@ Disk (Docker Desktop's `docker_data.vhdx`): Minikube node volume **8.3 GB** (nod
 | 11 | Ingestion | daily landing files, reprocess = clear the day | JDBC/CDC, late data |
 | 12 | Change management | branches + PRs (#1–#37), tags | branch protection (paid plan for private repos) |
 
-## Errors met and lessons (details: `05_errors_and_fixes.md`, E25–E60)
+## Errors met and lessons (details: `05_errors_and_fixes.md`, E25–E61)
 
 - **Resources are what the kubelet believes** (E25 Allocatable, E52 LocalExecutor workers): measure, then size; check restart counts, a green run can hide OOM kills.
 - **Airflow 3 changed defaults**: timedelta/cron schedules give zero-length intervals (E38), manual runs may have no logical date and templates render strictly (E47), one run per logical date (E49), DagBag API (E34), hostname for logs (E37).
