@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-11-10 — 3.3 done: Trino reads the lake, read-only twice
+Did (Bee): PR #66 → `make k8s-up` (17:42 UTC = 00:42 ICT: namespace trino, `MINIO_TRINO_SECRET`, 2 Secrets, minio-users) → `make s3-access-test` → `make mode-query` → `make trino-install` (17:46:34 UTC: chart 1.44.0 `OK`, release trino rev 1) → image check + 5 SQL statements + one write attempt.
+Observed: 4 × 6/6 access test (trino reads lakehouse only); pod image `docker.io/trinodb/trino@sha256:db58cc93…0534` (pinned digest); schemas bronze, silver (+ default, information_schema, system); counts 21,224 / 21,224 / 10,729 / 10,613 = pandas = Spark; `event_ts` = `timestamp(6)`; `CREATE TABLE` → `Access Denied` (17:51:35 UTC).
+Learned: one copy of the data, two engines: Spark writes, HMS points, Trino reads the same Iceberg files with its own Thrift client and native S3 file system. Next: 3.4 `make trino-check` (all Silver numbers via Trino vs `silver.json`).
+
 ### 2026-11-10 — 3.3 Trino prepared
 Checked (Claude, public reads): chart index → 1.43.0 and 1.44.0 = Trino 483, 1.45.0 = 484 → **1.44.0**; its SHA-256 equals GitHub's asset digest and the index digest (unlike E58); `trinodb/trino:483` index digest `sha256:db58cc93…0534` (Docker Hub). Chart facts: release `trino` → `deploy/trino-coordinator`, `svc/trino`; `server.workers: 0` removes the worker Deployment; catalogs as properties with `${ENV:…}`.
 Prepared (branch `task3/3.3-trino`): namespace `trino`; MinIO user `trino` (`lake-trino-read.json`: list + read `lakehouse/` only) + Secrets `trino-s3-credentials` (namespace trino) and `trino-access-test-credentials` (AWS names, for the access test); `infra/helm/trino/values-local.yaml` (single node, heap 1536M, query 600 MB, 2 Gi Guaranteed, catalog `lake` with `iceberg.security=read_only`); make `trino-chart`, `trino-install` (refuses unless in query mode), `trino-cli`, `trino-ui` (port 8081), `mode-query`, `mode-pipeline`; `s3-access-test` gets a positive op "read lakehouse" and profile `trino`; tests. Predicted: lint clean, tests pass, recipes `bash -n` OK, kustomize render with dummy secrets OK (my local runs).
