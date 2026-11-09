@@ -251,7 +251,8 @@ Speaker notes: Picking the controller is picking the failure behaviour. Our E54 
 ---
 # Slide K4a — Example: a stateless, scalable app (1/5): what it is, which objects
 A **stateless service**: a web API, a model-inference server or a worker that keeps no data inside itself. Any copy can answer any request, because all state lives *outside* the pods (database, cache, object storage).
-- Examples: a chatbot `chat-api`, an NLU inference service, Superset's web server, Trino workers
+- Examples: a REST API service (our chatbot `chat-api`), an NLU inference service, the **Airflow api-server** (chart 1.22.0: Deployment + HPA + PDB + Service + Ingress templates; state in the metadata DB), Superset's web server, **Trino workers**, **Kafka Connect workers** in distributed mode (config, offsets and status live in Kafka topics)
+- Looks similar but is not this pattern: **Spark executors** (created by the driver, run to completion like a Job, shuffle files on local disk → lost executor = recompute); **Airflow Celery workers** (chart default `workers.persistence.enabled: true` → StatefulSet, for task logs; with KubernetesExecutor one pod per task)
 - In our lab: the Hive Metastore is this kind of app; its state is in Postgres
 
 | Object | Job |
