@@ -1,7 +1,7 @@
 # Slide 1 — Task 1: Excel → Spark → Iceberg on MinIO
 VNPT AI · Data Engineering onboarding lab · Task 1 of 5
 Bronze layer for chatbot logs, catalogued in Hive Metastore
-Bee (Pham Quang Minh) · 2026-10-22
+Pham Quang Minh · 2026-10-22
 
 Visual: dark title slide; small orange line "VNPT AI · DE onboarding lab · Task 1".
 
