@@ -72,11 +72,15 @@ B1. Freeze step 1: event logs + History Server + read-only demo users          [
     make dag-report                                     (18 days, 23/23 each)
     make history-ui    -> expect 18 bronze + 18 validate applications
 
-B2. Freeze step 2: Iceberg tags + evidence                                     [PLANNED]
-    make freeze TASK=2                 (tags task2_v1 on both Bronze tables, asserts counts VERSION AS OF the tag)
-    make evidence                      (counts/states to ~/data/vnpt-lab/evidence/, outside Git)
-    make evidence-export               (copy of airflow-logs, backup, event logs to the laptop; sizes only printed)
-    make maintenance DRY=yes           (assert the tag survives)
+B2. Freeze step 2: Iceberg tags + evidence                                     [PLANNED: branch task2/b2-freeze]
+    PR -> images run (catalog_tool changed: new spark-job image) -> digest bump PR -> make k8s-up
+    make freeze TASK=2                 (tag task2_v1 on both Bronze tables, RETAIN 365 DAYS; then rows VERSION AS OF
+                                        the tag = 21,224 / 10,729; an existing tag is kept where it is)
+    make evidence                      (states/counts to ~/data/vnpt-lab/evidence/task2-YYYYMMDD/, outside Git)
+    make evidence-export               (airflow-logs + backup from MinIO, Spark event logs from the PVC, same folder;
+                                        checks copied files = manifest; prints counts and sizes only)
+    make freeze-check TASK=2           (after the next Sunday maintenance, 02:00 UTC = 09:00 ICT: tag still = frozen rows;
+                                        expire_snapshots never removes a tagged snapshot)
 
 B3. Freeze step 3: demo profiles                                                [PLANNED]
     make demo-task2       (lake + Airflow api-server + History Server; scheduler/dag-processor/triggerer/operator = 0)
