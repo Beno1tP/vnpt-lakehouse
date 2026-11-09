@@ -50,3 +50,4 @@ spec:
               - { key: lake-landing-reader.json, path: lake-landing-reader.json }
               - { key: lake-airflow-logs.json, path: lake-airflow-logs.json }
               - { key: lake-backup.json, path: lake-backup.json }
+              - { key: lake-demo-viewer.json, path: lake-demo-viewer.json }

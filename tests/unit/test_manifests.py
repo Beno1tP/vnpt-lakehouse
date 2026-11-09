@@ -88,3 +88,22 @@ def test_backup_cronjob_dumps_both_databases_with_server_major_version():
 def test_spark_operator_image_pinned_by_digest():
     values = yaml.safe_load((ROOT / "infra/helm/spark-operator/values-local.yaml").read_text())
     assert values["image"]["tag"].startswith("2.2.1@sha256:")  # chart 2.2.1 = app 2.2.1, Spark 3.5
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "dags/templates/bronze_sparkapp.yaml",
+        "dags/templates/validate_sparkapp.yaml",
+        "dags/templates/maintenance_sparkapp.yaml",
+        "infra/k8s/spark-jobs/catalog-sparkapp.yaml",
+    ],
+)
+def test_sparkapp_writes_event_log(path):
+    """Every Spark run is browsable later in the History Server (make spark-history): driver writes to the PVC."""
+    text = (ROOT / path).read_text().replace("{{", "").replace("}}", "")
+    spec = yaml.safe_load(text)["spec"]
+    assert spec["sparkConf"]["spark.eventLog.enabled"] == "true"
+    assert spec["sparkConf"]["spark.eventLog.dir"] == "file:///spark-events"
+    assert {"name": "spark-events", "persistentVolumeClaim": {"claimName": "spark-events"}} in spec["volumes"]
+    assert {"name": "spark-events", "mountPath": "/spark-events"} in spec["driver"]["volumeMounts"]

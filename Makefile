@@ -35,7 +35,7 @@ SPARK_SUBMIT = $(COMPOSE) exec -T spark /opt/spark/bin/spark-submit --master $(S
 SPARK_SQL    = $(COMPOSE) exec -T spark /opt/spark/bin/spark-sql --master local[1]
 NOISE        = ^Time taken|^:: loading settings
 
-.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks ghcr-prune k8s-up k8s-demo
+.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks ghcr-prune k8s-up k8s-demo airflow-viewer airflow-viewer-check minio-ui history-ui
 
 help:          ## list targets and variables
 	@awk -F':.*## ' '/^[a-zA-Z0-9_-]+:.*## /{printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -90,9 +90,9 @@ landing:       ## Task 2: split the Excel files by day -> s3://landing/<table>/d
 	for f in bot_dvc_hcm.xlsx bot_ddvc_hcm_bot_predict.xlsx; do kubectl -n spark-jobs cp $(K8S_RAW_DIR)/$$f landing-simulator:/work/$$f; done; \
 	kubectl -n spark-jobs exec landing-simulator -- python3 /opt/jobs/landing_simulator.py --src /work --dest s3://landing \
 	  --expected /opt/tests/expected/bronze_daily.json
-s3-access-test: ## Task 2: prove least privilege of the MinIO users spark-jobs + landing-writer (allowed AND denied ops)
+s3-access-test: ## Task 2: prove least privilege of the MinIO users spark-jobs, landing-writer, demo-viewer (allowed AND denied ops)
 	kubectl -n spark-jobs create configmap s3-access-check --from-file=tests/k8s/s3_access_check.py --dry-run=client -o yaml | kubectl apply -f -
-	@set -e; rc=0; for p in spark-jobs:s3-credentials landing-writer:landing-writer-credentials; do \
+	@set -e; rc=0; for p in spark-jobs:s3-credentials landing-writer:landing-writer-credentials demo-viewer:demo-viewer-credentials; do \
 	  prof=$${p%%:*}; sec=$${p#*:}; \
 	  kubectl -n spark-jobs delete pod s3-access-test-$$prof --ignore-not-found >/dev/null; \
 	  sed -e "s|__PROFILE__|$$prof|g" -e "s|__SECRET__|$$sec|" -e 's|__IMAGE__|$(JOB_IMAGE)|' tests/k8s/s3-access-test-pod.yaml | kubectl apply -f - >/dev/null; \
@@ -140,6 +140,21 @@ airflow-admin: ## Task 2: (re)create the Airflow UI user admin with the password
 	@$(AF) airflow users create --username admin --role Admin \
 	  --firstname admin --lastname lab --email admin@lab.local --password "$$(cat infra/k8s/secrets/airflow-admin-password)" \
 	  | grep -v -i password
+airflow-viewer: ## Demo: (re)create the Airflow UI user viewer (Viewer role: read-only) with the password from infra/k8s/secrets/airflow-viewer-password
+	@test -s infra/k8s/secrets/airflow-viewer-password || { echo "run make k8s-secrets first"; exit 1; }
+	-@$(AF) airflow users delete --username viewer >/dev/null 2>&1
+	@$(AF) airflow users create --username viewer --role Viewer \
+	  --firstname viewer --lastname demo --email viewer@lab.local --password "$$(cat infra/k8s/secrets/airflow-viewer-password)" \
+	  | grep -v -i password
+airflow-viewer-check: ## Demo: prove viewer can read runs but not trigger or clear them (harmless attempts, HTTP codes only)
+	@$(AFI) python - "$$(cat infra/k8s/secrets/airflow-viewer-password)" < tests/k8s/airflow_viewer_check.py
+minio-ui:      ## Demo: MinIO console on http://localhost:9001; log in as demo-viewer (read-only; password = MINIO_DEMO_VIEWER_SECRET in secrets.env)
+	kubectl -n lake port-forward svc/minio 9001:9001
+history-ui:    ## Demo: Spark History Server on http://localhost:18080 (scales it to 1, back to 0 on Ctrl+C); runs since event logs were enabled
+	kubectl -n spark-jobs scale deploy/spark-history --replicas=1
+	set -e; trap 'kubectl -n spark-jobs scale deploy/spark-history --replicas=0' EXIT; \
+	kubectl -n spark-jobs rollout status deploy/spark-history --timeout=600s; \
+	kubectl -n spark-jobs port-forward svc/spark-history 18080:18080
 airflow-ui:    ## Task 2: open the Airflow UI on http://localhost:8080 (Ctrl+C to stop)
 	kubectl -n airflow port-forward svc/airflow-api-server 8080:8080
 backfill:      ## Task 2: backfill chatbot_bronze: make backfill [FROM=2024-07-02] [TO=2024-07-25] [REPROCESS=none|completed|failed] [DRY=yes]

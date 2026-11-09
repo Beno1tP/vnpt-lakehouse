@@ -34,11 +34,17 @@ spec:
     spark.sql.session.timeZone: Asia/Ho_Chi_Minh
     spark.sql.execution.arrow.pyspark.enabled: "true"
     spark.sql.shuffle.partitions: "4"
+    spark.eventLog.enabled: "true"                # Spark UI after the run: make history-ui (lab: PVC, prod: s3a)
+    spark.eventLog.dir: file:///spark-events
+    spark.eventLog.compress: "true"
+  volumes:
+    - { name: spark-events, persistentVolumeClaim: { claimName: spark-events } }   # infra/k8s/spark-jobs/spark-events-pvc.yaml
   driver:
     cores: 1
     memory: 1g                                 # JVM heap
     memoryOverhead: 512m                       # no pandas here (pod = 1.5 GiB)
     serviceAccount: spark-operator-spark       # created by the operator chart; may create executor pods
+    volumeMounts: [{ name: spark-events, mountPath: /spark-events }]   # only the driver writes the event log
     labels: { app: validate, ingest-date: "{{ ds }}" }
     env: &env
       - { name: AWS_REGION, value: us-east-1 }

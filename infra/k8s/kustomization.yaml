@@ -10,6 +10,8 @@ resources:
   - lake/minio-users-job.yaml
   - spark-jobs/rbac-airflow.yaml
   - lake/pg-backup-cronjob.yaml
+  - spark-jobs/spark-events-pvc.yaml
+  - spark-jobs/spark-history.yaml
 images:                                # GHCR digests (2.0c); keep equal to infra/k8s/images.env (checked by CI)
   - name: ghcr.io/beno1tp/vnpt-lake-hms
     digest: sha256:9446f7d1e0ab211f1fe32b0f8def318699e6afa40a5e1fcebfa3d07d134b91ff
@@ -32,6 +34,10 @@ secretGenerator:                       # from files rendered by `make k8s-secret
   - name: landing-writer-credentials    # MinIO user landing-writer (landing simulator pod, outside kustomize)
     namespace: spark-jobs
     envs: [secrets/landing-writer.env]
+    options: { disableNameSuffixHash: true }
+  - name: demo-viewer-credentials       # MinIO user demo-viewer, only for make s3-access-test (negative test)
+    namespace: spark-jobs
+    envs: [secrets/demo-viewer.env]
     options: { disableNameSuffixHash: true }
   - name: minio-service-users           # passwords for the minio-users Job
     namespace: lake
@@ -65,4 +71,4 @@ configMapGenerator:
     files: [lake/minio-users/minio_users.sh, lake/minio-users/lake-spark-jobs.json,
             lake/minio-users/lake-landing-writer.json, lake/minio-users/lake-hms.json,
             lake/minio-users/lake-landing-reader.json, lake/minio-users/lake-airflow-logs.json,
-            lake/minio-users/lake-backup.json]
+            lake/minio-users/lake-backup.json, lake/minio-users/lake-demo-viewer.json]
