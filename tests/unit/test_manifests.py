@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 FILL = {"{{ ds }}": "2024-07-02", "{{ var.value.spark_job_image }}": "img@sha256:x"}  # what make/Airflow render
 
 
-@pytest.mark.parametrize("app", ["bronze", "validate"])
+@pytest.mark.parametrize("app", ["bronze", "validate", "silver"])
 def test_sparkapp_template(app):
     text = (ROOT / f"dags/templates/{app}_sparkapp.yaml").read_text()
     for key, value in FILL.items():
@@ -95,6 +95,7 @@ def test_spark_operator_image_pinned_by_digest():
     [
         "dags/templates/bronze_sparkapp.yaml",
         "dags/templates/validate_sparkapp.yaml",
+        "dags/templates/silver_sparkapp.yaml",
         "dags/templates/maintenance_sparkapp.yaml",
         "infra/k8s/spark-jobs/catalog-sparkapp.yaml",
     ],
