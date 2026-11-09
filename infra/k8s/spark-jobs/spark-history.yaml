@@ -23,8 +23,9 @@ spec:
           command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.history.HistoryServer"]
           env:
             - { name: SPARK_DAEMON_MEMORY, value: 384m }   # heap ≈ 75 % of the limit
-            - name: SPARK_HISTORY_OPTS
+            - name: SPARK_HISTORY_OPTS        # user.timezone: list times in ICT like the browser-rendered ones (display only, 11-09)
               value: >-
+                -Duser.timezone=Asia/Ho_Chi_Minh
                 -Dspark.history.fs.logDirectory=file:///spark-events
                 -Dspark.history.ui.port=18080
                 -Dspark.history.retainedApplications=20

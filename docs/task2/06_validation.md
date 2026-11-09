@@ -50,3 +50,13 @@ Scheduling is proven by runs the scheduler (or the K8s CronJob controller) creat
 | `chatbot_bronze` daily load | Airflow scheduler, `CronDataIntervalTimetable` 00:00 UTC | `scheduled__2026-10-27T00:00` (run_after 10-27, logical date 10-26), started 02:05:46Z right after the unpause, `success`; `check_landing` found no 2026-10-26 export → skipped (D2) | ✅ 2026-10-27 |
 | `lake_maintenance` weekly | Airflow scheduler, Sunday 02:00 UTC | `scheduled__2026-10-25T02:00` (logical date 10-18), 02:21:37 → 02:22:08Z, `success`; with `catchup=False` only the latest missed week ran | ✅ 2026-10-27 |
 | `pg-backup` nightly | K8s CronJob 01:00 UTC, `startingDeadlineSeconds` 12 h | CronJob created 2026-10-27T01:38:15Z (after that day's slot). 10-28 slot: no job (cluster down; catch-up did not happen, likely back > 12 h later, not investigated). **10-29 slot:** job `pg-backup-29887260` (suffix = scheduled minute since epoch = 2026-10-29T01:00Z, not `manual`), `lastScheduleTime` 01:00:00Z, `lastSuccessfulTime` **05:09:08Z** = laptop asleep at 01:00, caught up on wake inside the 12 h deadline; `Complete 1/1` in 5 s; upload 321.71 KiB (both dumps); first run after the E54 MinIO fix | ✅ 2026-10-29 |
+
+## 4. Freeze step 1 (2026-11-09, times UTC with ICT = UTC+7)
+
+| Check | Expected | Actual |
+|---|---|---|
+| `make airflow-viewer-check` | read 200, trigger/clear 403 | 4/4 |
+| `make s3-access-test` (spark-jobs, landing-writer, demo-viewer) | 5/5 each; demo-viewer read-only, no backup | 3 × 5/5 |
+| Rerun 2024-07-02 with event logs on | 12 / 6, 23/23, driver starts | 06:46:53 UTC (13:46:53 ICT), 12 / 6, 23/23 |
+| History Server lists the run | bronze + validate with jobs, stages, SQL, executors | both, 8 + 46 jobs |
+| Backup after E56 | `make backup-now` Completed | `pg-backup-manual-063853` Completed |

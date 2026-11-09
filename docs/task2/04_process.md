@@ -14,6 +14,12 @@ Time spent:
 
 ---
 
+### 2026-11-09 — freeze step 1 verified (B1 checks); time-zone convention
+Did (Bee): `make airflow-viewer` + `airflow-viewer-check`; `make s3-access-test`; clear 2024-07-02; `make dag-runs`, `make dag-report`; `make history-ui`.
+Observed: viewer 4/4 (read 200, trigger/clear 403); access test 3 × 5/5 (demo-viewer: read landing only; write, create bucket, read backup denied). Rerun 07-02 started **06:46:53 UTC (13:46:53 ICT)**, success, 12/6 rows, 23/23 (second identical log file). History Server: bronze (8 jobs: namespace SQL, 2 × overwritePartitions, counts; driver 13:47:16 ICT, executor 13:47:19 ICT) and validate (46 jobs, 06:47:48–06:47:56 UTC); first event log written without permission problems. Storage memory driver 434.4 MiB = (1024 − 300) × 0.6 (slide 48); executor 265.5 MiB ≈ (768 − 300) × 0.6 minus JVM overhead. E57 (kubectl watch with two types).
+Learned: the History Server lists times in its pod's zone (UTC) but the Executors tab in the browser's (ICT): same instant, two clocks. Convention from now on (Bee is in Vietnam): write `HH:MM UTC (HH:MM ICT)`; History Server set to `-Duser.timezone=Asia/Ho_Chi_Minh`; Airflow UI time zone per user (top right). Airflow's interval for day D = [D 00:00 UTC, D+1 00:00 UTC) = [D 07:00 ICT, D+1 07:00 ICT) ≠ the Vietnamese calendar day; data stays correct because `ds` is only the label of landing `dt=D` (split by the date as written in CREATED_TIME). Aligning the schedule to ICT = Task 3 decision, test first.
+Next: optional full backfill (event logs for 18 days), then B2 (Iceberg tags `task2_v1`, evidence).
+
 ### 2026-11-09 — freeze step 1 deployed; E56 (backup caught up before DNS was ready)
 Did (Bee): PR #50 merged (`d28cf2b`), images run 42561599191 (airflow `sha256:822ed12a…`; spark-job rebuilt with the same content, not promoted), bump PR #51 (`837176a`), `make k8s-up`.
 Observed: secrets generated (`MINIO_DEMO_VIEWER_SECRET`, `AIRFLOW_VIEWER_PASSWORD`); created PVC `spark-events`, Deployment/Service `spark-history` (0 replicas), Secret `demo-viewer-credentials`, Job `minio-users`; Airflow rev 4 on the new image; all pods Running except `pg-backup-29903100` `Init:Error` ×2 → **E56**.

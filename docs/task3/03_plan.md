@@ -92,6 +92,7 @@ docs/task3/01 … 07, README.md                    ➕
 
 - **Modes reuse the Task 2 targets:** `mode-pipeline` = `make airflow-resume` + Trino to 0; `mode-query` / `mode-serving` = `make airflow-pause` (it refuses while a SparkApplication exists) + Trino/StarRocks/Superset up. Every mode first deletes `spark-history` if it runs (512 Mi request).
 - **Silver gets event logs for free:** `silver_sparkapp.yaml` must copy the `spark.eventLog.*` + `spark-events` volume block from `bronze_sparkapp.yaml` (unit test `test_sparkapp_writes_event_log` should list it).
+- **Time-zone decision before 3.1 (11-09):** Airflow's day D interval is [D 07:00 ICT, D+1 07:00 ICT) (UTC schedule), while the data day is the Vietnamese date as written. Option: `CronDataIntervalTimetable("0 0 * * *", timezone="Asia/Ho_Chi_Minh")`; first prove with a DAG test how `ds` renders under it (a wrong `ds` loads the wrong partition, E38 class). Also decide Silver's `event_ts`: Vietnam local without zone (`to_timestamp_ntz`) or an instant (`to_utc_timestamp(…, 'Asia/Ho_Chi_Minh')`).
 - **Open decision for step 3.7 (Bee):** the lifecycle (Q53) keeps results until the final presentation, while 3.7 starts with `minikube delete`. Options: (a) `make evidence` + screenshots, then from zero as planned (results are rebuilt, Airflow history / event logs / drill evidence are lost); (b) move the from-zero acceptance to the end of Task 5, once, after the final presentation. To decide at 3.7.
 
 ---

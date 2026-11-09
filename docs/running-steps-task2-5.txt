@@ -1,6 +1,6 @@
 VNPT lakehouse lab - running steps for Task 2 (view/freeze) and Tasks 3-5
-Written 2026-11-09 by Claude Code. Source of the Task 3-5 steps: docs/task3/03_plan.md, docs/task4/03_plan.md,
-docs/task5/03_plan.md (branch docs/task3-5-plans; not on main yet).
+Written 2026-11-09 by Claude Code; B1 updated 2026-11-09 after it was done. Times: UTC (ICT = UTC+7). Source of the Task 3-5 steps: docs/task3/03_plan.md, docs/task4/03_plan.md,
+docs/task5/03_plan.md (on main since PR #49).
 
 STATUS LEGEND
   [WORKS NOW]  the command exists on main today
@@ -16,7 +16,7 @@ A. CAN I SEE TASK 2's RESULTS NOW?
 | MinIO data (landing, Bronze)  | YES        | port-forward + console (root login for now; read-only demo-viewer comes in freeze step 1) |
 | Airflow runs + task logs      | YES        | make airflow-ui (logs read from s3://airflow-logs, runs since the 10-27 from-zero load) |
 | Spark driver output           | YES        | inside the Airflow task log of bronze/validate |
-| Spark UI (stages, executors)  | NO         | drivers were deleted after each run; no event logs yet (change parked in git stash) |
+| Spark UI (stages, executors)  | YES*       | make history-ui (event logs since 2026-11-09; *older runs only after the full backfill in B1) |
 | Counts per day                | YES        | make dag-report |
 
 A1. Start the cluster (every session)                                          [WORKS NOW]
@@ -25,22 +25,28 @@ A1. Start the cluster (every session)                                          [
     Expect: all pods Running/Completed within 2-3 min (a few may restart once, E40).
 
 A2. MinIO console (data split by day)                                          [WORKS NOW]
-    Terminal 1:  kubectl -n lake port-forward svc/minio 9001:9001
-    Terminal 2:  grep -E "^MINIO_ROOT_(USER|PASSWORD)=" infra/k8s/secrets.env      (do not paste the output)
+    Terminal 1:  make minio-ui
+    Terminal 2:  grep -E "^MINIO_DEMO_VIEWER_SECRET=" infra/k8s/secrets.env        (do not paste the output)
+                 login: user demo-viewer, password = that value (read-only, cannot see backups)
     Browser:     http://localhost:9001 -> Object Browser
                  landing/chatlog/dt=2024-07-24/
                  lakehouse/warehouse/bronze.db/chatlog/data/_ingest_date=2024-07-24/  and  .../metadata/
-    Do NOT click delete/upload (root can do everything).
+    demo-viewer cannot delete or upload (proved by make s3-access-test).
 
 A3. Airflow UI (runs and logs)                                                 [WORKS NOW]
     Terminal 1:  make airflow-ui
-    Browser:     http://localhost:8080 (user admin, password: cat infra/k8s/secrets/airflow-admin-password)
+    Browser:     http://localhost:8080 (user viewer, password: cat infra/k8s/secrets/airflow-viewer-password;
+                 Viewer role: cannot trigger or clear, proved by make airflow-viewer-check)
+                 Top right: set the UI time zone to Asia/Ho_Chi_Minh (display only)
                  chatbot_bronze -> Grid -> run 2024-07-24 -> bronze -> Logs ; validate -> Logs (23/23)
-    Do NOT press Clear / Mark as / Delete / Trigger.
+    As admin: do NOT press Clear / Mark as / Delete / Trigger.
 
 A4. Numbers                                                                    [WORKS NOW]
     make dag-runs
     make dag-report | grep 2024-07-24
+
+A4b. Spark UI of past runs                                                     [WORKS NOW]
+    make history-ui    -> http://localhost:18080 (Ctrl+C scales it back to 0; times shown in ICT)
 
 A5. Stop after viewing
     Ctrl+C in the port-forward terminals
@@ -49,28 +55,22 @@ A5. Stop after viewing
 =====================================================================================================
 B. BEFORE TASK 3: put the plans on main, then freeze Task 2 (Claude Desktop's plan, PVC event logs)
 =====================================================================================================
-B0. Plans PR (branch exists locally)                                           [WORKS NOW]
+B0. Plans PR                                                                   [DONE 11-06: PR #49]
     git switch docs/task3-5-plans
     git push -u origin docs/task3-5-plans
     gh pr create --fill --base main
     sleep 15 && gh pr checks --watch
     gh pr merge --merge --delete-branch && git switch main && git pull
 
-B1. Freeze step 1: event logs + History Server + read-only demo users          [PLANNED: Claude finishes the parked work]
-    git switch task2/demo-lifecycle
-    git stash pop                       (Claude then completes the files, runs lint/tests, commits)
-    git push -u origin task2/demo-lifecycle
-    gh pr create --fill --base main
-    sleep 15 && gh pr checks --watch
-    gh pr merge --merge --delete-branch && git switch main && git pull
-    gh run list --workflow images.yml --limit 1        (DAG templates changed -> new Airflow image; paste digests)
-    -> Claude writes the digest bump PR; Bee merges it the same way
-    make k8s-up                                         (renders the new secrets, creates PVC spark-events, users)
-    make airflow-viewer                                 [PLANNED]
-    make s3-access-test                                 (now also proves demo-viewer cannot write or read backups)
-    make airflow-viewer-check                           [PLANNED]
-    make backfill REPROCESS=completed                   (idempotent rerun: writes event logs for all 18 days)
-    make history-ui    -> http://localhost:18080        [PLANNED] expect 18 bronze + 18 validate applications
+B1. Freeze step 1: event logs + History Server + read-only demo users          [DONE 2026-11-09]
+    PR #50 (code) -> images run 42561599191 -> PR #51 (airflow digest d28cf2b) -> make k8s-up
+    E56 (backup caught up before DNS was ready) -> PR #52 -> make backup-now + make k8s-up
+    Checks passed: make airflow-viewer-check 4/4; make s3-access-test 3 x 5/5 (demo-viewer read-only, no backups);
+    rerun 2024-07-02 at 06:46:53 UTC (13:46:53 ICT): 12/6 rows, 23/23; make history-ui shows bronze + validate.
+    Remaining (optional, recommended before B2): event logs for all 18 days
+    make backfill REPROCESS=completed                   (idempotent; ~20-30 min; same counts expected)
+    make dag-report                                     (18 days, 23/23 each)
+    make history-ui    -> expect 18 bronze + 18 validate applications
 
 B2. Freeze step 2: Iceberg tags + evidence                                     [PLANNED]
     make freeze TASK=2                 (tags task2_v1 on both Bronze tables, asserts counts VERSION AS OF the tag)
