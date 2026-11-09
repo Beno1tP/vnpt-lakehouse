@@ -74,11 +74,21 @@ def chatbot_bronze():
         **common,
     )
 
+    # Task 3 step 3.2: Silver for the same day (D6, D10: same DAG id); retries as bronze / validate (E41)
+    silver = SparkKubernetesOperator(task_id="silver", application_file="templates/silver_sparkapp.yaml", **common)
+    validate_silver = SparkKubernetesOperator(
+        task_id="validate_silver",
+        application_file="templates/validate_silver_sparkapp.yaml",
+        retries=1,
+        retry_delay=timedelta(minutes=1),
+        **common,
+    )
+
     @task(retries=0)
     def notify(ds=None):
-        print(f"[notify] {ds}: bronze loaded and validated")  # success stays quiet; failures/deadlines alert
+        print(f"[notify] {ds}: bronze + silver loaded and validated")  # success stays quiet; failures alert
 
-    check_landing() >> bronze >> validate >> notify()
+    check_landing() >> bronze >> validate >> silver >> validate_silver >> notify()
 
 
 chatbot_bronze()

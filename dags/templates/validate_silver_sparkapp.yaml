@@ -1,0 +1,58 @@
+# Silver validation of ONE event day (Task 3 step 3.2): exact counts (silver_daily.json) + day-generic rules
+# (silver_rules.sql) + column types. Same template expressions as the others; used by the DAG and make sparkapp.
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: validate-silver-{{ ds }}
+  namespace: spark-jobs
+spec:
+  type: Python
+  pythonVersion: "3"
+  mode: cluster
+  sparkVersion: "3.5.9"
+  image: {{ var.value.spark_job_image }}
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: [ghcr-pull]                # private GHCR package (2.0c)
+  mainApplicationFile: local:///opt/jobs/validate_silver.py
+  arguments: ["--ingest-date", "{{ ds }}", "--expected", "/opt/tests/expected/silver_daily.json",
+              "--rules", "/opt/tests/sql/silver_rules.sql"]
+  restartPolicy: { type: Never }               # a wrong number is deterministic: no retry anywhere
+  timeToLiveSeconds: 86400                     # the operator deletes the app (and its driver pod) after 1 day
+  sparkConf:                                   # = infra/compose/spark/spark-defaults.conf with cluster DNS names
+    spark.sql.extensions: org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions
+    spark.sql.catalog.lake: org.apache.iceberg.spark.SparkCatalog
+    spark.sql.catalog.lake.type: hive
+    spark.sql.catalog.lake.uri: thrift://hive-metastore.lake.svc.cluster.local:9083
+    spark.sql.catalog.lake.warehouse: s3a://lakehouse/warehouse
+    spark.sql.catalog.lake.io-impl: org.apache.iceberg.aws.s3.S3FileIO
+    spark.sql.catalog.lake.s3.endpoint: http://minio.lake.svc.cluster.local:9000
+    spark.sql.catalog.lake.s3.path-style-access: "true"
+    spark.sql.catalog.lake.client.region: us-east-1
+    spark.sql.defaultCatalog: lake
+    spark.sql.session.timeZone: Asia/Ho_Chi_Minh
+    spark.sql.execution.arrow.pyspark.enabled: "true"
+    spark.sql.shuffle.partitions: "4"
+    spark.eventLog.enabled: "true"                # Spark UI after the run: make history-ui (lab: PVC, prod: s3a)
+    spark.eventLog.dir: file:///spark-events
+    spark.eventLog.compress: "true"
+  volumes:
+    - { name: spark-events, persistentVolumeClaim: { claimName: spark-events } }   # infra/k8s/spark-jobs/spark-events-pvc.yaml
+  driver:
+    cores: 1
+    memory: 1g                                 # JVM heap
+    memoryOverhead: 512m                       # no pandas here (pod = 1.5 GiB)
+    serviceAccount: spark-operator-spark       # created by the operator chart; may create executor pods
+    volumeMounts: [{ name: spark-events, mountPath: /spark-events }]   # only the driver writes the event log
+    labels: { app: validate-silver, ingest-date: "{{ ds }}" }
+    env: &env
+      - { name: AWS_REGION, value: us-east-1 }
+    envFrom: &envFrom
+      - secretRef: { name: s3-credentials }    # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (webhook injects it)
+  executor:
+    instances: 1
+    cores: 1
+    memory: 768m
+    memoryOverhead: 384m                       # pod = 1.1 GiB
+    labels: { app: validate-silver, ingest-date: "{{ ds }}" }
+    env: *env
+    envFrom: *envFrom

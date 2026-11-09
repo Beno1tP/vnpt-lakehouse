@@ -14,6 +14,12 @@ Time spent:
 
 ---
 
+### 2026-11-09 — 3.1 verified on Minikube; 3.2 prepared (validator + DAG)
+Did (Bee): `make all` (81 passed) → PR #61 → images run 42597542204 → bump PR #62 (spark-job `f55ebb2f…`) → `make k8s-up` → `make sparkapp APP=silver DATE=2024-07-09` (17:11:19–17:11:52 ICT = 10:11 UTC) and `DATE=2024-07-25` (17:14:58–17:15:19 ICT = 10:14–10:15 UTC).
+Observed: both summaries **identical** to `silver_daily.json` (07-09: 86/43/43, final_intent 6/18/19, internal 16 (8 client), /home 13; 07-25: 7,552/3,892/3,776, 116 without chat row). `make sparkapp` filtered the `[silver]` lines (fixed in 3.2: the grep knows silver/validate_silver).
+Prepared (Claude, branch `task3/3.2-silver-dag`): `tests/sql/silver_rules.sql` (12 day-generic rules), `jobs/validate_silver.py` (exact counts vs `silver_daily.json`, rules, `event_ts`=`timestamp_ntz` / `event_date`=`date` per table), `dags/templates/validate_silver_sparkapp.yaml` (name `validate-silver-D`: K8s names have no `_`; `make sparkapp` maps `_`→`-`), DAG `… validate >> silver >> validate_silver >> notify` (silver retries 2, validate_silver retries 1), `dag-report` learns the Silver lines; tests (predicted 85 pass, my local run).
+Next (Bee): `make all` → PR → images (airflow + spark-job) → bump both → `make k8s-up` → validate_silver by hand on 07-09/07-25 → backfill ×2.
+
 ### 2026-11-09 — 3.1 Silver job prepared
 Prepared (Claude, branch `task3/3.1-silver-job`): `jobs/silver_transform.py --ingest-date D` (Spark SQL built by pure functions: one-`_batch_id` check across both Bronze tables; `to_timestamp_ntz` (D8); dedup by `row_number()`; flags; `final_intent` with the row's threshold (D9); `has_chat_row` against all Bronze chat IDs; `user_message` left join; refuses rows with a null `event_ts` or another `event_date` (else `overwritePartitions()` would replace another day, D7 edge) and a chat id with two predictions; writes 3 tables partitioned by `event_date`, property `source.timezone=Asia/Ho_Chi_Minh`); `dags/templates/silver_sparkapp.yaml` (driver 640m + 384m = 1 GiB, R13; event logs on); 5 unit tests (CI has no Spark, so the SQL text and input validation are tested; numbers are checked on Minikube). Caught in review before any run: an `IN (SELECT …)` in the SELECT list, which Spark rejects → left join.
 Next (Bee): PR → images run → bump spark-job → `make sparkapp APP=silver DATE=2024-07-24` → counts vs `silver_daily.json`.
