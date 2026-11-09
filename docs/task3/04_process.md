@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-11-09 — 3.1 Silver job prepared
+Prepared (Claude, branch `task3/3.1-silver-job`): `jobs/silver_transform.py --ingest-date D` (Spark SQL built by pure functions: one-`_batch_id` check across both Bronze tables; `to_timestamp_ntz` (D8); dedup by `row_number()`; flags; `final_intent` with the row's threshold (D9); `has_chat_row` against all Bronze chat IDs; `user_message` left join; refuses rows with a null `event_ts` or another `event_date` (else `overwritePartitions()` would replace another day, D7 edge) and a chat id with two predictions; writes 3 tables partitioned by `event_date`, property `source.timezone=Asia/Ho_Chi_Minh`); `dags/templates/silver_sparkapp.yaml` (driver 640m + 384m = 1 GiB, R13; event logs on); 5 unit tests (CI has no Spark, so the SQL text and input validation are tested; numbers are checked on Minikube). Caught in review before any run: an `IN (SELECT …)` in the SELECT list, which Spark rejects → left join.
+Next (Bee): PR → images run → bump spark-job → `make sparkapp APP=silver DATE=2024-07-24` → counts vs `silver_daily.json`.
+
 ### 2026-11-09 — 3.0 expected Silver numbers
 Decided (Bee): D7–D12 accepted; D13 schedule stays UTC (show ICT); D14 test Silver on Minikube one day by hand (no Compose loop).
 Did: Claude wrote `tools/expected_silver.py` (pandas on the Excel files: parse `CREATED_TIME` to a naive wall clock, flags, `final_intent`, `has_chat_row`, `user_message` left join; fails unless totals = Task 1) + 5 unit tests; checked the 2 internal senders = SENDER_IDs containing `@` (counts only, no IDs). Bee ran it.
