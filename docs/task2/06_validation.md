@@ -60,3 +60,12 @@ Scheduling is proven by runs the scheduler (or the K8s CronJob controller) creat
 | Rerun 2024-07-02 with event logs on | 12 / 6, 23/23, driver starts | 06:46:53 UTC (13:46:53 ICT), 12 / 6, 23/23 |
 | History Server lists the run | bronze + validate with jobs, stages, SQL, executors | both, 8 + 46 jobs |
 | Backup after E56 | `make backup-now` Completed | `pg-backup-manual-063853` Completed |
+
+## 5. Freeze step 2 (2026-11-09, times UTC with ICT = UTC+7)
+
+| Check | Expected | Actual |
+|---|---|---|
+| Backfill 07-02 → 07-25 with event logs | 24 runs success, same counts | 24 success, 07:54:14–08:09:12 UTC (14:54–15:09 ICT) |
+| `make freeze TASK=2` | tag `task2_v1` on both tables, rows VERSION AS OF tag = 21,224 / 10,729 | PASS / PASS (snapshots 4460393597214113888 / 3649899175837714746, retain 365 d) |
+| `make evidence-export` | copied files = manifest | 176 of 176 (airflow-logs 172, backup 4) + 39 Spark event logs, 21 MB |
+| History of `scheduled__2026-10-28` | explained | E59: laptop sleep + `dagrun_timeout`, all tasks skipped |
