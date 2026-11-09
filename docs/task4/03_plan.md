@@ -94,7 +94,7 @@ docs/task4/01 … 07, README.md                ➕
 
 ## I. Integration with Task 2's demo tooling and lifecycle (2026-11-06, slides 70–71 of Task 2)
 
-- **Modes reuse the Task 2 targets:** `mode-gold` = `make airflow-pause` only if Airflow must give way to StarRocks (otherwise keep it, since `gold_build` runs in Airflow); `mode-pipeline` = `make airflow-resume` + StarRocks to 0. Every mode first deletes `spark-history` if it runs (512 Mi).
+- **Modes reuse the Task 2 targets:** `mode-gold` = the `demo-task2` pattern (B3: scheduler, dag-processor, triggerer to 0) only if Airflow must give way to StarRocks (otherwise keep it, since `gold_build` runs in Airflow); `mode-pipeline` = `make demo-pipeline` + StarRocks to 0. Every mode first deletes `spark-history` if it runs (512 Mi).
 - **No Spark event logs for dbt:** dbt runs SQL in StarRocks, not Spark; its evidence = `dbt` run results + `dbt docs` lineage, kept with `make evidence`-style files outside Git.
 - **Keep results:** StarRocks FE/BE scaled to 0 keep their PVCs; never `minikube delete` before the final presentation (Q53).
 

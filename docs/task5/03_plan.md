@@ -78,7 +78,7 @@ README.md (root): end-to-end diagram                  ✏️
 
 ## I. Integration with Task 2's demo tooling and lifecycle (2026-11-06, slides 70–71 of Task 2)
 
-- **`mode-serving` = `make airflow-pause`** (refuses while a SparkApplication exists) + Trino 0 + StarRocks/Superset 1; `mode-pipeline` = `make airflow-resume` + Superset 0. Delete `spark-history` first if it runs (512 Mi).
+- **`mode-serving` = the `demo-task2` pattern (B3: scheduler, dag-processor, triggerer to 0)** (refuses while a SparkApplication exists) + Trino 0 + StarRocks/Superset 1; `mode-pipeline` = `make demo-pipeline` + Superset 0. Delete `spark-history` first if it runs (512 Mi).
 - **Final presentation = the end of the lifecycle:** show Task 2 (MinIO as `viewer`, Airflow logs, Spark History Server), Task 3 (Trino), Task 4 (dbt lineage), Task 5 (dashboard) from the same cluster; switch modes between parts, because they don't fit in RAM together.
 - **After it:** the one-time from-zero acceptance if it was moved here (Task 3 §I, option b), then the cleanup in `02_config.md` §3 (`minikube delete` only then).
 

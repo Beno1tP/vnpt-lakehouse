@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-11-09 — B3 prepared: demo profiles + demo-check; E60
+Prepared (Claude, branch `task2/b3-demo-profiles`): make `demo-task2` (refuses while a SparkApplication exists or a chatbot_bronze run is running; scheduler, dag-processor, triggerer → 0; History Server → 1), `demo-pipeline` (back; History Server → 0), `demo-check` (5 workloads ready; Airflow `/api/v2/monitor/health`, MinIO console, History Server answer 200 through temporary port-forwards on 28080/29001/28081; `freeze-check TASK=$(DEMO_TASK)`). Deviation from Claude Desktop's spec: the Spark Operator stays up in demo-task2 (webhook `failurePolicy: Fail` would reject matching pods, e.g. the freeze-check job; saving ~192 Mi). Recipes checked with `bash -n`; a first `make -n` executed the recipe (E60).
+Next (Bee): PR → merge → demo-task2 → demo-check → measure → demo-pipeline → measure.
+
 ### 2026-11-09 — B2 done: Task 2 frozen and copied off the cluster; E58, E59
 Did (Bee): PR #54 → images run 42579777978 (airflow digest unchanged `822ed12a…`: reproducible; spark-job `130a2b2f…` promoted, PR #55 after a CI rerun, E58) → `make airflow-install` during the GitHub outage, `make k8s-up` after (07:49 UTC, 14:49 ICT) → `make backfill REPROCESS=completed` → `make freeze TASK=2` → `make evidence` → `make evidence-export`.
 Observed: backfill 24 runs success 07:54:14–08:09:12 UTC (14:54–15:09 ICT); one old red run explained (E59). Freeze at 08:18:05 UTC (15:18:05 ICT): `task2_v1` on bronze.chatlog → snapshot 4460393597214113888 (21,224 rows = expected), on bronze.bot_predict → 3649899175837714746 (10,729 = expected), retain 365 d. Evidence in `~/data/vnpt-lab/evidence/task2-20261109/` (21 MB, outside Git): 8 state files (176 lines), airflow-logs 172 files 8.4 MiB + backup 4 files 647 KiB (copied 176 of 176 = manifest), Spark event logs 39 files (18 bronze + 18 validate + 2 from the 07-02 test + 1 freeze job).
