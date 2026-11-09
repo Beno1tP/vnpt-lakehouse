@@ -1,0 +1,166 @@
+VNPT lakehouse lab - running steps for Task 2 (view/freeze) and Tasks 3-5
+Written 2026-11-09 by Claude Code. Source of the Task 3-5 steps: docs/task3/03_plan.md, docs/task4/03_plan.md,
+docs/task5/03_plan.md (branch docs/task3-5-plans; not on main yet).
+
+STATUS LEGEND
+  [WORKS NOW]  the command exists on main today
+  [PLANNED]    the command/target is designed in the plan; it exists only after the named step's PR is merged
+Rules (CLAUDE.md): Bee types every command in WSL; one PR per step; merge only after "All checks were successful";
+deploy only from clean main (make deploy-guard); apply infra/k8s only with -k (E54); never minikube delete before
+the final presentation (Q53).
+
+=====================================================================================================
+A. CAN I SEE TASK 2's RESULTS NOW?
+=====================================================================================================
+| What                         | Available? | How |
+| MinIO data (landing, Bronze)  | YES        | port-forward + console (root login for now; read-only demo-viewer comes in freeze step 1) |
+| Airflow runs + task logs      | YES        | make airflow-ui (logs read from s3://airflow-logs, runs since the 10-27 from-zero load) |
+| Spark driver output           | YES        | inside the Airflow task log of bronze/validate |
+| Spark UI (stages, executors)  | NO         | drivers were deleted after each run; no event logs yet (change parked in git stash) |
+| Counts per day                | YES        | make dag-report |
+
+A1. Start the cluster (every session)                                          [WORKS NOW]
+    minikube start
+    kubectl get pods -A
+    Expect: all pods Running/Completed within 2-3 min (a few may restart once, E40).
+
+A2. MinIO console (data split by day)                                          [WORKS NOW]
+    Terminal 1:  kubectl -n lake port-forward svc/minio 9001:9001
+    Terminal 2:  grep -E "^MINIO_ROOT_(USER|PASSWORD)=" infra/k8s/secrets.env      (do not paste the output)
+    Browser:     http://localhost:9001 -> Object Browser
+                 landing/chatlog/dt=2024-07-24/
+                 lakehouse/warehouse/bronze.db/chatlog/data/_ingest_date=2024-07-24/  and  .../metadata/
+    Do NOT click delete/upload (root can do everything).
+
+A3. Airflow UI (runs and logs)                                                 [WORKS NOW]
+    Terminal 1:  make airflow-ui
+    Browser:     http://localhost:8080 (user admin, password: cat infra/k8s/secrets/airflow-admin-password)
+                 chatbot_bronze -> Grid -> run 2024-07-24 -> bronze -> Logs ; validate -> Logs (23/23)
+    Do NOT press Clear / Mark as / Delete / Trigger.
+
+A4. Numbers                                                                    [WORKS NOW]
+    make dag-runs
+    make dag-report | grep 2024-07-24
+
+A5. Stop after viewing
+    Ctrl+C in the port-forward terminals
+    minikube stop          (keeps all data; frees RAM)
+
+=====================================================================================================
+B. BEFORE TASK 3: put the plans on main, then freeze Task 2 (Claude Desktop's plan, PVC event logs)
+=====================================================================================================
+B0. Plans PR (branch exists locally)                                           [WORKS NOW]
+    git switch docs/task3-5-plans
+    git push -u origin docs/task3-5-plans
+    gh pr create --fill --base main
+    sleep 15 && gh pr checks --watch
+    gh pr merge --merge --delete-branch && git switch main && git pull
+
+B1. Freeze step 1: event logs + History Server + read-only demo users          [PLANNED: Claude finishes the parked work]
+    git switch task2/demo-lifecycle
+    git stash pop                       (Claude then completes the files, runs lint/tests, commits)
+    git push -u origin task2/demo-lifecycle
+    gh pr create --fill --base main
+    sleep 15 && gh pr checks --watch
+    gh pr merge --merge --delete-branch && git switch main && git pull
+    gh run list --workflow images.yml --limit 1        (DAG templates changed -> new Airflow image; paste digests)
+    -> Claude writes the digest bump PR; Bee merges it the same way
+    make k8s-up                                         (renders the new secrets, creates PVC spark-events, users)
+    make airflow-viewer                                 [PLANNED]
+    make s3-access-test                                 (now also proves demo-viewer cannot write or read backups)
+    make airflow-viewer-check                           [PLANNED]
+    make backfill REPROCESS=completed                   (idempotent rerun: writes event logs for all 18 days)
+    make history-ui    -> http://localhost:18080        [PLANNED] expect 18 bronze + 18 validate applications
+
+B2. Freeze step 2: Iceberg tags + evidence                                     [PLANNED]
+    make freeze TASK=2                 (tags task2_v1 on both Bronze tables, asserts counts VERSION AS OF the tag)
+    make evidence                      (counts/states to ~/data/vnpt-lab/evidence/, outside Git)
+    make evidence-export               (copy of airflow-logs, backup, event logs to the laptop; sizes only printed)
+    make maintenance DRY=yes           (assert the tag survives)
+
+B3. Freeze step 3: demo profiles                                                [PLANNED]
+    make demo-task2       (lake + Airflow api-server + History Server; scheduler/dag-processor/triggerer/operator = 0)
+    make demo-check       (pods Ready, 0 restarts, UIs answer, tags exist)
+    make demo-pipeline    (everything back for building)
+
+B4. Freeze step 4: clean-up before Task 3                                       [WORKS NOW / partly PLANNED]
+    minikube ssh -- df -h /var
+    make ghcr-prune                     (list) ; make ghcr-prune CONFIRM=yes   (delete old versions)
+    minikube image ls | grep beno1tp    (old digests not in infra/k8s/images.env -> remove with Claude's list)
+    minikube ssh -- df -h /var          (record before/after)
+
+=====================================================================================================
+C. TASK 3 - Silver on Spark + Trino (docs/task3/03_plan.md)
+=====================================================================================================
+Per step: Claude writes files on a branch -> Bee: push, PR, checks, merge -> (images run + digest bump PR if jobs/dags/docker
+changed) -> make k8s-up -> run -> verify. New errors from E56.
+
+3.0 Expected Silver numbers (pandas, local, no cluster)                        [PLANNED]
+    make venv
+    .venv/bin/python tools/expected_silver.py      -> tests/expected/silver.json, silver_daily.json
+3.1 Silver job                                                                  [PLANNED]
+    make test                                      (unit tests incl. Oracle timestamp parsing)
+3.2 Silver on K8s + DAG                                                         [PLANNED]
+    make sparkapp APP=silver DATE=2024-07-24       (one day by hand first)
+    make backfill REPROCESS=completed              (bronze -> validate -> silver -> validate_silver for 24 days)
+    make dag-report
+3.3 Trino                                                                       [PLANNED]
+    make mode-query                                (Airflow paused, Trino up; never together with a Spark run)
+    make trino-chart && make trino-install
+    make trino-cli                                 (SELECT count(*) FROM lake.silver.user_message;)
+    make trino-ui                                  -> http://localhost:8080 (stop airflow-ui first: same port)
+3.4 Reconcile                                                                   [PLANNED]
+    make trino-check                               (Trino = Spark = expected on every number)
+3.5 Explore + explain                                                           [PLANNED]
+    make trino-cli < sql/trino/explore.sql        (snapshots, time travel, EXPLAIN ANALYZE)
+3.7 Close                                                                       [PLANNED]
+    make evidence ; decide from-zero option (a) or (b) (docs/task3/03_plan.md section I)
+    make mode-pipeline
+    git tag task3-v1 && git push origin task3-v1
+    make freeze TASK=3 ; make demo-task3 ; make demo-check
+
+=====================================================================================================
+D. TASK 4 - StarRocks Gold with dbt (docs/task4/03_plan.md)
+=====================================================================================================
+4.0 Metrics + expected Gold                                                     [PLANNED]
+    .venv/bin/python tools/expected_gold.py        -> dbt/seeds/expected_gold_uc*.csv ; docs/metrics.md
+4.1 StarRocks                                                                   [PLANNED]
+    make mode-gold                                 (Airflow/Trino down as needed, StarRocks up)
+    make starrocks-chart && make starrocks-install
+    make starrocks-sql                             (SHOW BACKENDS;)
+4.2 Catalog + users                                                             [PLANNED]
+    make k8s-up                                    (MinIO user starrocks, Job starrocks-init)
+    make starrocks-sql                             (SELECT count(*) FROM lake_iceberg.silver.user_message;)
+4.3-4.4 dbt models + tests                                                      [PLANNED]
+    make dbt-build                                 (one-off pod: dbt build -> models + tests + reconcile_uc*)
+    make dbt-docs                                  (lineage)
+4.5 Orchestrate                                                                 [PLANNED]
+    make mode-pipeline ; make backfill REPROCESS=completed ; make mode-gold     (gold_build runs from the Asset event)
+4.6 Close                                                                       [PLANNED]
+    git tag task4-v1 && git push origin task4-v1 ; make freeze TASK=4 ; make demo-task4 ; make demo-check
+
+=====================================================================================================
+E. TASK 5 - Superset dashboard UC4-UC8 (docs/task5/03_plan.md)
+=====================================================================================================
+5.0 Prereq                                                                      [PLANNED]
+    make k8s-up                                    (Job superset-db-init: role + DB superset)
+5.1 Image (CI builds, no laptop build)                                          [PLANNED]
+    gh run list --workflow images.yml --limit 1    -> digest bump PR
+5.2-5.3 Install + connect                                                       [PLANNED]
+    make mode-serving                              (Airflow 0, Trino 0, StarRocks 1, Superset 1)
+    make superset-chart && make superset-install
+    make superset-ui                               -> http://localhost:8088
+5.4-5.5 Datasets, charts, dashboard (in the UI; numbers = docs/task5/06_validation.md)
+5.6 As code                                                                     [PLANNED]
+    make superset-export ; make superset-import
+5.7 Demo + tag                                                                  [PLANNED]
+    git tag task5-v1 && git push origin task5-v1 ; make freeze TASK=5 ; make demo-task5 ; make demo-check
+
+=====================================================================================================
+F. FINAL PRESENTATION AND CLEAN-UP (end of the lifecycle)
+=====================================================================================================
+    make demo-check
+    make demo-task2 / demo-task3 / demo-task4 / demo-task5      (one profile per part; they do not fit in RAM together)
+    then, only after the presentation and a verified evidence copy:
+    optional from-zero acceptance (Task 3 plan section I, option b)
+    minikube delete ; docker builder prune ; compact the WSL disk (docs/task1/04_process.md 1.15)
