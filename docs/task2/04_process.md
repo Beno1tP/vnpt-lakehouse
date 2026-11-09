@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-11-09 — freeze step 1 prepared: event logs, History Server, read-only demo users
+Decided (Bee, 11-06): Claude Desktop's freeze plan (steps 1–4), event logs on a **PVC** (the Spark image has no hadoop-aws; s3a = +~280 MB rebuild avoided; lab-only because one node).
+Prepared (Claude, branch `task2/demo-lifecycle`): `spark.eventLog.*` + PVC mount in the 4 SparkApplication templates; PVC `spark-events` 1Gi; Deployment + Service `spark-history` (replicas 0, base Spark image by digest, 512Mi, read-only mount, cleaner 365 d); MinIO user `demo-viewer` (list + read landing/lakehouse/airflow-logs, never backup) + its negative test in `make s3-access-test` (new op "read backup" for every user); Airflow user `viewer` (Viewer role) + `make airflow-viewer-check` (harmless write attempts must return 403); make `minio-ui`, `history-ui`, `airflow-viewer`, `airflow-viewer-check`. Checks: lint, 57 unit tests, kustomize render with dummy secrets in a scratch copy (all images by digest). The existing wildcard policy test caught a first draft with `arn:aws:s3:::*`.
+Next (Bee): PR → images run → digest bump PR → `make k8s-up` → `make airflow-viewer`, `make s3-access-test`, `make airflow-viewer-check` → one idempotent backfill → `make history-ui`.
+
 ### 2026-10-29 — Task 2 closed (E55)
 Did (Bee): PR #42 (E54 + backup) pushed and merged; `gh run list` → PR and `main` CI runs ✓ (2m04s / 2m02s). Claude: E55 logged, PR procedure (`sleep 15 && gh pr checks --watch`) in CLAUDE.md, progress §8.
 Observed: `gh pr checks --watch` printed `no checks reported` and the merge went through before CI registered (E55); verified green afterwards.

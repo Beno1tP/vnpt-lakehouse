@@ -35,7 +35,9 @@ def test_hms_cannot_touch_landing():
 def test_no_wildcards_or_admin():
     for policy in sorted(p.stem for p in (ROOT / "infra/k8s/lake/minio-users").glob("*.json")):  # every policy file
         for action, res in grants(policy):
-            assert action != "s3:*" and not action.startswith("admin:") and res != "arn:aws:s3:::*", policy
+            assert action != "s3:*" and not action.startswith("admin:"), policy
+            # the only wildcard allowed: listing bucket NAMES (the console needs it), never objects
+            assert res != "arn:aws:s3:::*" or action == "s3:ListAllMyBuckets", policy
             assert "CreateBucket" not in action and "DeleteBucket" not in action, policy
 
 
@@ -54,3 +56,9 @@ def test_backup_writer_cannot_delete_backups():
     assert {r for _, r in g} <= {"arn:aws:s3:::backup", "arn:aws:s3:::backup/*"}
     assert ("s3:PutObject", "arn:aws:s3:::backup/*") in g
     assert not any(a == "s3:DeleteObject" for a, _ in g)  # a compromised job cannot wipe the backups
+
+
+def test_demo_viewer_is_read_only_and_cannot_see_backups():
+    g = grants("lake-demo-viewer")
+    assert {a for a, _ in g} == {"s3:ListAllMyBuckets", "s3:GetBucketLocation", "s3:ListBucket", "s3:GetObject"}
+    assert not any("backup" in r for _, r in g)  # pg_dump files stay invisible in demos

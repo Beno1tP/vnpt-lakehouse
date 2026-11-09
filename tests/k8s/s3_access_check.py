@@ -12,12 +12,21 @@ PROFILES = {  # operation -> expected result for each user
         "write landing": False,
         "write+delete lakehouse": True,
         "create bucket": False,
+        "read backup": False,
     },
     "landing-writer": {
         "read landing": True,
         "write landing": True,
         "write+delete lakehouse": False,
         "create bucket": False,
+        "read backup": False,
+    },
+    "demo-viewer": {  # demo console login (freeze plan step 1): read and list only, never backups
+        "read landing": True,
+        "write landing": False,
+        "write+delete lakehouse": False,
+        "create bucket": False,
+        "read backup": False,
     },
 }
 fs = pafs.S3FileSystem(
@@ -43,6 +52,8 @@ def attempt(op: str) -> bool:
             with fs.open_output_stream("lakehouse/_access_test/probe.txt") as f:
                 f.write(b"probe")
             fs.delete_file("lakehouse/_access_test/probe.txt")
+        elif op == "read backup":
+            fs.get_file_info(pafs.FileSelector("backup", recursive=False))
         elif op == "create bucket":
             fs.create_dir("access-test-should-not-exist")
             fs.delete_dir("access-test-should-not-exist")

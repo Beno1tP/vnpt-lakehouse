@@ -1,0 +1,12 @@
+# Spark event logs for the History Server (`make history-ui`). Every SparkApplication driver mounts it at
+# /spark-events (spark.eventLog.dir=file:///spark-events). Lab-only design (decision 2026-11-06): RWO works because
+# Minikube has ONE node, so drivers and the History Server always share it. Production answer: event logs on S3
+# (s3a, needs hadoop-aws in the Spark image) or the cloud's managed History Server. Keep for the freeze: cleaner 365 d.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: spark-events
+  namespace: spark-jobs
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: { requests: { storage: 1Gi } }    # ~0.1–2 MB per compressed log; the History Server cleaner keeps 365 days (freeze)

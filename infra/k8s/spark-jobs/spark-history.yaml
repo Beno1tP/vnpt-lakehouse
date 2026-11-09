@@ -1,0 +1,55 @@
+# Spark History Server (freeze plan step 1, 2026-11-06). Reads the event logs every driver writes to PVC
+# spark-events (spark.eventLog.dir=file:///spark-events). replicas 0: started only for demos (`make history-ui`,
+# later the demo profiles); `kubectl apply -k` / `make k8s-up` puts it back to 0. Needs no S3 or catalog access.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spark-history
+  namespace: spark-jobs
+spec:
+  replicas: 0
+  selector: { matchLabels: { app: spark-history } }
+  template:
+    metadata:
+      labels: { app: spark-history }
+    spec:
+      imagePullSecrets: [{ name: ghcr-pull }]
+      securityContext:
+        fsGroup: 185                       # uid/gid "spark" (lesson E27)
+      containers:
+        - name: history
+          image: ghcr.io/beno1tp/vnpt-lake-spark   # digest set in kustomization.yaml (images:); contains /opt/spark
+          imagePullPolicy: IfNotPresent
+          command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.history.HistoryServer"]
+          env:
+            - { name: SPARK_DAEMON_MEMORY, value: 384m }   # heap ≈ 75 % of the limit
+            - name: SPARK_HISTORY_OPTS
+              value: >-
+                -Dspark.history.fs.logDirectory=file:///spark-events
+                -Dspark.history.ui.port=18080
+                -Dspark.history.retainedApplications=20
+                -Dspark.history.fs.cleaner.enabled=true
+                -Dspark.history.fs.cleaner.maxAge=365d
+          ports:
+            - { name: ui, containerPort: 18080 }
+          readinessProbe:
+            httpGet: { path: /, port: 18080 }
+            periodSeconds: 5
+          resources:
+            requests: { memory: 512Mi, cpu: 100m }
+            limits:   { memory: 512Mi }
+          volumeMounts:
+            - { name: spark-events, mountPath: /spark-events, readOnly: true }
+      volumes:
+        - name: spark-events
+          persistentVolumeClaim: { claimName: spark-events }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spark-history
+  namespace: spark-jobs
+spec:
+  selector: { app: spark-history }
+  ports:
+    - { name: ui, port: 18080, targetPort: 18080 }

@@ -29,11 +29,17 @@ spec:
     spark.sql.catalog.lake.client.region: us-east-1
     spark.sql.defaultCatalog: lake
     spark.sql.session.timeZone: Asia/Ho_Chi_Minh
+    spark.eventLog.enabled: "true"                # Spark UI after the run: make history-ui (lab: PVC, prod: s3a)
+    spark.eventLog.dir: file:///spark-events
+    spark.eventLog.compress: "true"
+  volumes:
+    - { name: spark-events, persistentVolumeClaim: { claimName: spark-events } }   # infra/k8s/spark-jobs/spark-events-pvc.yaml
   driver:
     cores: 1
     memory: 1g
     memoryOverhead: 512m
     serviceAccount: spark-operator-spark
+    volumeMounts: [{ name: spark-events, mountPath: /spark-events }]   # only the driver writes the event log
     labels: { app: catalog }
     env: [{ name: AWS_REGION, value: us-east-1 }]
     envFrom: [{ secretRef: { name: s3-credentials } }]
