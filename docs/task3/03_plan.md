@@ -40,12 +40,14 @@ trino (new) : Trino 483, single node (coordinator schedules on itself), catalog 
 | ID | Decision | Alternative rejected | Why |
 |---|---|---|---|
 | D6 | Silver = `jobs/silver_transform.py` in the existing DAG, at the start of Task 3 (Bee 10-25, confirm with leader) | Silver in dbt (Task 4) | Lab doc: Spark ETL writes Iceberg, dbt builds Gold |
-| **D7** (proposed) | Silver partitioned by `event_date`, written with dynamic `overwritePartitions()` | `MERGE INTO` by `id` (input plan) | One export = one event day (Bronze rule); overwrite also removes rows dropped by a corrected export; no SQL extensions needed. MERGE stays in knowledge + one demo |
-| **D8** (proposed) | `event_ts` = `TIMESTAMP_NTZ` + `event_date DATE` | `timestamptz` after converting from `Asia/Ho_Chi_Minh` | Source has no zone; NTZ shows the same wall clock in Spark, Trino, StarRocks, Superset |
-| **D9** (proposed) | `final_intent` uses the row's `NLU_THRESHOLD` column | job parameter | The threshold is in the data (0.8); a parameter could disagree |
-| **D10** (proposed) | Keep DAG id `chatbot_bronze`, add Silver tasks | rename to `chatbot_lakehouse` | A new `dag_id` = new DAG: history, `make backfill/dag-runs/drill-*`, CI tests and Telegram rules all name `chatbot_bronze`. Rename later in one PR if wanted |
-| **D11** (proposed) | Trino read-only twice (MinIO policy + `iceberg.security=read_only`); no `ANALYZE` | Trino with write access | HMS has no auth; Spark owns writes |
-| **D12** (proposed) | Pipeline mode / query mode; Trino 0 while Spark runs | Trino always on | 32 Mi spare during bronze (`02_config.md` §2) |
+| **D7** (accepted 11-09) | Silver partitioned by `event_date`, written with dynamic `overwritePartitions()` | `MERGE INTO` by `id` (input plan) | One export = one event day (Bronze rule); overwrite also removes rows dropped by a corrected export; no SQL extensions needed. MERGE stays in knowledge + one demo |
+| **D8** (accepted 11-09) | `event_ts` = `TIMESTAMP_NTZ` + `event_date DATE` | `timestamptz` after converting from `Asia/Ho_Chi_Minh` | Source has no zone; NTZ shows the same wall clock in Spark, Trino, StarRocks, Superset |
+| **D9** (accepted 11-09) | `final_intent` uses the row's `NLU_THRESHOLD` column | job parameter | The threshold is in the data (0.8); a parameter could disagree |
+| **D10** (accepted 11-09) | Keep DAG id `chatbot_bronze`, add Silver tasks | rename to `chatbot_lakehouse` | A new `dag_id` = new DAG: history, `make backfill/dag-runs/drill-*`, CI tests and Telegram rules all name `chatbot_bronze`. Rename later in one PR if wanted |
+| **D11** (accepted 11-09) | Trino read-only twice (MinIO policy + `iceberg.security=read_only`); no `ANALYZE` | Trino with write access | HMS has no auth; Spark owns writes |
+| **D12** (accepted 11-09) | Pipeline mode / query mode; Trino 0 while Spark runs | Trino always on | 32 Mi spare during bronze (`02_config.md` §2) |
+| **D13** (Bee 11-09) | Airflow schedule stays **UTC** (`CronDataIntervalTimetable("0 0 * * *", UTC)`, run 07:00 ICT); UIs/docs show ICT | ICT timetable | correctness does not depend on it (`ds` labels landing `dt=D` = the Vietnamese date as written); an ICT timetable changes `ds`/run_ids (E38 risk) |
+| **D14** (Bee 11-09) | 3.1 tested on Minikube with `make sparkapp APP=silver DATE=…` (one day), no Compose fast loop | Compose loop on Task 1 Bronze | Compose + Minikube share the 10 GiB VM; the K8s template is what runs in production |
 
 ## E. Risks and first checks
 

@@ -13,11 +13,11 @@ Source of truth: `tests/expected/silver.json` / `silver_daily.json`, generated b
 | `event_date` distinct | 18 (2024-07-02 → 07-25) |
 | `nlu_prediction` rows / `has_chat_row = false` | 10,729 / 116 |
 | `final_intent` | xin_chao 10,588 · fallback 107 · bot_khong_hieu 34 (all predict rows) |
-| `user_message` rows (client messages) / with prediction | 10,613 / to compute (expected 10,613) |
-| `is_internal_sender` rows | to compute (2 sender IDs) |
+| `user_message` rows (client messages) / with prediction | 10,613 / **10,613** (100 % coverage) |
+| `is_internal_sender` rows (SENDER_ID contains `@`: 2 senders) | **32** (16 client) |
 | null `event_ts` | 0 |
 
-Per-day table: filled from `silver_daily.json` after 3.0.
+Generated 2026-11-09 by `.venv/bin/python tools/expected_silver.py` (Bee): `PASS: totals equal the Task 1 numbers`, 18 days. Per-day values: `tests/expected/silver_daily.json` (e.g. 2024-07-25: 7,552 chat, 3,776 client all `/home`, 3,892 predict incl. all 116 without a chat row).
 
 ## 2. Results
 
