@@ -110,3 +110,14 @@ def test_sparkapp_writes_event_log(path):
     assert spec["sparkConf"]["spark.eventLog.dir"] == "file:///spark-events"
     assert {"name": "spark-events", "persistentVolumeClaim": {"claimName": "spark-events"}} in spec["volumes"]
     assert {"name": "spark-events", "mountPath": "/spark-events"} in spec["driver"]["volumeMounts"]
+
+
+def test_trino_values_single_node_read_only_no_keys():
+    values = yaml.safe_load((ROOT / "infra/helm/trino/values-local.yaml").read_text())
+    assert values["server"]["workers"] == 0 and values["coordinator"]["config"]["nodeScheduler"]["includeCoordinator"]
+    assert values["image"]["tag"] == "483" and values["image"]["digest"].startswith("sha256:")
+    lake = dict(line.split("=", 1) for line in values["catalogs"]["lake"].strip().splitlines())
+    assert lake["iceberg.security"] == "read_only"  # D11: Trino refuses writes before they reach HMS
+    assert lake["s3.aws-access-key"] == "${ENV:TRINO_S3_ACCESS_KEY}" and lake["s3.aws-secret-key"].startswith("${ENV:")
+    res = values["coordinator"]["resources"]
+    assert res["requests"]["memory"] == res["limits"]["memory"] == "2Gi"  # Guaranteed QoS, 02_config.md §2

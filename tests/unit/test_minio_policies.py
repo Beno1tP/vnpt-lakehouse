@@ -62,3 +62,9 @@ def test_demo_viewer_is_read_only_and_cannot_see_backups():
     g = grants("lake-demo-viewer")
     assert {a for a, _ in g} == {"s3:ListAllMyBuckets", "s3:GetBucketLocation", "s3:ListBucket", "s3:GetObject"}
     assert not any("backup" in r for _, r in g)  # pg_dump files stay invisible in demos
+
+
+def test_trino_reads_lakehouse_only():
+    g = grants("lake-trino-read")
+    assert {r for _, r in g} == {"arn:aws:s3:::lakehouse", "arn:aws:s3:::lakehouse/*"}
+    assert {a for a, _ in g} == {"s3:GetBucketLocation", "s3:ListBucket", "s3:GetObject"}  # D11: no write, no delete

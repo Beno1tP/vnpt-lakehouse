@@ -4,8 +4,8 @@
 
 | Component | Pin | Check command (Bee) |
 |---|---|---|
-| Trino | **483** (`progress.md` §2: released 2026-07-17); image `trinodb/trino:483` pinned by digest | `docker buildx imagetools inspect trinodb/trino:483` |
-| Trino Helm chart | `trino/trino` from `https://trinodb.github.io/charts`, exact version + SHA-256 of the `.tgz` (E29 pattern) | `helm repo add trino https://trinodb.github.io/charts && helm search repo trino/trino --versions \| head` |
+| Trino | **483**; image `trinodb/trino:483@sha256:db58cc93e593…0534` (multi-arch index, read from Docker Hub 2026-11-10) | `docker buildx imagetools inspect trinodb/trino:483` |
+| Trino Helm chart | **1.44.0** (appVersion 483; 1.43.0 also 483, 1.45.0 = 484), GitHub Releases asset, SHA-256 `ce3c2f65…6caa` = asset digest = index digest; cached by `make trino-chart` (E58) | chart index read 2026-11-10 |
 | Silver job | same image `vnpt-lake-spark-job` (Spark 3.5.9, Iceberg 1.11.0), new job file → new git-SHA tag by CI | `infra/k8s/images.env` |
 | Airflow, provider | unchanged (3.3.2, cncf.kubernetes 10.22.0). Trino provider is **not** in the image → only if 3.6 is done | `pip show apache-airflow-providers-trino` in the image |
 

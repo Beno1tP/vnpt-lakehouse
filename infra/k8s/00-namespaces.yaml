@@ -22,3 +22,9 @@ kind: Namespace
 metadata:
   name: airflow             # Airflow 3.3.2 (chart 1.22.0, LocalExecutor)
   labels: { app.kubernetes.io/part-of: vnpt-lakehouse }
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: trino               # Trino 483 (chart 1.44.0), single node, read-only on the lake (Task 3, D11)
+  labels: { app.kubernetes.io/part-of: vnpt-lakehouse }

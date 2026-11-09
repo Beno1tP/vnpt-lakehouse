@@ -35,6 +35,14 @@ secretGenerator:                       # from files rendered by `make k8s-secret
     namespace: spark-jobs
     envs: [secrets/landing-writer.env]
     options: { disableNameSuffixHash: true }
+  - name: trino-s3-credentials          # Task 3: MinIO user trino for the Trino catalog (Helm envFrom by fixed name)
+    namespace: trino
+    envs: [secrets/trino-s3.env]
+    options: { disableNameSuffixHash: true }
+  - name: trino-access-test-credentials # same user with AWS_* names, only for make s3-access-test
+    namespace: spark-jobs
+    envs: [secrets/trino-access-test.env]
+    options: { disableNameSuffixHash: true }
   - name: demo-viewer-credentials       # MinIO user demo-viewer, only for make s3-access-test (negative test)
     namespace: spark-jobs
     envs: [secrets/demo-viewer.env]
@@ -71,4 +79,4 @@ configMapGenerator:
     files: [lake/minio-users/minio_users.sh, lake/minio-users/lake-spark-jobs.json,
             lake/minio-users/lake-landing-writer.json, lake/minio-users/lake-hms.json,
             lake/minio-users/lake-landing-reader.json, lake/minio-users/lake-airflow-logs.json,
-            lake/minio-users/lake-backup.json, lake/minio-users/lake-demo-viewer.json]
+            lake/minio-users/lake-backup.json, lake/minio-users/lake-demo-viewer.json, lake/minio-users/lake-trino-read.json]

@@ -59,6 +59,8 @@ def test_generates_keys_once_and_escapes(tmp_path, monkeypatch):
     assert (out / "s3.env").read_text().startswith("AWS_ACCESS_KEY_ID=spark-jobs\n")  # not the root user (2.1b)
     assert (out / "landing-writer.env").read_text().startswith("AWS_ACCESS_KEY_ID=landing-writer\n")
     assert (out / "hms-s3.env").read_text().startswith("AWS_ACCESS_KEY_ID=hive-metastore\n")
+    assert (out / "trino-s3.env").read_text().startswith("TRINO_S3_ACCESS_KEY=trino\nTRINO_S3_SECRET_KEY=")  # Task 3
+    assert (out / "trino-access-test.env").read_text().startswith("AWS_ACCESS_KEY_ID=trino\n")
     assert first.count("MINIO_SPARK_JOBS_SECRET=") == 1
     conns = dict(line.split("=", 1) for line in (out / "airflow-connections.env").read_text().splitlines())
     minio = json.loads(conns["AIRFLOW_CONN_MINIO_LANDING"])

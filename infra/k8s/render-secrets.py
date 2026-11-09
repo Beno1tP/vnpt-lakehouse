@@ -39,6 +39,7 @@ GENERATED = {
     "MINIO_AIRFLOW_LOGS_SECRET": lambda: secrets.token_hex(24),  # step 2.6: Airflow remote task logs
     "MINIO_BACKUP_SECRET": lambda: secrets.token_hex(24),  # step 2.5b: pg-backup (hex: URL-safe)
     "MINIO_DEMO_VIEWER_SECRET": lambda: secrets.token_hex(24),  # demo console login "demo-viewer": read-only
+    "MINIO_TRINO_SECRET": lambda: secrets.token_hex(24),  # Task 3: Trino reads lakehouse/ only (D11)
     "AIRFLOW_VIEWER_PASSWORD": lambda: secrets.token_urlsafe(18),  # Airflow UI user "viewer" (Viewer role) for demos
 }
 
@@ -90,6 +91,7 @@ def main():
         "MINIO_AIRFLOW_LOGS_SECRET",
         "MINIO_BACKUP_SECRET",
         "MINIO_DEMO_VIEWER_SECRET",
+        "MINIO_TRINO_SECRET",
     )
     write_private("minio-service-users.env", "".join(f"{k}={env[k]}\n" for k in users))
 
@@ -100,6 +102,8 @@ def main():
     write_private("landing-writer.env", s3_keys("landing-writer", "MINIO_LANDING_WRITER_SECRET"))  # rw landing
     write_private("hms-s3.env", s3_keys("hive-metastore", "MINIO_HMS_SECRET"))  # rw lakehouse
     write_private("demo-viewer.env", s3_keys("demo-viewer", "MINIO_DEMO_VIEWER_SECRET"))  # read-only (s3-access-test)
+    write_private("trino-s3.env", f"TRINO_S3_ACCESS_KEY=trino\nTRINO_S3_SECRET_KEY={env['MINIO_TRINO_SECRET']}\n")
+    write_private("trino-access-test.env", s3_keys("trino", "MINIO_TRINO_SECRET"))  # same user, AWS names
     # Airflow (namespace airflow): metadata DB connection + keys, one file per Secret the Helm chart expects
     pw = urllib.parse.quote(env["AIRFLOW_DB_PASSWORD"], safe="")
     write_private(
