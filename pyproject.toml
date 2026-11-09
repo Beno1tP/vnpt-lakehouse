@@ -13,5 +13,5 @@ known-first-party = ["bronze_ingest", "validate_bronze", "landing_simulator", "l
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit"]
-pythonpath = ["jobs", "infra/k8s", "plugins"]
+pythonpath = ["jobs", "infra/k8s", "plugins", "tools"]
 addopts = "-q"

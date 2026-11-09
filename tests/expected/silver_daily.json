@@ -1,0 +1,281 @@
+{
+  "_comment": "Expected Silver counts (Task 3 step 3.0), pandas on the two Excel files; tools/expected_silver.py. Day = date as written in CREATED_TIME (Vietnam local). Counts only.",
+  "rules": "is_client SOURCE='client'; is_home TEXT='/home'; is_internal_sender SENDER_ID contains '@'; final_intent fallback > (confidence < row NLU_THRESHOLD -> bot_khong_hieu) > COALESCE(UPDATED_INTENT, INTENT_NAME)",
+  "days": {
+    "2024-07-02": {
+      "chat_rows": 12,
+      "client_rows": 6,
+      "client_home_rows": 3,
+      "internal_sender_rows": 0,
+      "internal_sender_client_rows": 0,
+      "predict_rows": 6,
+      "predict_without_chat_row": 0,
+      "final_intent": {
+        "bot_khong_hieu": 1,
+        "fallback": 2,
+        "xin_chao": 3
+      },
+      "user_message_rows": 6,
+      "user_message_with_prediction": 6
+    },
+    "2024-07-03": {
+      "chat_rows": 2,
+      "client_rows": 1,
+      "client_home_rows": 0,
+      "internal_sender_rows": 0,
+      "internal_sender_client_rows": 0,
+      "predict_rows": 1,
+      "predict_without_chat_row": 0,
+      "final_intent": {
+        "fallback": 1
+      },
+      "user_message_rows": 1,
+      "user_message_with_prediction": 1
+    },
+    "2024-07-04": {
+      "chat_rows": 14,
+      "client_rows": 7,
+      "client_home_rows": 2,
+      "internal_sender_rows": 2,
+      "internal_sender_client_rows": 1,
+      "predict_rows": 7,
+      "predict_without_chat_row": 0,
+      "final_intent": {
+        "fallback": 5,
+        "xin_chao": 2
+      },
+      "user_message_rows": 7,
+      "user_message_with_prediction": 7
+    },
+    "2024-07-05": {
+      "chat_rows": 4,
+      "client_rows": 2,
+      "client_home_rows": 2,
+      "internal_sender_rows": 0,
+      "internal_sender_client_rows": 0,
+      "predict_rows": 2,
+      "predict_without_chat_row": 0,
+      "final_intent": {
+        "xin_chao": 2
+      },
+      "user_message_rows": 2,
+      "user_message_with_prediction": 2
+    },
+    "2024-07-06": {
+      "chat_rows": 18,
+      "client_rows": 9,
+      "client_home_rows": 1,
+      "internal_sender_rows": 0,
+      "internal_sender_client_rows": 0,
+      "predict_rows": 9,
+      "predict_without_chat_row": 0,
+      "final_intent": {
+        "bot_khong_hieu": 1,
+        "fallback": 7,
+        "xin_chao": 1
+      },
+      "user_message_rows": 9,
+      "user_message_with_prediction": 9
+    },
+    "2024-07-08": {
+      "chat_rows": 12,
+      "client_rows": 6,
+      "client_home_rows": 0,
+      "internal_sender_rows": 0,
+      "internal_sender_client_rows": 0,
+      "predict_rows": 6,
+      "predict_without_chat_row": 0,
+      "final_intent": {
+        "fallback": 3,
+        "xin_chao": 3
+      },
+      "user_message_rows": 6,
+      "user_message_with_prediction": 6
+    },
+    "2024-07-09": {
+      "chat_rows": 86,
+      "client_rows": 43,
+      "client_home_rows": 13,
+      "internal_sender_rows": 16,
+      "internal_sender_client_rows": 8,
+      "predict_rows": 43,
+      "predict_without_chat_row": 0,
+      "final_intent": {
+        "bot_khong_hieu": 6,
+        "fallback": 18,
+        "xin_chao": 19
+      },
+      "user_message_rows": 43,
+      "user_message_with_prediction": 43
+    },
+    "2024-07-10": {
+      "chat_rows": 14,
+      "client_rows": 7,
+      "client_home_rows": 3,
+      "internal_sender_rows": 0,
+      "internal_sender_client_rows": 0,
+      "predict_rows": 7,
+      "predict_without_chat_row": 0,
+      "final_intent": {
+        "bot_khong_hieu": 1,
+        "fallback": 1,
+        "xin_chao": 5
+      },
+      "user_message_rows": 7,
+      "user_message_with_prediction": 7
+    },
+    "2024-07-11": {
+      "chat_rows": 10,
+      "client_rows": 5,
+      "client_home_rows": 1,
+      "internal_sender_rows": 8,
+      "internal_sender_client_rows": 4,
+      "predict_rows": 5,
+      "predict_without_chat_row": 0,
+      "final_intent": {
+        "bot_khong_hieu": 1,
+        "fallback": 2,
+        "xin_chao": 2
+      },
+      "user_message_rows": 5,
+      "user_message_with_prediction": 5
+    },
+    "2024-07-15": {
+      "chat_rows": 36,
+      "client_rows": 18,
+      "client_home_rows": 10,
+      "internal_sender_rows": 0,
+      "internal_sender_client_rows": 0,
+      "predict_rows": 18,
+      "predict_without_chat_row": 0,
+      "final_intent": {
+        "bot_khong_hieu": 3,
+        "fallback": 3,
+        "xin_chao": 12
+      },
+      "user_message_rows": 18,
+      "user_message_with_prediction": 18
+    },
+    "2024-07-16": {
+      "chat_rows": 156,
+      "client_rows": 78,
+      "client_home_rows": 17,
+      "internal_sender_rows": 4,
+      "internal_sender_client_rows": 2,
+      "predict_rows": 78,
+      "predict_without_chat_row": 0,
+      "final_intent": {
+        "bot_khong_hieu": 7,
+        "fallback": 30,
+        "xin_chao": 41
+      },
+      "user_message_rows": 78,
+      "user_message_with_prediction": 78
+    },
+    "2024-07-17": {
+      "chat_rows": 94,
+      "client_rows": 48,
+      "client_home_rows": 12,
+      "internal_sender_rows": 0,
+      "internal_sender_client_rows": 0,
+      "predict_rows": 48,
+      "predict_without_chat_row": 0,
+      "final_intent": {
+        "bot_khong_hieu": 5,
+        "fallback": 20,
+        "xin_chao": 23
+      },
+      "user_message_rows": 48,
+      "user_message_with_prediction": 48
+    },
+    "2024-07-18": {
+      "chat_rows": 186,
+      "client_rows": 93,
+      "client_home_rows": 36,
+      "internal_sender_rows": 0,
+      "internal_sender_client_rows": 0,
+      "predict_rows": 93,
+      "predict_without_chat_row": 0,
+      "final_intent": {
+        "bot_khong_hieu": 9,
+        "fallback": 12,
+        "xin_chao": 72
+      },
+      "user_message_rows": 93,
+      "user_message_with_prediction": 93
+    },
+    "2024-07-19": {
+      "chat_rows": 40,
+      "client_rows": 20,
+      "client_home_rows": 11,
+      "internal_sender_rows": 0,
+      "internal_sender_client_rows": 0,
+      "predict_rows": 20,
+      "predict_without_chat_row": 0,
+      "final_intent": {
+        "fallback": 1,
+        "xin_chao": 19
+      },
+      "user_message_rows": 20,
+      "user_message_with_prediction": 20
+    },
+    "2024-07-22": {
+      "chat_rows": 6,
+      "client_rows": 3,
+      "client_home_rows": 2,
+      "internal_sender_rows": 0,
+      "internal_sender_client_rows": 0,
+      "predict_rows": 3,
+      "predict_without_chat_row": 0,
+      "final_intent": {
+        "fallback": 1,
+        "xin_chao": 2
+      },
+      "user_message_rows": 3,
+      "user_message_with_prediction": 3
+    },
+    "2024-07-23": {
+      "chat_rows": 12,
+      "client_rows": 6,
+      "client_home_rows": 4,
+      "internal_sender_rows": 2,
+      "internal_sender_client_rows": 1,
+      "predict_rows": 6,
+      "predict_without_chat_row": 0,
+      "final_intent": {
+        "fallback": 1,
+        "xin_chao": 5
+      },
+      "user_message_rows": 6,
+      "user_message_with_prediction": 6
+    },
+    "2024-07-24": {
+      "chat_rows": 12970,
+      "client_rows": 6485,
+      "client_home_rows": 6485,
+      "internal_sender_rows": 0,
+      "internal_sender_client_rows": 0,
+      "predict_rows": 6485,
+      "predict_without_chat_row": 0,
+      "final_intent": {
+        "xin_chao": 6485
+      },
+      "user_message_rows": 6485,
+      "user_message_with_prediction": 6485
+    },
+    "2024-07-25": {
+      "chat_rows": 7552,
+      "client_rows": 3776,
+      "client_home_rows": 3776,
+      "internal_sender_rows": 0,
+      "internal_sender_client_rows": 0,
+      "predict_rows": 3892,
+      "predict_without_chat_row": 116,
+      "final_intent": {
+        "xin_chao": 3892
+      },
+      "user_message_rows": 3776,
+      "user_message_with_prediction": 3776
+    }
+  }
+}
