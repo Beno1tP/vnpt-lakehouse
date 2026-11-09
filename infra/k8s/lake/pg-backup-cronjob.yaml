@@ -30,6 +30,13 @@ spec:
               args:
                 - |
                   set -euo pipefail
+                  # E56: a slot caught up right after `minikube start` ran before CoreDNS/Postgres answered.
+                  # Wait up to 5 min (covers DNS + database start-up); after that, fail as before.
+                  for i in $(seq 1 60); do
+                    if pg_isready -q -h postgres.lake.svc.cluster.local -t 5; then break; fi
+                    echo "waiting for postgres ($i/60)"; sleep 5
+                  done
+                  pg_isready -h postgres.lake.svc.cluster.local -t 5
                   ts=$(date -u +%Y%m%dT%H%M%SZ); mkdir -p /backup/postgres/$ts
                   for db in metastore airflow; do
                     pg_dump -Fc -h postgres.lake.svc.cluster.local -U "$PGUSER" -d "$db" -f /backup/postgres/$ts/$db.dump
