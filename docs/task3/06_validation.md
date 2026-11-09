@@ -28,6 +28,8 @@ Generated 2026-11-09 by `.venv/bin/python tools/expected_silver.py` (Bee): `PASS
 | 3.2 `validate_silver` 2024-07-09 by hand (16:02 UTC = 23:02 ICT) | 28/28 (9 counts, final_intent 6/18/19, 12 rules, 6 types) | — | `silver_daily.json`, `silver_rules.sql` | ✅ |
 | 3.2 `validate_silver` 2024-07-25 by hand | 28/28 (116 without chat row) | — | same | ✅ |
 | 3.2 `event_ts` type in all 3 tables | `timestamp_ntz` (D8 end to end) | — | `timestamp_ntz` | ✅ |
+| 3.3 row counts read by Trino (17:51 UTC = 00:51 ICT, 11-10) | bronze.chatlog 21,224 · chat_message 21,224 · nlu_prediction 10,729 · user_message 10,613 | ✅ same | pandas totals | ✅ |
+| 3.3 `event_ts` type seen by Trino | — | `timestamp(6)` (no zone, D8) | without zone | ✅ |
 | 3.2 DAG backfill pass 1 + 2, all 18 data days | `validate_silver 28/28` × 18, 0 failed runs, scheduler 0 restarts | — | 28/28 every day | ✅ |
 
 ## 3. Idempotency and backfill
@@ -36,4 +38,4 @@ Generated 2026-11-09 by `.venv/bin/python tools/expected_silver.py` (Bee): `PASS
 |---|---|
 | Backfill 07-02 → 07-25 run 1 vs run 2: per-day Silver counts | ✅ 155 distinct per-day data lines (landing, bronze, validate, silver, validate_silver) identical after pass 1 (16:13–~16:43 UTC = 23:13–~23:43 ICT) and pass 2 (~16:43–17:15 UTC = ~23:43–00:15 ICT); evidence `~/data/vnpt-lab/evidence/task3-backfill-20261109T1613Z/` |
 | Rerun one day (`tasks clear`): totals unchanged, new snapshot `overwrite` | |
-| Read-only: Trino `CREATE TABLE` / `ANALYZE` denied; `trino` user write denied in `s3-access-test` | |
+| Read-only: Trino `CREATE TABLE` / `ANALYZE` denied; `trino` user write denied in `s3-access-test` | ✅ `CREATE TABLE lake.silver.should_fail` → `Access Denied: Cannot create table` (iceberg.security=read_only); `s3-access-test` 4 × 6/6, `trino`: read lakehouse allowed, landing / writes / create bucket / backup denied (D11, both layers). ANALYZE → 3.5 |
