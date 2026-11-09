@@ -192,5 +192,5 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 - 10-28: E54 (MinIO Secret name drift after a non-kustomize apply) fixed; 10-28 backup slot missed (cluster down).
 - 10-29: first scheduled `pg-backup` run ✅ (slot 01:00Z, ran 05:09Z after the laptop woke, within the 12 h deadline; 321.71 KiB) → all three automations proven (`docs/task2/06_validation.md` §3); the overnight plan (option 1) was not needed.
 - 10-29: E55 (PR #42 merged before CI registered; both runs verified green afterwards; procedure `sleep 15 && gh pr checks --watch`). **Task 2 closed** (PRs #39–#43).
-- Next: Task 3 = Silver Spark job (D6, confirm with the leader) → Trino, after the Task 2 freeze (2026-11). New errors from **E60**. Before starting: `minikube start` (E40/E53), check `kubectl get pods -A`.
+- Next: Task 3 = Silver Spark job (D6, confirm with the leader) → Trino, after the Task 2 freeze (2026-11). New errors from **E61**. Before starting: `minikube start` (E40/E53), check `kubectl get pods -A`.
 - Open questions for the leader: D6 Silver placement; public vs private GHCR images; off-cluster backup copy (backups live in the same MinIO).

@@ -80,10 +80,13 @@ B2. Freeze step 2: Iceberg tags + evidence                                     [
     Later, after a Sunday maintenance (02:00 UTC = 09:00 ICT):
     make freeze-check TASK=2           (tag still reads the frozen rows)
 
-B3. Freeze step 3: demo profiles                                                [PLANNED]
-    make demo-task2       (lake + Airflow api-server + History Server; scheduler/dag-processor/triggerer/operator = 0)
-    make demo-check       (pods Ready, 0 restarts, UIs answer, tags exist)
-    make demo-pipeline    (everything back for building)
+B3. Freeze step 3: demo profiles                                                [PLANNED: branch task2/b3-demo-profiles]
+    make demo-task2       (view-only: Airflow scheduler/dag-processor/triggerer = 0, api-server + History Server up;
+                           Spark Operator stays up: its webhook has failurePolicy Fail, saving was only ~192 Mi)
+    make demo-check       (workloads ready, Airflow/MinIO console/History answer HTTP 200, tag task2_v1 = frozen rows)
+    kubectl describe node minikube | grep -A8 "Allocated resources" ; kubectl top pods -A     (measure this profile)
+    make demo-pipeline    (scheduler/dag-processor/triggerer back, History Server 0)
+    kubectl describe node minikube | grep -A8 "Allocated resources" ; kubectl top pods -A     (measure this profile)
 
 B4. Freeze step 4: clean-up before Task 3                                       [WORKS NOW / partly PLANNED]
     minikube ssh -- df -h /var
