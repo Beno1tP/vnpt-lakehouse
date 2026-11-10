@@ -162,7 +162,7 @@ trino-explore: ## Task 3 step 3.5: plans (partition pruning), metadata tables, t
 mode-query:    ## Task 3 (D12): query mode. Refuses while a run is active; Airflow scheduler/dag-processor/triggerer + History Server -> 0; Trino -> 1
 	@! kubectl -n spark-jobs get sparkapplications --no-headers -o custom-columns=S:.status.applicationState.state | grep -vE '^(COMPLETED|FAILED)$$' | grep -q . || \
 	  { echo "refusing: a SparkApplication is not finished; wait for it"; exit 1; }
-	@! $(AF) airflow dags list-runs chatbot_bronze --state running -o plain 2>/dev/null | grep -q chatbot_bronze || { echo "refusing: a chatbot_bronze run is running; wait for it"; exit 1; }
+	@! $(AF) airflow dags list-runs chatbot_bronze -o plain 2>/dev/null | grep -qE " (running|queued) " || { echo "refusing: a chatbot_bronze run is running or queued; wait for it (E64)"; exit 1; }
 	kubectl -n airflow scale $(DEMO_STOP) --replicas=0
 	kubectl -n spark-jobs scale deploy/spark-history --replicas=0
 	@if kubectl -n trino get deploy/trino-coordinator >/dev/null 2>&1; then \
@@ -212,7 +212,7 @@ DEMO_TASK ?= 2
 demo-task2:    ## Demo profile (B3): view-only. Scheduler, dag-processor, triggerer -> 0 (nothing can start a run); api-server + History Server up. Refuses while a run is active
 	@! kubectl -n spark-jobs get sparkapplications --no-headers -o custom-columns=S:.status.applicationState.state | grep -vE '^(COMPLETED|FAILED)$$' | grep -q . || \
 	  { echo "refusing: a SparkApplication is not finished (state other than COMPLETED/FAILED); wait for it"; exit 1; }   # E61: finished apps stay until their TTL
-	@! $(AF) airflow dags list-runs chatbot_bronze --state running -o plain 2>/dev/null | grep -q chatbot_bronze || { echo "refusing: a chatbot_bronze run is running; wait for it"; exit 1; }
+	@! $(AF) airflow dags list-runs chatbot_bronze -o plain 2>/dev/null | grep -qE " (running|queued) " || { echo "refusing: a chatbot_bronze run is running or queued; wait for it (E64)"; exit 1; }
 	kubectl -n airflow scale $(DEMO_STOP) --replicas=0
 	kubectl -n spark-jobs scale deploy/spark-history --replicas=1
 	kubectl -n spark-jobs rollout status deploy/spark-history --timeout=600s
