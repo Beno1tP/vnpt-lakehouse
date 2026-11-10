@@ -14,6 +14,12 @@ Time spent:
 
 ---
 
+### 2026-11-10 — 3.6 done (Trino check in Airflow) + E66 (backup slot never evaluated)
+Did (Bee): E64 PR #71 → 3.6 PR #72 (CI caught E65 first) → images run 42751303413 → bump PR #73 (airflow `bc177d4c…`, spark-job `e7ab260b…`) → `make k8s-up` (03:51 UTC = 10:51 ICT: Role/RoleBinding `airflow-trino-scaler`) → unpause `trino_reconcile` → clear 07-09.
+Observed: 07-09 rerun success (03:56 UTC); `trino_reconcile` created **by the asset** at 03:58:11 UTC, success in 26 s, 4 tasks success, reconcile log `191/191 values equal`, Trino back to `0/0`. Side finding: CronJob `pg-backup` last scheduled 11-09 01:00 UTC; the 11-10 slot never ran → E66; nudge experiment: `pg-backup-29904540` created within 20 s, Complete in 4 s.
+Fix prepared: backup slot 06:30 UTC = 13:30 ICT, `make k8s-up` nudges the CronJob.
+Next: `make freeze TASK=3` → evidence → demo-task3 + demo-check → clean-up → README → tag.
+
 ### 2026-11-10 — 3.6 prepared: Trino reconcile orchestrated by Airflow
 Decided (Bee): do 3.6 now, before the freeze ("Airflow checks are important"). Resolved the plan's blocker: query mode stops the scheduler, but Airflow idle (4,036 Mi) + Trino (2,048 Mi) = 6,084 Mi fits; only Trino + a Spark run does not (D12).
 Prepared (Claude, branch `task3/3.6-trino-in-airflow`): asset `LAKE_SILVER` (`dags/lake_assets.py`), emitted by `validate_silver` (outlets); DAG `trino_reconcile` scheduled on it: `wait_no_spark` (sensor, reschedule mode) → `trino_up` (scale 0 → 1) → `reconcile` (Trino REST, `sql/trino/reconcile.sql`, vs `silver_daily.json` + `silver.json`, fails on any mismatch, retries 0) → `trino_down` (`all_done`: always back to 0). `plugins/lake_reconcile.py` = the one comparison used by Airflow and `tools/trino_check.py` + stdlib Trino REST client + Kubernetes helpers. RBAC Role `airflow-trino-scaler` (ns trino: get the deployment, get/patch its scale, only `trino-coordinator`). Airflow image gets `/opt/airflow/resources/{expected,sql}` via named build contexts (CI + images; `sql/**` added to the images paths). Predicted: lint clean, tests pass, kustomize render OK (my local runs); DAG import is checked by CI inside the image.

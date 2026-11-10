@@ -386,6 +386,7 @@ k8s-up: deploy-guard ## Task 2: whole stack, idempotent (also from zero after mi
 	kubectl -n lake rollout status statefulset/postgres --timeout=600s
 	kubectl -n lake rollout status statefulset/minio --timeout=600s
 	kubectl -n lake wait --for=condition=complete job/bucket-init job/minio-users --timeout=600s
+	kubectl -n lake annotate cronjob pg-backup vnpt-lake/nudge="$$(date -u +%FT%TZ)" --overwrite >/dev/null   # E66: re-evaluate after a sleep
 	kubectl -n lake rollout status deploy/hive-metastore --timeout=900s
 	$(MAKE) --no-print-directory spark-operator-chart
 	helm upgrade --install spark-operator $(SPARK_OPERATOR_CHART) -n spark-operator \
