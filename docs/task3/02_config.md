@@ -46,7 +46,9 @@ First checks: `minikube ssh -- df -h /var`, `df -h /mnt/c` (C: free). Prune afte
 | WSL VM | used 5.1 Gi, available 5.3 Gi, swap 273 Mi / 4 Gi | |
 | Node `/var` | 19 G (18 G on 11-09: +1.04 GB Trino image) | |
 | Docker volumes / images / build cache | 10.42 GB / 7.58 GB / 0.88 GB | volumes +1.55 GB since 11-09 |
-| Old images in the node | airflow ×1, spark-job ×2 not deployed | remove at the 3.7 clean-up (shared layers: small saving) |
+| Old images in the node | airflow ×1, spark-job ×2 not deployed | ✅ 3.7 clean-up (11-10): 5 old images removed (airflow ×2, spark-job ×3; the old spark-job digests were still reported by `Succeeded` hand-run driver pods, harmless), `/var` 19 G unchanged (shared layers); GHCR 10 old versions deleted |
 | **Windows C:** | **60 G free of 476 G (88 %)**; 87.2 GB free on 10-25 | ⚠ main disk risk: vhdx files grow into C: → clean-up + vhdx compaction at the end of Task 3; check before Task 4 (StarRocks +2–3 GB) |
+
+**demo-task3 measured (3.7, 11-10):** requests cpu 2,300m (28 %), memory **4,964 Mi (68 %)** = the estimate below; limits 6,620 Mi (91 %); WSL used 5,437 MB, available 5,227 MB, swap 390 MB / 4 GB.
 
 Budget per mode (requests vs 7,268 Mi): pipeline idle 4,036 · + Bronze run 7,236 (32 Mi spare) · + Silver run ≈ 6,212 · query mode ≈ 4,452 · demo-task3 ≈ 4,964 · Task 4 StarRocks (2.5 Gi) with Trino 0 ≈ 4,964 · StarRocks + Trino ≈ 7,012 (plan separate modes).

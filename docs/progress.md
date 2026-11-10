@@ -62,7 +62,7 @@ The deadline is tight for "learn K8s + 8 tools". **Learn K8s just-in-time while 
 |---|---|---|---|
 | 1 | MinIO + Spark → Iceberg (Docker Compose) | `docs/task1/` | ✅ 10-18 (Bronze validated, idempotent, from-zero tested, failure drills, README); presented 10-23; Silver deferred (Bronze only for now) |
 | 2 | Minikube + Airflow running the Spark job | `docs/task2/` | ✅ 10-27 (`task2-v1`): Bronze on K8s under Airflow 3.3.2, CI → GHCR by digest, 24 daily runs (18 load / 6 skip, 23/23 checks), drills 1–7, backup/restore, maintenance DAG, Telegram alerts + 2 h deadline, remote logs, from zero `make k8s-up && make k8s-demo` with 0 restarts; E25–E53; summary `docs/task2/README.md` |
-| 3 | Trino querying Iceberg (starts with Silver, D6) | `docs/task3/` | ⬜ next; plan + review written 11-06 (`03_plan.md` §R, proposed D7–D12) |
+| 3 | Trino querying Iceberg (starts with Silver, D6) | `docs/task3/` | ✅ 11-10 (`task3-v1`): Silver job in `chatbot_bronze` (28/28 per day, backfill twice identical), Trino 483 read-only (2 layers), Trino = pandas = Spark 191/191 (`make trino-check` + asset-triggered DAG `trino_reconcile`), explain plans + time travel, frozen `task3_v1` (5 tables), demo-task3 ALL PASS 4,964 Mi; E63–E66; from zero deferred to after Task 5; summary `docs/task3/README.md` |
 | 4 | StarRocks Gold via SQL/dbt | `docs/task4/` | ⬜ plan written 11-06 (D13–D18) |
 | 5 | Superset dashboard UC4–UC8 | `docs/task5/` | ⬜ plan written 11-06 (D19–D22) |
 
@@ -183,6 +183,13 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 - Chat phase ended. Continue from `docs/HANDOFF.md` (sections 6–10).
 - Open: **E17** (confirm in HMS log; hadoop-aws 3.1.0), infra redesign toward pulled images + compose config, disk audit (setup used 30–50 GB).
 - Data reminder: trial/imaginary data, lab only; keep local.
+
+## 8a. Status 2026-11-10 (Task 3 done and frozen)
+
+- Task 3 done, tag `task3-v1`; read `docs/task3/README.md` first. Steps 3.0–3.7 in `docs/task3/04_process.md`, commands in `docs/running-steps-task2-5.txt` C.
+- Cluster: Minikube running in pipeline mode (Trino 0), Silver + Bronze 18 days, `chatbot_bronze` + `trino_reconcile` unpaused; tags `task2_v1`, `task3_v1`; evidence `~/data/vnpt-lab/evidence/task3-20261110/` (120 MB). Never `minikube delete` before the final presentation; from-zero acceptance once after Task 5.
+- Clean-up done (node images, GHCR). Watch **Windows C: (60 GB free, 88 %)** before Task 4 (StarRocks +2–3 GB); vhdx compaction optional (needs `minikube stop` + `wsl --shutdown`).
+- Next: Task 4 = StarRocks + dbt Gold (`docs/task4/03_plan.md`, D13–D18 there to renumber after Task 3's D13/D14). New errors from **E67**.
 
 ## 8. Status 2026-11-09 (Task 2 done and frozen)
 
