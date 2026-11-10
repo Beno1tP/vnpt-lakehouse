@@ -20,8 +20,11 @@ SPARK_NS = "spark-jobs"
 
 
 # --- comparison (pure, unit-tested) ---------------------------------------------------------------------------------
+NESTED = ("final_intent", "step")  # keys whose value is {label: count}; Trino sends them as '<key>.<label>'
+
+
 def parse(rows) -> dict[str, dict]:
-    """day -> {key: int, "final_intent": {intent: int}} from (day, key, value) rows or 'day,key,value' CSV lines."""
+    """day -> {key: int, "final_intent"/"step": {label: int}} from (day, key, value) rows or 'day,key,value' CSV."""
     days: dict[str, dict] = {}
     if rows and isinstance(next(iter(rows), None), str):
         rows = csv.reader(rows)
@@ -29,21 +32,22 @@ def parse(rows) -> dict[str, dict]:
         if not row or len(row) != 3:
             continue
         day, key, value = str(row[0]).strip(), str(row[1]).strip(), int(row[2])
-        d = days.setdefault(day, {"final_intent": {}})
-        if key.startswith("final_intent."):
-            d["final_intent"][key.split(".", 1)[1]] = value
+        d = days.setdefault(day, {k: {} for k in NESTED})
+        group, _, label = key.partition(".")
+        if group in NESTED and label:
+            d[group][label] = value
         else:
             d[key] = value
     return days
 
 
 def totals(days: dict[str, dict]) -> dict:
-    out: dict = {"final_intent": {}}
+    out: dict = {k: {} for k in NESTED}
     for d in days.values():
         for k, v in d.items():
-            if k == "final_intent":
-                for intent, n in v.items():
-                    out["final_intent"][intent] = out["final_intent"].get(intent, 0) + n
+            if k in NESTED:
+                for label, n in v.items():
+                    out[k][label] = out[k].get(label, 0) + n
             else:
                 out[k] = out.get(k, 0) + v
     out["event_dates"] = len(days)
@@ -54,7 +58,7 @@ def compare(got: dict, want: dict, label: str, report: list[bool], out=print) ->
     for key in sorted(set(want) | set(got)):
         ok = got.get(key) == want.get(key)
         report.append(ok)
-        if not ok or key == "final_intent":
+        if not ok or key in NESTED:
             out(
                 f"[trino-check] {'PASS' if ok else 'FAIL'}  {label:<12} {key:<30} "
                 f"expected={want.get(key)}  trino={got.get(key)}"

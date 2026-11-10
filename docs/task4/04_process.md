@@ -14,6 +14,13 @@ Time spent:
 
 ---
 
+### 2026-11-10 — 4.0 checks + UC4 profile + 4.0a prepared (`step` in Silver)
+Did (Bee): disk + version checks; two pandas profiles of the Excel files (counts and labels only).
+Observed: C: 60 G free (88 %), node `/var` 19 G; chart `kube-starrocks` 1.11.8 (APP VERSION `4.1-latest`: the chart default image tag is `4.1-latest` and the FE default `-Xmx8192m`, read in the v1.11.8 `values.yaml` → override both, check `helm template`); `fe-ubuntu:3.5.21@sha256:cbc2460a…d9fc6`, `be-ubuntu:3.5.21@sha256:6ed9e75b…cbe9f`; dbt-starrocks 1.12.2 (`dbt-core>=1.9.0`, Python <3.15), dbt-core 1.12.6. UC4 "kịch bản": predict `STEP` has 2 values: `406665` 10,494 rows (all `xin_chao`; 10,378 = the `/home` messages + 116 = the predict rows without a chat row), `406666` 235 (94 xin_chao · 107 fallback · 34 bot_khong_hieu, no `/home`: typed text); `BOT_ID` 1 value; `META_DATA` JSON but only 276 rows with a key (`button_variables`, no sub-keys); `SOURCE` of predict = `action`.
+Decided (Bee): UC4 period = the whole dataset; base = all 10,729 predict rows (same base as `final_intent`); `STEP` enters **Silver** (option A: Gold must not read Bronze).
+Prepared (Claude, branch `task4/4.0a-silver-step`): `silver_transform.py` adds `step` to `nlu_prediction` and `user_message`; existing tables get `ALTER TABLE … ADD COLUMN step string` (Iceberg schema evolution, idempotent `add_columns_sql`) before the write; summary + validator check the per-day `step` split; 2 new rules (`nlu_prediction.step_not_null`, `user_message.step_iff_prediction`) → 31 checks per day; `expected_silver.py` counts `step` and asserts the profiled totals; Trino `reconcile.sql` + `lake_reconcile` handle `step.<value>` like `final_intent` → 210 values. Predicted (my local runs): lint clean; expected generation into a scratch folder: step totals as profiled, every other key unchanged on all 18 days; unit tests pass except the one that needs the regenerated `silver_daily.json`.
+Next (Bee): regenerate the expected files → `make all` → PR → images (airflow + spark-job) → bump → `make k8s-up` → backfill all days (`REPROCESS=completed`) → `make mode-query` → `make trino-check` (210/210) → `make mode-pipeline`.
+
 ### 2026-11-10 — decision IDs renumbered
 Did (Claude): plan of 11-06 kept as is (Bee 11-10: StarRocks + dbt Gold incl. `gold_uc4…uc8` stay in Task 4); proposed decisions D13–D18 renumbered **D15–D20** because Task 3 used D13 (UTC schedule) and D14 (Minikube test loop). Task 5 docs not changed: its D19–D20 now collide with Task 4's and its references to "Task 4 D13/D18" mean D15/D20; renumber when Task 5 starts.
 Next (Bee): before 4.0, the checks in the 11-06 entry below.

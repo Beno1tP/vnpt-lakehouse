@@ -31,4 +31,7 @@ CROSS JOIN UNNEST(ARRAY['user_message_rows', 'user_message_with_prediction'],
 UNION ALL
 SELECT CAST(event_date AS varchar), 'final_intent.' || final_intent, count(*)
 FROM lake.silver.nlu_prediction GROUP BY event_date, final_intent
+UNION ALL
+SELECT CAST(event_date AS varchar), 'step.' || step, count(*)
+FROM lake.silver.nlu_prediction GROUP BY event_date, step
 ORDER BY 1, 2

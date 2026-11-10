@@ -36,6 +36,13 @@ SELECT count(*) FROM lake.silver.nlu_prediction WHERE event_date = DATE '${inges
                            WHEN confidence < nlu_threshold THEN 'bot_khong_hieu'
                            ELSE coalesce(updated_intent, intent_name) END;
 
+-- rule: nlu_prediction.step_not_null
+SELECT count(*) FROM lake.silver.nlu_prediction WHERE event_date = DATE '${ingest_date}' AND step IS NULL;
+
+-- rule: user_message.step_iff_prediction
+SELECT count(*) FROM lake.silver.user_message WHERE event_date = DATE '${ingest_date}'
+  AND (step IS NULL) = has_prediction;
+
 -- rule: nlu_prediction.rows_equal_bronze
 SELECT abs((SELECT count(*) FROM lake.silver.nlu_prediction WHERE event_date = DATE '${ingest_date}')
          - (SELECT count(DISTINCT ID) FROM lake.bronze.bot_predict WHERE _ingest_date = DATE '${ingest_date}'));
