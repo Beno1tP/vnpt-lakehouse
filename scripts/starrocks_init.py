@@ -53,6 +53,9 @@ def setup_statements(env: dict) -> list[str]:
         "GRANT USAGE ON CATALOG lake_iceberg TO USER 'dbt_rw'@'%'",
         "SET CATALOG lake_iceberg",
         "GRANT SELECT ON ALL TABLES IN ALL DATABASES TO USER 'dbt_rw'@'%'",
+        # E72: REFRESH EXTERNAL TABLE (drop the cached Iceberg metadata, R8) is a privilege of its own; it does not
+        # allow writes. dbt_rw needs it before every build (gold_build.refresh_catalog, 4.5)
+        "GRANT REFRESH ON ALL TABLES IN ALL DATABASES TO USER 'dbt_rw'@'%'",
         "SET CATALOG default_catalog",
         "GRANT SELECT ON ALL TABLES IN DATABASE gold TO USER 'bi_ro'@'%'",
         "GRANT SELECT ON ALL VIEWS IN DATABASE gold TO USER 'bi_ro'@'%'",
