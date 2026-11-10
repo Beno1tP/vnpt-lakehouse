@@ -124,17 +124,21 @@ changed) -> make k8s-up -> run -> verify. New errors from E56.
     make mode-query
     make trino-check                               (every Silver number per day: Trino = pandas; N/N values equal)
     make mode-pipeline
-3.5 Explore + explain                                                           [PLANNED]
+3.5 Explore + explain                                                           [DONE 2026-11-10]
     make catalog CMD=info TABLE=bronze.chatlog     (pipeline mode: Spark reports metadata.json + snapshots)
     make mode-query
     make trino-explore                             (EXPLAIN ANALYZE, metadata tables, tag time travel, stats; saved to evidence)
     trino: time travel to the first Silver snapshot by id; ANALYZE -> Access Denied
     make mode-pipeline
-3.7 Close                                                                       [PLANNED]
-    make evidence ; decide from-zero option (a) or (b) (docs/task3/03_plan.md section I)
+3.7 Close                                                                       [IN PROGRESS: branch task3/3.7-freeze]
+    Decided 11-10: from-zero deferred to after Task 5; full freeze; README then tag task3-v1
+    PR -> images run (catalog_tool) -> bump spark-job -> make k8s-up
+    make freeze TASK=3                             (pipeline mode: tag task3_v1 on 2 Bronze + 3 Silver tables, verify rows)
+    make evidence TASK=3 ; make evidence-export TASK=3
+    make demo-task3 ; make demo-check DEMO_TASK=3  (tag checked through Trino)
+    kubectl describe node minikube | grep -A8 "Allocated resources"     (measure the profile)
     make mode-pipeline
-    git tag task3-v1 && git push origin task3-v1
-    make freeze TASK=3 ; make demo-task3 ; make demo-check
+    docs/task3/README.md -> git tag task3-v1 && git push origin task3-v1
 
 =====================================================================================================
 D. TASK 4 - StarRocks Gold with dbt (docs/task4/03_plan.md)

@@ -9,7 +9,8 @@
     tag      --table … --tag task2_v1 [--retain-days 365]
                                                  freeze: ALTER TABLE … CREATE TAG IF NOT EXISTS (keeps an existing
                                                  tag where it is), then verify-tag
-    verify-tag --table … --tag task2_v1          rows VERSION AS OF the tag = expected totals (bronze_daily.json);
+    verify-tag --table … --tag task2_v1          rows VERSION AS OF the tag = expected totals (bronze_daily.json,
+                                                 silver.json for the Silver tables, Task 3);
                                                  exit 1 on a mismatch or a missing tag
 Inputs are validated before they reach SQL (identifiers and paths only from a strict pattern).
 """
@@ -20,10 +21,16 @@ import argparse
 import re
 import sys
 
-TABLE_RE = re.compile(r"^bronze\.(chatlog|bot_predict)$")
+TABLE_RE = re.compile(r"^(bronze\.(chatlog|bot_predict)|silver\.(chat_message|nlu_prediction|user_message))$")
 TAG_RE = re.compile(r"^task[2-5]_v[0-9]{1,3}$")  # one freeze tag per task version, e.g. task2_v1
-EXPECTED = "/opt/tests/expected/bronze_daily.json"  # baked into the spark-job image
-EXPECTED_KEY = {"bronze.chatlog": "chatlog_rows", "bronze.bot_predict": "bot_predict_rows"}
+EXPECTED_DIR = "/opt/tests/expected"  # baked into the spark-job image
+EXPECTED_KEY = {  # table -> (expected file, key in its "totals")
+    "bronze.chatlog": ("bronze_daily.json", "chatlog_rows"),
+    "bronze.bot_predict": ("bronze_daily.json", "bot_predict_rows"),
+    "silver.chat_message": ("silver.json", "chat_rows"),
+    "silver.nlu_prediction": ("silver.json", "predict_rows"),
+    "silver.user_message": ("silver.json", "user_message_rows"),
+}
 METADATA_RE = re.compile(
     r"^s3a://lakehouse/warehouse/bronze\.db/(chatlog|bot_predict)/metadata/[0-9A-Za-z._-]+\.metadata\.json$"
 )
@@ -31,7 +38,7 @@ METADATA_RE = re.compile(
 
 def check_table(table: str) -> str:
     if not TABLE_RE.match(table):
-        raise ValueError(f"table must be bronze.chatlog or bronze.bot_predict, got {table!r}")
+        raise ValueError(f"table must be one of {sorted(EXPECTED_KEY)}, got {table!r}")
     return table
 
 
@@ -56,7 +63,9 @@ def tag_sql(table: str, tag: str, retain_days: int) -> str:
 
 
 def expected_rows(table: str, expected: dict) -> int:
-    return int(expected["totals"][EXPECTED_KEY[check_table(table)]])
+    """expected = {file name: parsed json} (only the files the requested tables need)."""
+    file, key = EXPECTED_KEY[check_table(table)]
+    return int(expected[file]["totals"][key])
 
 
 def verify_tag(spark, table: str, tag: str, expected: dict) -> bool:
@@ -124,8 +133,10 @@ def main() -> None:
             for table, sql in zip(args.table, sqls_tag, strict=True):
                 spark.sql(sql).collect()
                 print(f"[catalog] {table}: tag {args.tag} created (or already present: kept where it was)", flush=True)
-        with open(EXPECTED) as f:
-            expected = json.load(f)
+        expected = {}
+        for file in {EXPECTED_KEY[t][0] for t in args.table}:
+            with open(f"{EXPECTED_DIR}/{file}") as f:
+                expected[file] = json.load(f)
         ok = all([verify_tag(spark, t, args.tag, expected) for t in args.table])
     spark.stop()
     if not ok:
