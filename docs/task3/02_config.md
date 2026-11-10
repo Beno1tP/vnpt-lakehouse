@@ -36,3 +36,17 @@ Minikube (docker driver) keeps its node and images inside Docker Desktop's `dock
 | Silver data | < 5 MB (≈ 32 k rows) | `$files` |
 
 First checks: `minikube ssh -- df -h /var`, `df -h /mnt/c` (C: free). Prune after the task: old spark-job tags in the node (`minikube ssh -- sudo crictl rmi <id>`), `make ghcr-prune`.
+
+## 4. Measured 2026-11-10 (pipeline mode, after Trino was installed)
+
+| Measure | Value | Note |
+|---|---|---|
+| Node requests / usage | 4,036 Mi (55 %) / 4,324 Mi (59 %) | Trino and History Server at 0 cost nothing |
+| Pods above their request | triggerer 525 Mi (request 256), dag-processor 410 Mi (256) | Burstable: first to be evicted under pressure. Raising their requests (+~400 Mi) would make a Bronze run (7,236 Mi) exceed Allocatable 7,268 Mi → kept as a known trade-off of the 8 GiB node |
+| WSL VM | used 5.1 Gi, available 5.3 Gi, swap 273 Mi / 4 Gi | |
+| Node `/var` | 19 G (18 G on 11-09: +1.04 GB Trino image) | |
+| Docker volumes / images / build cache | 10.42 GB / 7.58 GB / 0.88 GB | volumes +1.55 GB since 11-09 |
+| Old images in the node | airflow ×1, spark-job ×2 not deployed | remove at the 3.7 clean-up (shared layers: small saving) |
+| **Windows C:** | **60 G free of 476 G (88 %)**; 87.2 GB free on 10-25 | ⚠ main disk risk: vhdx files grow into C: → clean-up + vhdx compaction at the end of Task 3; check before Task 4 (StarRocks +2–3 GB) |
+
+Budget per mode (requests vs 7,268 Mi): pipeline idle 4,036 · + Bronze run 7,236 (32 Mi spare) · + Silver run ≈ 6,212 · query mode ≈ 4,452 · demo-task3 ≈ 4,964 · Task 4 StarRocks (2.5 Gi) with Trino 0 ≈ 4,964 · StarRocks + Trino ≈ 7,012 (plan separate modes).

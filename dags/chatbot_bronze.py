@@ -46,7 +46,9 @@ LANDING = {"chatlog": "bot_dvc_hcm.xlsx", "bot_predict": "bot_ddvc_hcm_bot_predi
     tags=["task2", "lake", "bronze"],
 )
 def chatbot_bronze():
-    @task(retries=0)
+    # E64: one retry for TRANSIENT failures (laptop slept, the task's JWT expired: API_SERVER_ERROR 403). Deterministic
+    # outcomes are unaffected: AirflowFailException (no logical date) skips retries, AirflowSkipException is a skip.
+    @task(retries=1, retry_delay=timedelta(minutes=1))
     def check_landing(ds=None, data_interval_start=None, data_interval_end=None):
         if not ds:  # Airflow 3 allows manual runs without a logical date: then there is no day to load (E47)
             raise AirflowFailException("chatbot_bronze needs a day: trigger with --logical-date YYYY-MM-DDT00:00:00Z")

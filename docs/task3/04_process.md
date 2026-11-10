@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-11-10 — E64 (deadline alert) + resource check
+Observed (Bee): ⏰ for logical date 11-09 at 02:24:17 UTC (09:24:17 ICT); run failed at 01:06 UTC: `check_landing` frozen 41 min by laptop sleep, then `403 Invalid auth token` (expired task JWT) → **E64**. Claude's first hypothesis (`mode-query` at 01:44 UTC) was disproved by the timeline. Resource check (02_config.md §4): RAM fine (requests 55 %, usage 59 %, WSL 5.3 Gi available), node disk +1 GB (Trino), **Windows C: 60 G free (88 %)** = the risk to watch.
+Prepared (branch `task3/e64-check-landing-retry`): `check_landing` retries=1 (1 min); run guards also refuse on `queued`; E64 + measurements in docs. One images run will then give both images for a single bump (catalog_tool from #70 + this DAG change).
+
 ### 2026-11-10 — 3.7 decided + freeze prepared
 Decided (Bee): from-zero acceptance deferred to one full-stack run after Task 5 (plan §I option b; results stay alive for the final presentation, Q53); full freeze like Task 2; README first, then git tag `task3-v1`.
 Prepared (Claude, branch `task3/3.7-freeze`): `catalog_tool` tag/verify-tag/info accept the 3 Silver tables (validated names; expected rows from `silver.json`; `register` stays Bronze-only); `FREEZE_TABLES_2` / `FREEZE_TABLES_3` (Bronze + Silver) selected by `TASK`; `make trino-tag-check TASK=3` (`tools/trino_tag_check.py`, same expectations as catalog_tool, unit-tested); `demo-task3` (demo-task2 + Trino); `demo-check DEMO_TASK=3` adds Trino ready + `/v1/info` 200 and checks the tag **through Trino**: a Spark freeze-check (~2.6 Gi) would not fit next to Trino (2 Gi) in that profile; `EVIDENCE_DIR` per task. Predicted (my local runs): lint clean, tests pass, recipes `bash -n` OK for DEMO_TASK 2 and 3, variable expansions printed.
