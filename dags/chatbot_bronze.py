@@ -19,6 +19,7 @@ from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.providers.cncf.kubernetes.operators.spark_kubernetes import SparkKubernetesOperator
 from airflow.sdk import AsyncCallback, CronDataIntervalTimetable, DeadlineAlert, DeadlineReference, dag, task
 from airflow.sdk.exceptions import AirflowFailException, AirflowSkipException  # Airflow 3 location
+from lake_assets import LAKE_SILVER
 
 from lake_alerts import deadline_alert, task_failure_alert
 
@@ -81,6 +82,7 @@ def chatbot_bronze():
     validate_silver = SparkKubernetesOperator(
         task_id="validate_silver",
         application_file="templates/validate_silver_sparkapp.yaml",
+        outlets=[LAKE_SILVER],  # step 3.6: a validated Silver update schedules trino_reconcile
         retries=1,
         retry_delay=timedelta(minutes=1),
         **common,

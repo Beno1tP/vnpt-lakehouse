@@ -1,3 +1,4 @@
+import pytest
 import trino_check as tc
 
 ROWS = [
@@ -27,3 +28,42 @@ def test_compare_flags_missing_and_unexpected_keys():
     report: list[bool] = []
     tc.compare({"a": 1, "extra": 2}, {"a": 1, "b": 3}, "d", report)
     assert report.count(False) == 2  # b missing in Trino, extra not expected
+
+
+def test_reconcile_counts_all_days_and_totals():
+    import lake_reconcile as lr
+
+    got = lr.parse([["2024-07-09", "chat_rows", "86"], ["2024-07-09", "final_intent.fallback", 18]])
+    want_days = {"2024-07-09": {"chat_rows": 86, "final_intent": {"fallback": 18}}}
+    want_total = {"chat_rows": 86, "final_intent": {"fallback": 18}, "event_dates": 1}
+    lines: list[str] = []
+    assert lr.reconcile(got, want_days, want_total, out=lines.append) == (5, 0)  # 2 day keys + 3 total keys
+    assert lines[-1].startswith("[trino-check] 5/5 values equal")
+
+
+def test_trino_query_follows_next_uri_and_raises_on_error(monkeypatch):
+    import io
+    import json as js
+
+    import lake_reconcile as lr
+
+    pages = iter(
+        [
+            {"nextUri": "http://t/2", "data": [["2024-07-09", "chat_rows", 86]]},
+            {"data": [["2024-07-25", "chat_rows", 7552]]},
+        ]
+    )
+
+    class Resp(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr(lr.urllib.request, "urlopen", lambda *a, **k: Resp(js.dumps(next(pages)).encode()))
+    assert lr.trino_query("SELECT 1;") == [["2024-07-09", "chat_rows", 86], ["2024-07-25", "chat_rows", 7552]]
+
+    pages = iter([{"error": {"errorName": "PERMISSION_DENIED", "message": "Access Denied"}}])
+    with pytest.raises(RuntimeError, match="PERMISSION_DENIED"):
+        lr.trino_query("ANALYZE x")
