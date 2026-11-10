@@ -40,6 +40,10 @@ secretGenerator:                       # from files rendered by `make k8s-secret
     namespace: trino
     envs: [secrets/trino-s3.env]
     options: { disableNameSuffixHash: true }
+  - name: starrocks-root                # Task 4: StarRocks root password (chart initPassword.passwordSecret, fixed name)
+    namespace: starrocks
+    envs: [secrets/starrocks-root.env]
+    options: { disableNameSuffixHash: true }
   - name: trino-access-test-credentials # same user with AWS_* names, only for make s3-access-test
     namespace: spark-jobs
     envs: [secrets/trino-access-test.env]

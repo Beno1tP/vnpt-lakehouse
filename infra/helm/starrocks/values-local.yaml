@@ -1,0 +1,80 @@
+# StarRocks 3.5.21 on the kube-starrocks chart 1.11.8 (Task 4 step 4.1): operator + one FE + one BE in namespace
+# starrocks. Chart from GitHub Releases, cached + SHA-256 (make starrocks-chart, E58 pattern).
+# Pins (docs/task4/02_config.md §1, checked 2026-11-10): the chart defaults to image tag "4.1-latest" (moving, and
+# StarRocks 4.1) and a spec's values REPLACE componentValues instead of merging, so every image below is set in
+# full. make starrocks-render greps the rendered images: only 3.5.21 digests may appear.
+# Memory (D15, docs/task4/02_config.md §2): FE 1 / 1.5 Gi with heap 1 GiB (the shipped fe.conf has -Xmx8192m: an
+# 8 GiB heap in a 1.5 Gi pod would be OOMKilled), BE 1.5 / 2 Gi with mem_limit 1600M (~80 % of the limit).
+# Root password: Secret starrocks-root (key "password", from secrets.env via kustomize); the chart's init job sets it
+# once on the first install (SET PASSWORD through the FE's MySQL port; the script does not print it).
+operator:
+  timeZone: UTC
+  starrocksOperator:
+    enabled: true
+    image:
+      repository: starrocks/operator
+      tag: v1.11.8
+    imagePullPolicy: IfNotPresent
+    watchNamespace: starrocks             # only our cluster (default: every namespace)
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 256Mi }
+
+starrocks:
+  timeZone: UTC
+  initPassword:
+    enabled: true
+    passwordSecret: starrocks-root
+  starrocksCluster:
+    name: starrocks                       # pods starrocks-fe-0 / starrocks-be-0
+    enabledBe: true
+    enabledCn: false
+    componentValues:
+      image:
+        tag: "3.5.21"                     # not "4.1-latest"; the specs below pin the digests
+  starrocksFESpec:
+    replicas: 1
+    image:
+      repository: starrocks/fe-ubuntu
+      tag: "3.5.21@sha256:cbc2460aa325c69c143c6497c3ae27822328aec3c74fb17525bb387a719d9fc6"
+    imagePullPolicy: IfNotPresent
+    resources:
+      requests: { cpu: 250m, memory: 1Gi }
+      limits: { cpu: "2", memory: 1536Mi }
+    storageSpec:
+      name: fe
+      storageSize: 2Gi                    # metadata (BDB-JE): tiny for a few tables
+      logStorageSize: 1Gi
+    config: |
+      LOG_DIR = ${STARROCKS_HOME}/log
+      DATE = "$(date +%Y%m%d-%H%M%S)"
+      JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true -Xmx1024m -XX:+UseG1GC -Xlog:gc*:${LOG_DIR}/fe.gc.log.$DATE:time"
+      http_port = 8030
+      rpc_port = 9020
+      query_port = 9030
+      edit_log_port = 9010
+      mysql_service_nio_enabled = true
+      sys_log_level = INFO
+      min_graceful_exit_time_second = 25
+      default_replication_num = 1
+  starrocksBeSpec:
+    replicas: 1
+    image:
+      repository: starrocks/be-ubuntu
+      tag: "3.5.21@sha256:6ed9e75bfb7fd6b48947b8b75f5811a49abe3b793595e4cd4239a6dba7fcbe9f"
+    imagePullPolicy: IfNotPresent
+    resources:
+      requests: { cpu: 250m, memory: 1536Mi }
+      limits: { cpu: "2", memory: 2Gi }
+    storageSpec:
+      name: be
+      storageSize: 5Gi                    # chart default 1 Ti; Gold is a few MB
+      logStorageSize: 1Gi
+    config: |
+      be_port = 9060
+      webserver_port = 8040
+      heartbeat_service_port = 9050
+      brpc_port = 8060
+      sys_log_level = INFO
+      default_rowset_type = beta
+      mem_limit = 1600M

@@ -41,6 +41,7 @@ GENERATED = {
     "MINIO_DEMO_VIEWER_SECRET": lambda: secrets.token_hex(24),  # demo console login "demo-viewer": read-only
     "MINIO_TRINO_SECRET": lambda: secrets.token_hex(24),  # Task 3: Trino reads lakehouse/ only (D11)
     "AIRFLOW_VIEWER_PASSWORD": lambda: secrets.token_urlsafe(18),  # Airflow UI user "viewer" (Viewer role) for demos
+    "STARROCKS_ROOT_PASSWORD": lambda: secrets.token_hex(24),  # Task 4: StarRocks root (hex: safe inside SQL quotes)
 }
 
 
@@ -104,6 +105,7 @@ def main():
     write_private("demo-viewer.env", s3_keys("demo-viewer", "MINIO_DEMO_VIEWER_SECRET"))  # read-only (s3-access-test)
     write_private("trino-s3.env", f"TRINO_S3_ACCESS_KEY=trino\nTRINO_S3_SECRET_KEY={env['MINIO_TRINO_SECRET']}\n")
     write_private("trino-access-test.env", s3_keys("trino", "MINIO_TRINO_SECRET"))  # same user, AWS names
+    write_private("starrocks-root.env", f"password={env['STARROCKS_ROOT_PASSWORD']}\n")  # key read by the chart
     # Airflow (namespace airflow): metadata DB connection + keys, one file per Secret the Helm chart expects
     pw = urllib.parse.quote(env["AIRFLOW_DB_PASSWORD"], safe="")
     write_private(

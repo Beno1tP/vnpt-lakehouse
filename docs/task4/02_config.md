@@ -4,9 +4,9 @@
 
 | Component | Pin | Check command (Bee) |
 |---|---|---|
-| StarRocks FE / BE | **3.5.21** (`progress.md` §2: fixes an intermittent Iceberg-via-HMS query error); `starrocks/fe-ubuntu:3.5.21`, `starrocks/be-ubuntu:3.5.21` by digest | `docker buildx imagetools inspect starrocks/fe-ubuntu:3.5.21` |
-| StarRocks Operator + chart `kube-starrocks` | input plan says v1.11.x — **not verified here**; pick the newest release whose notes support 3.5 | `helm repo add starrocks https://starrocks.github.io/starrocks-kubernetes-operator && helm search repo starrocks --versions \| head` |
-| dbt-core + dbt-starrocks | newest pair where `dbt-starrocks`'s `Requires-Dist` allows that `dbt-core`; pinned in `docker/dbt/requirements.txt` (with hashes if CI allows) | `pip index versions dbt-starrocks`; `pip download dbt-starrocks==X --no-deps` → read `METADATA` |
+| StarRocks FE / BE | **3.5.21**: `starrocks/fe-ubuntu:3.5.21@sha256:cbc2460aa325c69c143c6497c3ae27822328aec3c74fb17525bb387a719d9fc6`, `starrocks/be-ubuntu:3.5.21@sha256:6ed9e75bfb7fd6b48947b8b75f5811a49abe3b793595e4cd4239a6dba7fcbe9f` (Bee 2026-11-10, `imagetools inspect`) | `make starrocks-render` (no `4.1-latest`, both digests rendered) |
+| Operator + chart `kube-starrocks` | **1.11.8** (released 2026-10-22; operator image `starrocks/operator:v1.11.8`); chart from GitHub Releases, SHA-256 `c05804d0…2286` = asset digest; chart defaults: image tag `4.1-latest`, FE `-Xmx8192m`, FE/BE 4–8 Gi, BE storage 1 Ti → all overridden in `infra/helm/starrocks/values-local.yaml`. R10 closed by rendering, not by release notes (`CHANGELOG.md` stops at 1.9.8) | `make starrocks-chart`, `make starrocks-render` |
+| dbt-core + dbt-starrocks | **dbt-starrocks 1.12.2** (2026-09-15; `dbt-core>=1.9.0`, `mysql-connector-python>=8.1`, Python <3.15) + **dbt-core 1.12.6**: the adapter sets only a floor, so CI proves the pair (`dbt parse` + `dbt debug`) when the dbt image is built (4.2) | `pip index versions …`; PyPI `requires_dist` |
 | dbt image base | `python:3.11-slim` by digest | |
 | Airflow | unchanged; `KubernetesPodOperator` is in cncf.kubernetes 10.22.0 (already in the image) | |
 
