@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-11-10 — 4.0b done + 4.1 prepared (StarRocks on Minikube)
+Did (Bee): `expected_gold.py` → PASS, seeds 36/36/57/48/48 rows (= Claude's prediction); `make all` 100 passed; PR #82.
+Prepared (Claude, branch `task4/4.1-starrocks`): namespace `starrocks`; `STARROCKS_ROOT_PASSWORD` generated once into `secrets.env` → Secret `starrocks-root` (key `password`, the chart's `initPassword.passwordSecret`); `infra/helm/starrocks/values-local.yaml` (operator watches only `starrocks`, 128/256 Mi; FE 1/1.5 Gi, `-Xmx1024m`, `default_replication_num = 1`; BE 1.5/2 Gi, `mem_limit = 1600M`, storage 5 Gi; images pinned in full because spec values replace `componentValues`; time zone UTC); make `starrocks-chart` (GitHub asset + SHA-256), `starrocks-render` (fails on `4.1-latest` or a missing FE/BE image), `starrocks-install` (refuses while Spark runs, Trino → 0, waits for FE/BE pods: helm only waits for the operator), `starrocks-sql` (password via stdin, never in args). Read from the chart source v1.11.8: init job = `SET PASSWORD` with the mysql client of the FE image, no `set -x`, password from env. Predicted: lint + tests pass, recipes `bash -n` OK (extracted, not `make -n`, E60).
+Next (Bee): PR → merge → `make k8s-up` → `make starrocks-render` → `make starrocks-install` → `make starrocks-sql SQL="SHOW FRONTENDS; SHOW BACKENDS"` → measure.
+
 ### 2026-11-10 — E67 proven + E68 (Spark TTL late after sleep)
 Did (Bee): PR #79 → images run 42786011222 → bump PR #80 (airflow `95cb4511…` only; spark-job stays `3da7f249…`: no file it copies changed, the new digest only differs by build timestamps) → `make k8s-up` (git 65e23b1, Airflow rev 16) → `make backfill FROM=2024-07-24 TO=2024-07-25 REPROCESS=completed` (09:06–09:10 UTC = 16:06–16:10 ICT) → nudge of `catalog-081805` (Bee approved).
 Observed: 2 backfill runs success; 2 `trino_reconcile` runs success (the first waited `1; 1` → `0; 0`), both 210/210, `verdict` passed, no ❌ → E67 fixed. `catalog-081805` 54 min past its TTL → E68; annotate → deleted in seconds. `make dag-runs | head` → `Error 141` = SIGPIPE from `head` with pipefail (harmless).

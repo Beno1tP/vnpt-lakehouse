@@ -22,6 +22,10 @@ SPARK_OPERATOR_CHART        = $(HOME)/.cache/vnpt-lake/charts/spark-operator-2.2
 TRINO_CHART        = $(HOME)/.cache/vnpt-lake/charts/trino-1.44.0.tgz
 EVIDENCE_TRINO    ?= $(HOME)/data/vnpt-lab/evidence/task3-explore-$(shell date -u +%Y%m%dT%H%MZ).txt
 TRINO_CHART_SHA256 = ce3c2f6525d896513c5e20cac19a1260bf108f1d17f65188be45ccea9fb36caa
+# kube-starrocks chart 1.11.8 (operator 1.11.8; image tag default 4.1-latest, overridden): SHA-256 = GitHub asset digest
+STARROCKS_CHART        = $(HOME)/.cache/vnpt-lake/charts/kube-starrocks-1.11.8.tgz
+STARROCKS_CHART_SHA256 = c05804d0dc38719557c68e23713437e38b82be97db73799e59e1d5bc113c2286
+SR_SQL = kubectl -n starrocks exec -i starrocks-fe-0 -- sh -c 'read -r p; MYSQL_PWD="$$p" exec mysql -h127.0.0.1 -P9030 -uroot --table'
 SPARK_OPERATOR_CHART_SHA256 = 1c47c850c8d6ecc7eda4ede03e7932aa59f23fa6d186a10da3c8359df3671cf1
 include infra/k8s/images.env
 JOB_SRC              = jobs/ tests/ docker/spark-job/
@@ -44,7 +48,7 @@ SPARK_SUBMIT = $(COMPOSE) exec -T spark /opt/spark/bin/spark-submit --master $(S
 SPARK_SQL    = $(COMPOSE) exec -T spark /opt/spark/bin/spark-sql --master local[1]
 NOISE        = ^Time taken|^:: loading settings
 
-.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks ghcr-prune k8s-up k8s-demo airflow-viewer airflow-viewer-check minio-ui history-ui freeze freeze-check evidence evidence-export spark-operator-chart demo-task2 demo-pipeline demo-check trino-chart trino-install trino-cli trino-ui mode-query mode-pipeline trino-check trino-explore trino-tag-check demo-task3
+.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks ghcr-prune k8s-up k8s-demo airflow-viewer airflow-viewer-check minio-ui history-ui freeze freeze-check evidence evidence-export spark-operator-chart demo-task2 demo-pipeline demo-check trino-chart trino-install trino-cli trino-ui mode-query mode-pipeline trino-check trino-explore trino-tag-check demo-task3 starrocks-chart starrocks-render starrocks-install starrocks-sql
 
 help:          ## list targets and variables
 	@awk -F':.*## ' '/^[a-zA-Z0-9_-]+:.*## /{printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -144,6 +148,29 @@ trino-install: trino-chart deploy-guard ## Task 3: helm upgrade --install Trino 
 	  { echo "refusing: Airflow scheduler is running (pipeline mode). Run make mode-query first (D12)"; exit 1; }
 	helm upgrade --install trino $(TRINO_CHART) -n trino -f infra/helm/trino/values-local.yaml \
 	  --description "git $$(git rev-parse --short HEAD)" --wait --timeout 15m
+starrocks-chart: ## Task 4: download the kube-starrocks chart 1.11.8 once from GitHub Releases and check its SHA-256 (E58 pattern)
+	mkdir -p $(dir $(STARROCKS_CHART))
+	test -f $(STARROCKS_CHART) || curl -fL --retry 3 -o $(STARROCKS_CHART) https://github.com/StarRocks/starrocks-kubernetes-operator/releases/download/v1.11.8/kube-starrocks-1.11.8.tgz
+	echo "$(STARROCKS_CHART_SHA256)  $(STARROCKS_CHART)" | sha256sum --check
+starrocks-render: starrocks-chart ## Task 4: render the chart and fail unless every image is pinned (no 4.1-latest, FE/BE 3.5.21 by digest)
+	@out=$$(helm template starrocks $(STARROCKS_CHART) -n starrocks -f infra/helm/starrocks/values-local.yaml); \
+	  echo "$$out" | grep -nE '^\s+(image|tag|repository):' ; \
+	  ! echo "$$out" | grep -q '4.1-latest' || { echo "FAIL: 4.1-latest is still rendered"; exit 1; }; \
+	  for c in fe-ubuntu be-ubuntu; do echo "$$out" | grep -q "starrocks/$$c" || { echo "FAIL: starrocks/$$c not rendered"; exit 1; }; done; \
+	  echo "$$out" | grep -o '3.5.21@sha256:[0-9a-f]*' | sort -u; echo "starrocks-render: PASS (no 4.1-latest, FE/BE pinned)"
+starrocks-install: starrocks-render deploy-guard ## Task 4: helm upgrade --install StarRocks (operator + FE + BE, namespace starrocks); refuses while a Spark run is active
+	@! kubectl -n spark-jobs get sparkapplications --no-headers -o custom-columns=S:.status.applicationState.state | grep -vE '^(COMPLETED|FAILED)$$' | grep -q . || \
+	  { echo "refusing: a SparkApplication is not finished; wait for it (StarRocks + Spark do not fit, D15)"; exit 1; }
+	-kubectl -n trino scale deploy/trino-coordinator --replicas=0
+	helm upgrade --install starrocks $(STARROCKS_CHART) -n starrocks -f infra/helm/starrocks/values-local.yaml \
+	  --description "git $$(git rev-parse --short HEAD)" --wait --timeout 15m
+	@echo "helm waited for the operator only; the operator now creates FE and BE (first image pull: several minutes)"
+	@for p in starrocks-fe-0 starrocks-be-0; do for i in $$(seq 1 180); do kubectl -n starrocks get pod $$p >/dev/null 2>&1 && break; sleep 5; done; done
+	kubectl -n starrocks wait --for=condition=Ready pod/starrocks-fe-0 pod/starrocks-be-0 --timeout=1200s
+	kubectl -n starrocks get pods -o wide
+starrocks-sql: ## Task 4: run SQL in the FE as root (password from infra/k8s/secrets, via stdin, never in args): make starrocks-sql SQL="SHOW BACKENDS"
+	@test -n "$(SQL)" || { echo 'set SQL=, e.g. make starrocks-sql SQL="SHOW FRONTENDS; SHOW BACKENDS"'; exit 1; }
+	@{ sed -n 's/^password=//p' infra/k8s/secrets/starrocks-root.env; echo "$(SQL)"; } | $(SR_SQL)
 trino-cli:     ## Task 3: interactive Trino SQL on catalog lake (exit with quit; read-only)
 	kubectl -n trino exec -it deploy/trino-coordinator -- trino --catalog lake
 trino-ui:      ## Task 3: Trino web UI on http://localhost:8081 (8080 is Airflow's; Ctrl+C to stop)
