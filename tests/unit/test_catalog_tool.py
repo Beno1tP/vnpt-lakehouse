@@ -47,7 +47,23 @@ def test_tag_sql_rejects_bad_input(table, tag, days):
         ct.tag_sql(table, tag, days)
 
 
-def test_expected_rows_from_bronze_daily():
-    expected = {"totals": {"chatlog_rows": 21224, "bot_predict_rows": 10729}}
+def test_expected_rows_from_the_expected_files():
+    expected = {
+        "bronze_daily.json": {"totals": {"chatlog_rows": 21224, "bot_predict_rows": 10729}},
+        "silver.json": {"totals": {"chat_rows": 21224, "predict_rows": 10729, "user_message_rows": 10613}},
+    }
     assert ct.expected_rows("bronze.chatlog", expected) == 21224
     assert ct.expected_rows("bronze.bot_predict", expected) == 10729
+    assert ct.expected_rows("silver.user_message", expected) == 10613  # Task 3 freeze
+
+
+def test_silver_tables_can_be_tagged_but_not_registered():
+    assert "silver.chat_message" in ct.tag_sql("silver.chat_message", "task3_v1", 365)
+    with pytest.raises(ValueError):  # register stays Bronze-only (metadata path pattern)
+        ct.register_sql("silver.chat_message", GOOD)
+
+
+def test_trino_tag_check_uses_the_same_expectations():
+    import trino_tag_check as ttc
+
+    assert ttc.EXPECTED_KEY == ct.EXPECTED_KEY  # Spark and Trino verify a freeze against the same numbers

@@ -44,7 +44,7 @@ SPARK_SUBMIT = $(COMPOSE) exec -T spark /opt/spark/bin/spark-submit --master $(S
 SPARK_SQL    = $(COMPOSE) exec -T spark /opt/spark/bin/spark-sql --master local[1]
 NOISE        = ^Time taken|^:: loading settings
 
-.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks ghcr-prune k8s-up k8s-demo airflow-viewer airflow-viewer-check minio-ui history-ui freeze freeze-check evidence evidence-export spark-operator-chart demo-task2 demo-pipeline demo-check trino-chart trino-install trino-cli trino-ui mode-query mode-pipeline trino-check trino-explore
+.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks ghcr-prune k8s-up k8s-demo airflow-viewer airflow-viewer-check minio-ui history-ui freeze freeze-check evidence evidence-export spark-operator-chart demo-task2 demo-pipeline demo-check trino-chart trino-install trino-cli trino-ui mode-query mode-pipeline trino-check trino-explore trino-tag-check demo-task3
 
 help:          ## list targets and variables
 	@awk -F':.*## ' '/^[a-zA-Z0-9_-]+:.*## /{printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -218,13 +218,18 @@ demo-task2:    ## Demo profile (B3): view-only. Scheduler, dag-processor, trigge
 	kubectl -n spark-jobs rollout status deploy/spark-history --timeout=600s
 	kubectl -n airflow rollout status deploy/airflow-api-server --timeout=600s
 	@echo "demo-task2: view-only (no scheduler). UIs: make airflow-ui (viewer), make minio-ui (demo-viewer), port-forward History: kubectl -n spark-jobs port-forward svc/spark-history 18080:18080. Back to building: make demo-pipeline"
+demo-task3:    ## Demo profile (Task 3): view-only like demo-task2 + Trino up (~5 Gi requests; no Spark can start)
+	$(MAKE) --no-print-directory demo-task2
+	kubectl -n trino scale deploy/trino-coordinator --replicas=1
+	kubectl -n trino rollout status deploy/trino-coordinator --timeout=600s
+	@echo "demo-task3: + Trino. UIs: make trino-ui (8081), make trino-cli. Back to building: make mode-pipeline"
 demo-pipeline: ## Demo profile (B3): building mode. Airflow scheduler, dag-processor, triggerer -> 1; History Server -> 0 (frees 512 Mi for Spark)
 	kubectl -n airflow scale $(DEMO_STOP) --replicas=1
 	kubectl -n spark-jobs scale deploy/spark-history --replicas=0
 	for d in $(DEMO_STOP); do kubectl -n airflow rollout status $$d --timeout=600s; done
-demo-check:    ## Demo (B3): before presenting. Workloads ready, UIs answer (temporary port-forwards on 28080/29001/28081), freeze tag of DEMO_TASK (default 2) reads the frozen rows. Fails loudly
+demo-check:    ## Demo: before presenting. Workloads ready, UIs answer (temporary port-forwards), freeze tag of DEMO_TASK (2: Spark check; 3: + Trino, tag checked by Trino). Fails loudly
 	@set -u; fail=0; \
-	for w in lake:statefulset/postgres lake:statefulset/minio lake:deploy/hive-metastore airflow:deploy/airflow-api-server spark-jobs:deploy/spark-history; do \
+	for w in lake:statefulset/postgres lake:statefulset/minio lake:deploy/hive-metastore airflow:deploy/airflow-api-server spark-jobs:deploy/spark-history $(if $(filter 3,$(DEMO_TASK)),trino:deploy/trino-coordinator); do \
 	  ns=$${w%%:*}; obj=$${w#*:}; \
 	  r=$$(kubectl -n $$ns get $$obj -o jsonpath='{.status.readyReplicas}' 2>/dev/null); \
 	  if [ "$${r:-0}" -ge 1 ]; then echo "[demo-check] PASS ready  $$ns/$$obj ($$r ready)"; \
@@ -233,13 +238,14 @@ demo-check:    ## Demo (B3): before presenting. Workloads ready, UIs answer (tem
 	kubectl -n airflow port-forward svc/airflow-api-server 28080:8080 >/dev/null 2>&1 & p1=$$!; \
 	kubectl -n lake port-forward svc/minio 29001:9001 >/dev/null 2>&1 & p2=$$!; \
 	kubectl -n spark-jobs port-forward svc/spark-history 28081:18080 >/dev/null 2>&1 & p3=$$!; \
-	trap 'kill $$p1 $$p2 $$p3 2>/dev/null' EXIT; sleep 4; \
-	for u in airflow:http://localhost:28080/api/v2/monitor/health minio-console:http://localhost:29001/ spark-history:http://localhost:28081/; do \
+	p4=; $(if $(filter 3,$(DEMO_TASK)),kubectl -n trino port-forward svc/trino 28082:8080 >/dev/null 2>&1 & p4=$$!;) \
+	trap 'kill $$p1 $$p2 $$p3 $$p4 2>/dev/null' EXIT; sleep 4; \
+	for u in airflow:http://localhost:28080/api/v2/monitor/health minio-console:http://localhost:29001/ spark-history:http://localhost:28081/ $(if $(filter 3,$(DEMO_TASK)),trino:http://localhost:28082/v1/info); do \
 	  name=$${u%%:*}; url=$${u#*:}; code=$$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 $$url || true); \
 	  if [ "$$code" = 200 ]; then echo "[demo-check] PASS http   $$name ($$code)"; else echo "[demo-check] FAIL http   $$name ($$code)"; fail=1; fi; \
 	done; \
-	kill $$p1 $$p2 $$p3 2>/dev/null; trap - EXIT; \
-	if $(MAKE) --no-print-directory freeze-check TASK=$(DEMO_TASK) | grep -E "^\[catalog\] (PASS|FAIL)"; then :; else fail=1; fi; \
+	kill $$p1 $$p2 $$p3 $$p4 2>/dev/null; trap - EXIT; \
+	if $(MAKE) --no-print-directory $(if $(filter 3,$(DEMO_TASK)),trino-tag-check,freeze-check) TASK=$(DEMO_TASK) | grep -E "^\[catalog\] (PASS|FAIL)"; then :; else fail=1; fi; \
 	if [ $$fail = 0 ]; then echo "[demo-check] ALL PASS"; else echo "[demo-check] FAILED (see FAIL lines)"; exit 1; fi
 backfill:      ## Task 2: backfill chatbot_bronze: make backfill [FROM=2024-07-02] [TO=2024-07-25] [REPROCESS=none|completed|failed] [DRY=yes]
 	$(AF) airflow backfill create --dag-id chatbot_bronze --from-date $(FROM) --to-date $(TO) \
@@ -293,14 +299,22 @@ catalog:       ## Task 2 2.5b drill 7 + freeze: make catalog CMD=info|forget|reg
 	  for i in $$(seq 1 120); do s=$$(kubectl -n spark-jobs get sparkapplication $$n -o jsonpath='{.status.applicationState.state}'); \
 	    case "$$s" in COMPLETED|FAILED|SUBMISSION_FAILED) break;; esac; sleep 5; done; echo "[catalog] $$n state=$$s"; \
 	  kubectl -n spark-jobs logs $$n-driver | grep -E "^\[catalog\]|Error|Exception" || true; test "$$s" = COMPLETED
-FREEZE_TABLES ?= bronze.chatlog,bronze.bot_predict
+FREEZE_TABLES_2 = bronze.chatlog,bronze.bot_predict
+FREEZE_TABLES_3 = $(FREEZE_TABLES_2),silver.chat_message,silver.nlu_prediction,silver.user_message
+FREEZE_TABLES  ?= $(FREEZE_TABLES_$(TASK))
 freeze:        ## Freeze (B2): Iceberg tag task<TASK>_v1 on FREEZE_TABLES (RETAIN 365 DAYS, kept if it exists) + verify rows = expected: make freeze TASK=2
 	@test -n "$(TASK)" || { echo "set TASK= (e.g. make freeze TASK=2)"; exit 1; }
 	$(MAKE) --no-print-directory catalog CMD=tag TABLE=$(FREEZE_TABLES) TAG=task$(TASK)_v1
+trino-tag-check: ## Freeze (Task 3): verify tag task<TASK>_v1 through Trino (no Spark: fits next to Trino in demo-task3): make trino-tag-check TASK=3
+	@test -n "$(TASK)" || { echo "set TASK= (e.g. make trino-tag-check TASK=3)"; exit 1; }
+	@sql=$$(for t in $$(echo $(FREEZE_TABLES) | tr , ' '); do \
+	  printf "SELECT '%s', count(*) FROM lake.%s FOR VERSION AS OF 'task$(TASK)_v1' UNION ALL " $$t $$t; done); \
+	  kubectl -n trino exec deploy/trino-coordinator -- trino --catalog lake --output-format CSV_UNQUOTED \
+	  --execute "$${sql% UNION ALL }" | python3 -I tools/trino_tag_check.py task$(TASK)_v1
 freeze-check:  ## Freeze (B2): verify the tag still reads the frozen rows (run after maintenance): make freeze-check TASK=2
 	@test -n "$(TASK)" || { echo "set TASK= (e.g. make freeze-check TASK=2)"; exit 1; }
 	$(MAKE) --no-print-directory catalog CMD=verify-tag TABLE=$(FREEZE_TABLES) TAG=task$(TASK)_v1
-EVIDENCE_DIR ?= $(HOME)/data/vnpt-lab/evidence/task2-$(shell date -u +%Y%m%d)
+EVIDENCE_DIR ?= $(HOME)/data/vnpt-lab/evidence/task$(or $(TASK),2)-$(shell date -u +%Y%m%d)
 evidence:      ## Freeze (B2): save run states OUTSIDE Git to EVIDENCE_DIR (counts and states only, no rows)
 	mkdir -p $(EVIDENCE_DIR)
 	$(MAKE) --no-print-directory dag-runs   > $(EVIDENCE_DIR)/dag-runs.txt
