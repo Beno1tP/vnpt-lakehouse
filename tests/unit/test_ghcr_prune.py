@@ -22,4 +22,4 @@ def test_keeps_deployed_and_newest():
 
 def test_current_images_env_digests_are_found():
     digests = gp.deployed_digests((ROOT / "infra/k8s/images.env").read_text())
-    assert len(digests) == 4
+    assert len(digests) == 5  # + vnpt-lake-dbt (Task 4)
