@@ -42,12 +42,12 @@ airflow        : chatbot_bronze … → validate_silver (outlet Asset lake://sil
 
 | ID | Decision | Alternative rejected | Why |
 |---|---|---|---|
-| D13 (proposed) | StarRocks FE 1/1.5 Gi, BE 1.5/2 Gi (Burstable) + gold mode | FE 2 Gi + BE 3 Gi always on (input plan) | 9,156 Mi idle > 7,268 Allocatable (`02_config.md` §2) |
-| D14 (proposed) | Separate DAG `gold_build` on an Asset from `validate_silver` | `dbt_build` as the last task of the Spark DAG | StarRocks and Spark cannot run together on 8 GiB; Asset events wait for gold mode; one DAG per layer |
-| D15 (proposed) | Catalog, users, raw views by one idempotent `starrocks-init` Job **using the dbt image** | a `mysql` client image | one image less (~0.6 GB disk) |
-| D16 (proposed) | `fct_user_message` and `gold_uc*` = full rebuild (`table`); only `dim_sender` incremental | incremental everywhere | 10 k rows rebuild in seconds; full rebuild is idempotent by construction; incremental only where state matters (stable keys) |
-| D17 (proposed) | Expected Gold values from pandas → seeds | DuckDB (input plan) | no DuckDB in the repo; pandas already produced Task 1's numbers; an engine independent of Spark/StarRocks |
-| D18 (proposed) | `traffic_class` column in every `gold_uc*` | two boolean filters | one Superset native filter |
+| D15 (proposed) | StarRocks FE 1/1.5 Gi, BE 1.5/2 Gi (Burstable) + gold mode | FE 2 Gi + BE 3 Gi always on (input plan) | 9,156 Mi idle > 7,268 Allocatable (`02_config.md` §2) |
+| D16 (proposed) | Separate DAG `gold_build` on an Asset from `validate_silver` | `dbt_build` as the last task of the Spark DAG | StarRocks and Spark cannot run together on 8 GiB; Asset events wait for gold mode; one DAG per layer |
+| D17 (proposed) | Catalog, users, raw views by one idempotent `starrocks-init` Job **using the dbt image** | a `mysql` client image | one image less (~0.6 GB disk) |
+| D18 (proposed) | `fct_user_message` and `gold_uc*` = full rebuild (`table`); only `dim_sender` incremental | incremental everywhere | 10 k rows rebuild in seconds; full rebuild is idempotent by construction; incremental only where state matters (stable keys) |
+| D19 (proposed) | Expected Gold values from pandas → seeds | DuckDB (input plan) | no DuckDB in the repo; pandas already produced Task 1's numbers; an engine independent of Spark/StarRocks |
+| D20 (proposed) | `traffic_class` column in every `gold_uc*` | two boolean filters | one Superset native filter |
 
 ## E. Risks and first checks
 
@@ -107,13 +107,13 @@ Kept: StarRocks architecture, table types, bitmap reasoning, stable `sender_key`
 | # | Input plan said | Evidence | Changed to |
 |---|---|---|---|
 | R1 | "Blocked by the leader on UC6/UC7" | `progress.md` §5 10-23: leader answered (18 days OK, existing intents, re-analyse at Task 5) | not blocked; generic top-N + window parameter now |
-| R2 | FE 2 Gi + BE 3 Gi; "≈ 10 Gi, scale Trino to 0" | idle requests 4,036 Mi + 5,120 = 9,156 > 7,268 Allocatable even with Trino and Spark at 0 | D13 smaller Burstable sizing + gold mode |
-| R3 | `dbt_build` as a task after `validate_silver` in one DAG run | StarRocks must be down while Spark runs (32 Mi spare during bronze) → one DAG run cannot contain both | D14 Asset-triggered `gold_build` |
-| R4 | Expected values from DuckDB | repo has no DuckDB; Task 1 used pandas | D17 pandas |
+| R2 | FE 2 Gi + BE 3 Gi; "≈ 10 Gi, scale Trino to 0" | idle requests 4,036 Mi + 5,120 = 9,156 > 7,268 Allocatable even with Trino and Spark at 0 | D15 smaller Burstable sizing + gold mode |
+| R3 | `dbt_build` as a task after `validate_silver` in one DAG run | StarRocks must be down while Spark runs (32 Mi spare during bronze) → one DAG run cannot contain both | D16 Asset-triggered `gold_build` |
+| R4 | Expected values from DuckDB | repo has no DuckDB; Task 1 used pandas | D19 pandas |
 | R5 | `replication_num` per model only | FE config `default_replication_num = 1` also covers tables created outside dbt (raw, init) | both |
 | R6 | FE `-Xmx1536m` | the FE ships with a large default heap in `fe.conf`; the operator's config must override it, otherwise the pod is OOMKilled | explicit `JAVA_OPTS` in values |
-| R7 | Catalog Job (image unspecified) | a `mysql` client image costs another ~0.6 GB | D15 dbt image + Python script |
+| R7 | Catalog Job (image unspecified) | a `mysql` client image costs another ~0.6 GB | D17 dbt image + Python script |
 | R8 | No catalog refresh | external catalog caches Iceberg metadata | `refresh_catalog` task |
-| R9 | Two flags for the filter | Superset native filter = one column | D18 `traffic_class` (flags kept too) |
+| R9 | Two flags for the filter | Superset native filter = one column | D20 `traffic_class` (flags kept too) |
 | R10 | Operator v1.11.x, dbt-core ≥ 1.6.2 | not verified in this session | check commands in `02_config.md` §1 |
 | R11 | Bitmap justified by scale | 89 senders: `COUNT(DISTINCT)` would be instant | kept, with the honest reason (A2) |
