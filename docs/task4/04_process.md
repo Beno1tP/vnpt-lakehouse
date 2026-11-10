@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-11-10/11 — round trip of the modes → E69
+Did (Bee): PR #84 → `make starrocks-install` (rev 2: BE request 1 Gi, node 6,212 Mi = 85 %, BE alive) → `make mode-pipeline` (StarRocks → 0, node 5,060 Mi while the old BE was still Terminating) → `make mode-gold` (hung; laptop slept meanwhile) → read-only diagnosis 17:14 UTC (00:14 ICT 11-11).
+Observed: StatefulSets `0/0`, CR spec `1 1`, phase `running`; operator log `expectHash == actualHash, no need to update statefulset resource` → E69. Also seen in the StatefulSet: the operator injects `MYSQL_PWD` from the Secret `starrocks-root` into the FE container (by secretKeyRef, no value in the spec), `terminationGracePeriodSeconds: 120`, preStop `stop_fe.sh -g`.
+Prepared (Claude, branch `task4/e69-starrocks-modes`): `starrocks-up` scales the StatefulSets itself, `starrocks-ready` (rollout status + BE alive), `starrocks-down` waits for the pods to go. Predicted: recipes `bash -n` OK (extracted).
+
 ### 2026-11-10 — 4.1 done: StarRocks on Minikube + sizing A + modes
 Did (Bee): PR #83 → `make k8s-up` (STARROCKS_ROOT_PASSWORD generated, namespace + Secret created) → `make starrocks-render` (PASS: operator v1.11.8, FE/BE 3.5.21 by digest, also the init job's image; no `4.1-latest` → R10 closed) → `make starrocks-install` (rev 1, 16:45:40 ICT = 09:45:40 UTC) → `SHOW FRONTENDS/BACKENDS` → measure after 16 min.
 Observed: FE LEADER alive; BE `CONNECTING` at first (registered before its first heartbeat), alive 3 min later; 87 tablets before any table (system `_statistics_` tables, created with 1 replica: proves `default_replication_num = 1`); measurements in `02_config.md` §4: real margin ≈ 125 Mi.
