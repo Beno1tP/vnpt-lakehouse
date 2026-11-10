@@ -42,7 +42,7 @@ airflow        : chatbot_bronze … → validate_silver (outlet Asset lake://sil
 
 | ID | Decision | Alternative rejected | Why |
 |---|---|---|---|
-| D15 (proposed) | StarRocks FE 1/1.5 Gi, BE 1.5/2 Gi (Burstable) + gold mode | FE 2 Gi + BE 3 Gi always on (input plan) | 9,156 Mi idle > 7,268 Allocatable (`02_config.md` §2) |
+| **D15** (accepted 11-10, BE request revised by measurement) | StarRocks FE 1/1.5 Gi, BE **1**/2 Gi (Burstable, `mem_limit` 1600M) + gold mode (`make mode-gold`; pipeline and query modes scale StarRocks to 0: operator first, then FE/BE StatefulSets) | FE 2 Gi + BE 3 Gi always on (input plan) | 9,156 Mi idle > 7,268 Allocatable (`02_config.md` §2) |
 | D16 (proposed) | Separate DAG `gold_build` on an Asset from `validate_silver` | `dbt_build` as the last task of the Spark DAG | StarRocks and Spark cannot run together on 8 GiB; Asset events wait for gold mode; one DAG per layer |
 | D17 (proposed) | Catalog, users, raw views by one idempotent `starrocks-init` Job **using the dbt image** | a `mysql` client image | one image less (~0.6 GB disk) |
 | D18 (proposed) | `fct_user_message` and `gold_uc*` = full rebuild (`table`); only `dim_sender` incremental | incremental everywhere | 10 k rows rebuild in seconds; full rebuild is idempotent by construction; incremental only where state matters (stable keys) |

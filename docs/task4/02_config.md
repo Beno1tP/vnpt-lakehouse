@@ -17,7 +17,7 @@ Input plan sizes (FE 2 Gi + BE 3 Gi) give 4,036 + 5,120 = **9,156 Mi** idle: doe
 | Pod | Request | Limit | Setting |
 |---|---|---|---|
 | StarRocks FE | 1 Gi | 1.5 Gi | `JAVA_OPTS -Xmx1024m` (≈ 70 % of limit) |
-| StarRocks BE | 1.5 Gi | 2 Gi | `mem_limit = 1600M` (80 % of limit) |
+| StarRocks BE | 1 Gi (was 1.5: measured 302 Mi idle, option A 11-10) | 2 Gi | `mem_limit = 1600M` (80 % of limit) |
 | StarRocks operator | 128 Mi | 256 Mi | |
 | dbt pod | 256 Mi | 512 Mi | runs, then exits; work runs inside StarRocks |
 
@@ -41,3 +41,17 @@ Fallback (input plan): `starrocks/allin1-ubuntu:3.5.21` as one pod. It saves the
 | FE meta + BE storage PVCs | < 1 GB | `kubectl get pvc -A` |
 
 Check `minikube ssh -- df -h /var` and C: free first. If Task 3 is done and Trino is not needed for the demo, `minikube ssh -- sudo crictl rmi` the Trino image (re-pulled on demand).
+
+## 4. Measured 2026-11-10 (after `make starrocks-install`, 16 min, pipeline idle, Trino 0)
+
+| Measure | Value | Note |
+|---|---|---|
+| Pods | operator, FE, BE: 0 restarts; init job Completed after 4 retries (FE still starting) | 4.1 "done when" met: FE LEADER alive, BE alive, 3.5.21-85fccf8 |
+| Usage / request | FE 485 / 1,024 Mi · BE 302 / 1,536 Mi (13 % of `mem_limit`) · operator 19 / 128 Mi | idle, no tables yet (87 system tablets) |
+| Node requests | 6,724 Mi (92 %) = 4,036 + 1,024 + 1,536 + 128; limits 11,356 Mi (156 %) | as predicted |
+| Real margin | 7,268 − Σ max(request, usage) = 7,268 − (6,724 + 264 triggerer + 155 dag-processor) ≈ **125 Mi** | rule "< 200 Mi" → option A: BE request 1 Gi → ≈ 637 Mi (re-measure during `dbt build`, 4.3) |
+| WSL VM | used 6,938 MB, available 4,016 MB, swap 559 MB / 4 GB | |
+| Disk | node `/var` 24 G (+5 G): be-ubuntu 1.33 GB, fe-ubuntu 1.02 GB, operator 25 MB | |
+| PVC size | BE reports `TotalCapacity` 1,006.854 GB, not 5 Gi | Minikube's hostpath provisioner does not enforce PVC sizes (a folder on the node disk); watch `df` instead |
+
+Mode budget (requests, after A): pipeline 4,036 (StarRocks 0) · gold 6,212 · query 6,084 (StarRocks 0) · gold + Trino 8,260 ❌ · gold + Bronze run ≥ 9,400 ❌.

@@ -4,7 +4,8 @@
 # StarRocks 4.1) and a spec's values REPLACE componentValues instead of merging, so every image below is set in
 # full. make starrocks-render greps the rendered images: only 3.5.21 digests may appear.
 # Memory (D15, docs/task4/02_config.md §2): FE 1 / 1.5 Gi with heap 1 GiB (the shipped fe.conf has -Xmx8192m: an
-# 8 GiB heap in a 1.5 Gi pod would be OOMKilled), BE 1.5 / 2 Gi with mem_limit 1600M (~80 % of the limit).
+# 8 GiB heap in a 1.5 Gi pod would be OOMKilled), BE 1 / 2 Gi with mem_limit 1600M (~80 % of the limit).
+# BE request 1.5 -> 1 Gi (Bee 11-10, option A): measured 302 Mi idle; real node margin 125 -> ~637 Mi (02_config §4).
 # Root password: Secret starrocks-root (key "password", from secrets.env via kustomize); the chart's init job sets it
 # once on the first install (SET PASSWORD through the FE's MySQL port; the script does not print it).
 operator:
@@ -64,7 +65,7 @@ starrocks:
       tag: "3.5.21@sha256:6ed9e75bfb7fd6b48947b8b75f5811a49abe3b793595e4cd4239a6dba7fcbe9f"
     imagePullPolicy: IfNotPresent
     resources:
-      requests: { cpu: 250m, memory: 1536Mi }
+      requests: { cpu: 250m, memory: 1Gi }
       limits: { cpu: "2", memory: 2Gi }
     storageSpec:
       name: be
