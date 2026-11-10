@@ -14,6 +14,12 @@ Time spent:
 
 ---
 
+### 2026-11-10 — 4.0a deployed: step in Silver (18 days) + E67
+Did (Bee): PR #77 (CI green, `make all` 95 passed) → images run 42778808527 (spark-job `3da7f249…`, airflow `6de4988e…`) → bump PR → `make k8s-up` (git b525a70; Airflow rev 15, spark-operator rev 14) → `make backfill FROM=2024-07-02 TO=2024-07-25 REPROCESS=completed` (08:08–08:43 UTC = 15:08–15:43 ICT).
+Observed: 24 backfill runs `success`. `trino_reconcile`: 17 runs failed `reconcile` (FAIL keys `step` + `'None'`, 18 → 2), the run after the last day 08:43:05 UTC `210/210 values equal`; `list-runs` shows the failed runs as `success` → **E67**. Side notes: k8s-up reported StatefulSets/plain Secrets `configured` as in Task 2 (`docs/task2/04_process.md` 10-28); Telegram showed run `…08:33:38…_jfTLngWZ` twice (15:33 and 15:35 ICT) while the logs have a separate run 08:35:28: not explained yet (check the 15:35 message in Telegram).
+Learned: schema evolution worked without a rewrite of old files (the ALTER ran in the first Silver run; days not yet rewritten read `step` = NULL, which is exactly what the half-way reconciles saw). A check that spans the whole lake needs a consistent point.
+Prepared (Claude, branch `task4/e67-reconcile-guard`): sensor `wait_pipeline_idle` (+ `chatbot_bronze` running/queued via `ti.get_dr_count`), leaf `verdict`, CI DAG rule. Predicted: lint clean, unit tests pass (my local run); the DAG import + new rule run in CI inside the image.
+
 ### 2026-11-10 — 4.0 checks + UC4 profile + 4.0a prepared (`step` in Silver)
 Did (Bee): disk + version checks; two pandas profiles of the Excel files (counts and labels only).
 Observed: C: 60 G free (88 %), node `/var` 19 G; chart `kube-starrocks` 1.11.8 (APP VERSION `4.1-latest`: the chart default image tag is `4.1-latest` and the FE default `-Xmx8192m`, read in the v1.11.8 `values.yaml` → override both, check `helm template`); `fe-ubuntu:3.5.21@sha256:cbc2460a…d9fc6`, `be-ubuntu:3.5.21@sha256:6ed9e75b…cbe9f`; dbt-starrocks 1.12.2 (`dbt-core>=1.9.0`, Python <3.15), dbt-core 1.12.6. UC4 "kịch bản": predict `STEP` has 2 values: `406665` 10,494 rows (all `xin_chao`; 10,378 = the `/home` messages + 116 = the predict rows without a chat row), `406666` 235 (94 xin_chao · 107 fallback · 34 bot_khong_hieu, no `/home`: typed text); `BOT_ID` 1 value; `META_DATA` JSON but only 276 rows with a key (`button_variables`, no sub-keys); `SOURCE` of predict = `action`.
