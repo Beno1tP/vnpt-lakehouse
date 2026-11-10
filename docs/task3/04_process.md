@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-11-10 — 3.5 prepared: make trino-explore
+Prepared (Claude): `sql/trino/explore.sql` (session zone Asia/Ho_Chi_Minh; EXPLAIN ANALYZE without/with `event_date` filter; `$snapshots`, `$partitions`, `$files` of silver.chat_message; bronze.chatlog `$metadata_log_entries` + `$snapshots` to compare with Spark's `make catalog CMD=info`; time travel `FOR VERSION AS OF 'task2_v1'`; `$refs`; `SHOW STATS`), make `trino-explore` (query mode only; output saved outside Git), `07_explain_plans.md` rewritten to these sections. Adapted from the template: Spark comparison on Bronze (catalog_tool allows only Bronze names, no code change); MERGE demo kept as knowledge (would need new Spark write code). Predicted: recipe `bash -n` OK (my local run).
+Next (Bee): `make catalog CMD=info TABLE=bronze.chatlog` (pipeline mode) → `make mode-query` → `make trino-explore` → time travel by id + ANALYZE → `make mode-pipeline`.
+
 ### 2026-11-10 — 3.4 done: Trino = pandas = Spark on every Silver number
 Did (Bee): PR #68 merged → `make mode-query` → `make trino-check` → `make mode-pipeline`.
 Observed: `191/191 values equal (Trino = pandas = Spark-validated), 18 days`; final_intent per day and in total (34 · 107 · 10,588) equal; the `CROSS JOIN UNNEST` unpivot ran first time; cluster back in pipeline mode.
