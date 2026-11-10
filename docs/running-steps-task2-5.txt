@@ -124,7 +124,7 @@ changed) -> make k8s-up -> run -> verify. New errors from E56.
     make mode-query
     make trino-check                               (every Silver number per day: Trino = pandas; N/N values equal)
     make mode-pipeline
-3.5 Explore + explain                                                           [PLANNED]
+3.5 Explore + explain                                                           [DONE 2026-11-10]
     make catalog CMD=info TABLE=bronze.chatlog     (pipeline mode: Spark reports metadata.json + snapshots)
     make mode-query
     make trino-explore                             (EXPLAIN ANALYZE, metadata tables, tag time travel, stats; saved to evidence)

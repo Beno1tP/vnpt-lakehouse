@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-11-10 — 3.5 done: plans, metadata, two engines, time travel, read-only
+Did (Bee): `make catalog CMD=info TABLE=bronze.chatlog` (Spark) → `make mode-query` → `make trino-explore` (01:44 UTC = 08:44 ICT) → `sed` of the Silver snapshot lines → `ANALYZE` → time travel to the first Silver snapshot → `make mode-pipeline`.
+Observed (`07_explain_plans.md`): partition pruning 18 splits → 1 split for one day; Spark and Trino name the same current `metadata.json` of bronze.chatlog (00079-8085977d…, 60 snapshots); Silver 38 snapshots (2 hand runs + 2 × 18); tag `task2_v1` reads 21,224 while `main` moved on; first Silver snapshot reads 86 rows (only 07-09); SHOW STATS without distinct counts; ANALYZE denied; `session_id` is empty in every chat row (data fact).
+Learned: Spark's `collect()` formats timestamps in the pod zone (UTC) even with the session zone set to ICT; Trino with `SET TIME ZONE` shows ICT. Label zones. Next: 3.7 close (README, freeze as `task3_v1`, from-zero decision).
+
 ### 2026-11-10 — 3.5 prepared: make trino-explore
 Prepared (Claude): `sql/trino/explore.sql` (session zone Asia/Ho_Chi_Minh; EXPLAIN ANALYZE without/with `event_date` filter; `$snapshots`, `$partitions`, `$files` of silver.chat_message; bronze.chatlog `$metadata_log_entries` + `$snapshots` to compare with Spark's `make catalog CMD=info`; time travel `FOR VERSION AS OF 'task2_v1'`; `$refs`; `SHOW STATS`), make `trino-explore` (query mode only; output saved outside Git), `07_explain_plans.md` rewritten to these sections. Adapted from the template: Spark comparison on Bronze (catalog_tool allows only Bronze names, no code change); MERGE demo kept as knowledge (would need new Spark write code). Predicted: recipe `bash -n` OK (my local run).
 Next (Bee): `make catalog CMD=info TABLE=bronze.chatlog` (pipeline mode) → `make mode-query` → `make trino-explore` → time travel by id + ANALYZE → `make mode-pipeline`.
