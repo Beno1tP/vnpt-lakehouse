@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-11-10 — 3.4 prepared: make trino-check
+Prepared (Claude, branch `task3/3.4-trino-check`): `sql/trino/reconcile.sql` (every Silver number per `event_date` in Trino SQL, unpivoted with `CROSS JOIN UNNEST` into day,key,value; final_intent as `final_intent.<intent>`), `tools/trino_check.py` (stdlib; per-day vs `silver_daily.json`, totals vs `silver.json`, missing or unexpected keys fail), make `trino-check` (refuses unless Trino has a ready replica; runs the SQL in the coordinator with `--output-format CSV_UNQUOTED`, pipes into the comparer; the Makefile's bash `-o pipefail` makes a Trino error fail the target); 3 unit tests. Predicted: lint clean, tests pass (my local run).
+Next (Bee): `make all` → PR → merge → `make mode-query` → `make trino-check` → `make mode-pipeline`.
+
 ### 2026-11-10 — 3.3 done: Trino reads the lake, read-only twice
 Did (Bee): PR #66 → `make k8s-up` (17:42 UTC = 00:42 ICT: namespace trino, `MINIO_TRINO_SECRET`, 2 Secrets, minio-users) → `make s3-access-test` → `make mode-query` → `make trino-install` (17:46:34 UTC: chart 1.44.0 `OK`, release trino rev 1) → image check + 5 SQL statements + one write attempt.
 Observed: 4 × 6/6 access test (trino reads lakehouse only); pod image `docker.io/trinodb/trino@sha256:db58cc93…0534` (pinned digest); schemas bronze, silver (+ default, information_schema, system); counts 21,224 / 21,224 / 10,729 / 10,613 = pandas = Spark; `event_ts` = `timestamp(6)`; `CREATE TABLE` → `Access Denied` (17:51:35 UTC).

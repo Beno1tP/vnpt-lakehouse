@@ -43,7 +43,7 @@ SPARK_SUBMIT = $(COMPOSE) exec -T spark /opt/spark/bin/spark-submit --master $(S
 SPARK_SQL    = $(COMPOSE) exec -T spark /opt/spark/bin/spark-sql --master local[1]
 NOISE        = ^Time taken|^:: loading settings
 
-.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks ghcr-prune k8s-up k8s-demo airflow-viewer airflow-viewer-check minio-ui history-ui freeze freeze-check evidence evidence-export spark-operator-chart demo-task2 demo-pipeline demo-check trino-chart trino-install trino-cli trino-ui mode-query mode-pipeline
+.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks ghcr-prune k8s-up k8s-demo airflow-viewer airflow-viewer-check minio-ui history-ui freeze freeze-check evidence evidence-export spark-operator-chart demo-task2 demo-pipeline demo-check trino-chart trino-install trino-cli trino-ui mode-query mode-pipeline trino-check
 
 help:          ## list targets and variables
 	@awk -F':.*## ' '/^[a-zA-Z0-9_-]+:.*## /{printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -147,6 +147,11 @@ trino-cli:     ## Task 3: interactive Trino SQL on catalog lake (exit with quit;
 	kubectl -n trino exec -it deploy/trino-coordinator -- trino --catalog lake
 trino-ui:      ## Task 3: Trino web UI on http://localhost:8081 (8080 is Airflow's; Ctrl+C to stop)
 	kubectl -n trino port-forward svc/trino 8081:8080
+trino-check:   ## Task 3 step 3.4: every Silver number per day computed by Trino vs tests/expected/silver*.json (query mode)
+	@r=$$(kubectl -n trino get deploy/trino-coordinator -o jsonpath='{.status.readyReplicas}' 2>/dev/null); test "$${r:-0}" -ge 1 || \
+	  { echo "Trino is not running: make mode-query"; exit 1; }
+	kubectl -n trino exec deploy/trino-coordinator -- trino --catalog lake --output-format CSV_UNQUOTED \
+	  --execute "$$(cat sql/trino/reconcile.sql)" | python3 -I tools/trino_check.py
 mode-query:    ## Task 3 (D12): query mode. Refuses while a run is active; Airflow scheduler/dag-processor/triggerer + History Server -> 0; Trino -> 1
 	@! kubectl -n spark-jobs get sparkapplications --no-headers -o custom-columns=S:.status.applicationState.state | grep -vE '^(COMPLETED|FAILED)$$' | grep -q . || \
 	  { echo "refusing: a SparkApplication is not finished; wait for it"; exit 1; }
