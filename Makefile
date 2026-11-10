@@ -48,7 +48,7 @@ SPARK_SUBMIT = $(COMPOSE) exec -T spark /opt/spark/bin/spark-submit --master $(S
 SPARK_SQL    = $(COMPOSE) exec -T spark /opt/spark/bin/spark-sql --master local[1]
 NOISE        = ^Time taken|^:: loading settings
 
-.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks ghcr-prune k8s-up k8s-demo airflow-viewer airflow-viewer-check minio-ui history-ui freeze freeze-check evidence evidence-export spark-operator-chart demo-task2 demo-pipeline demo-check trino-chart trino-install trino-cli trino-ui mode-query mode-pipeline trino-check trino-explore trino-tag-check demo-task3 starrocks-chart starrocks-render starrocks-install starrocks-sql
+.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks ghcr-prune k8s-up k8s-demo airflow-viewer airflow-viewer-check minio-ui history-ui freeze freeze-check evidence evidence-export spark-operator-chart demo-task2 demo-pipeline demo-check trino-chart trino-install trino-cli trino-ui mode-query mode-pipeline trino-check trino-explore trino-tag-check demo-task3 starrocks-chart starrocks-render starrocks-install starrocks-sql starrocks-up starrocks-down mode-gold
 
 help:          ## list targets and variables
 	@awk -F':.*## ' '/^[a-zA-Z0-9_-]+:.*## /{printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -186,17 +186,33 @@ trino-explore: ## Task 3 step 3.5: plans (partition pruning), metadata tables, t
 	mkdir -p $(dir $(EVIDENCE_TRINO))
 	kubectl -n trino exec deploy/trino-coordinator -- trino --catalog lake --execute "$$(cat sql/trino/explore.sql)" > $(EVIDENCE_TRINO)
 	@echo "saved $$(wc -l < $(EVIDENCE_TRINO)) lines to $(EVIDENCE_TRINO)"
+starrocks-down: ## Task 4: StarRocks -> 0 (operator first, else it scales FE/BE back to the spec); PVCs + metadata stay
+	-@kubectl -n starrocks scale deploy/kube-starrocks-operator --replicas=0 2>/dev/null
+	-@kubectl -n starrocks scale statefulset/starrocks-be statefulset/starrocks-fe --replicas=0 2>/dev/null
+starrocks-up:  ## Task 4: StarRocks -> 1: operator up, it restores FE/BE to the spec (1 each); waits until both are Ready
+	kubectl -n starrocks scale deploy/kube-starrocks-operator --replicas=1
+	@for p in starrocks-fe-0 starrocks-be-0; do for i in $$(seq 1 120); do kubectl -n starrocks get pod $$p >/dev/null 2>&1 && break; sleep 5; done; done
+	kubectl -n starrocks wait --for=condition=Ready pod/starrocks-fe-0 pod/starrocks-be-0 --timeout=900s
+mode-gold:     ## Task 4 (D15): gold mode. Refuses while a run is active; Trino + History Server -> 0; StarRocks -> 1 (Airflow stays up; Spark cannot start)
+	@! kubectl -n spark-jobs get sparkapplications --no-headers -o custom-columns=S:.status.applicationState.state | grep -vE '^(COMPLETED|FAILED)$$' | grep -q . || \
+	  { echo "refusing: a SparkApplication is not finished; wait for it"; exit 1; }
+	@! $(AF) airflow dags list-runs chatbot_bronze -o plain 2>/dev/null | grep -qE " (running|queued) " || { echo "refusing: a chatbot_bronze run is running or queued; wait for it (E64)"; exit 1; }
+	-kubectl -n trino scale deploy/trino-coordinator --replicas=0
+	kubectl -n spark-jobs scale deploy/spark-history --replicas=0
+	$(MAKE) --no-print-directory starrocks-up
 mode-query:    ## Task 3 (D12): query mode. Refuses while a run is active; Airflow scheduler/dag-processor/triggerer + History Server -> 0; Trino -> 1
 	@! kubectl -n spark-jobs get sparkapplications --no-headers -o custom-columns=S:.status.applicationState.state | grep -vE '^(COMPLETED|FAILED)$$' | grep -q . || \
 	  { echo "refusing: a SparkApplication is not finished; wait for it"; exit 1; }
 	@! $(AF) airflow dags list-runs chatbot_bronze -o plain 2>/dev/null | grep -qE " (running|queued) " || { echo "refusing: a chatbot_bronze run is running or queued; wait for it (E64)"; exit 1; }
 	kubectl -n airflow scale $(DEMO_STOP) --replicas=0
 	kubectl -n spark-jobs scale deploy/spark-history --replicas=0
+	$(MAKE) --no-print-directory starrocks-down
 	@if kubectl -n trino get deploy/trino-coordinator >/dev/null 2>&1; then \
 	  kubectl -n trino scale deploy/trino-coordinator --replicas=1 && kubectl -n trino rollout status deploy/trino-coordinator --timeout=600s; \
 	else echo "Trino not installed yet: make trino-install"; fi
-mode-pipeline: ## Task 3 (D12): pipeline mode. Trino -> 0, then Airflow scheduler/dag-processor/triggerer -> 1 (Spark can run)
+mode-pipeline: ## Task 3 (D12): pipeline mode. Trino + StarRocks -> 0, then Airflow scheduler/dag-processor/triggerer -> 1 (Spark can run)
 	-kubectl -n trino scale deploy/trino-coordinator --replicas=0
+	$(MAKE) --no-print-directory starrocks-down
 	$(MAKE) --no-print-directory demo-pipeline
 airflow-install: airflow-chart deploy-guard ## Task 2: helm upgrade --install Airflow 3.3.2 (chart 1.22.0); image = AIRFLOW_IMAGE_REF in images.env
 	@test -n "$(AIRFLOW_IMAGE_REF)" || { echo "AIRFLOW_IMAGE_REF missing in infra/k8s/images.env (bump it after the images run)"; exit 1; }

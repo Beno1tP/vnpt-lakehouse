@@ -14,6 +14,12 @@ Time spent:
 
 ---
 
+### 2026-11-10 — 4.1 done: StarRocks on Minikube + sizing A + modes
+Did (Bee): PR #83 → `make k8s-up` (STARROCKS_ROOT_PASSWORD generated, namespace + Secret created) → `make starrocks-render` (PASS: operator v1.11.8, FE/BE 3.5.21 by digest, also the init job's image; no `4.1-latest` → R10 closed) → `make starrocks-install` (rev 1, 16:45:40 ICT = 09:45:40 UTC) → `SHOW FRONTENDS/BACKENDS` → measure after 16 min.
+Observed: FE LEADER alive; BE `CONNECTING` at first (registered before its first heartbeat), alive 3 min later; 87 tablets before any table (system `_statistics_` tables, created with 1 replica: proves `default_replication_num = 1`); measurements in `02_config.md` §4: real margin ≈ 125 Mi.
+Decided (Bee): option A, BE request 1 Gi (D15 accepted with that change).
+Prepared (Claude, branch `task4/4.1-sizing-modes`): values BE request 1 Gi; make `starrocks-down` (operator → 0 first, then FE/BE StatefulSets → 0; PVCs stay), `starrocks-up`, `mode-gold` (guards as mode-query, Trino + History → 0, StarRocks up; Airflow stays); `mode-pipeline` and `mode-query` now also scale StarRocks to 0. Predicted: tests pass, recipes `bash -n` OK (extracted).
+
 ### 2026-11-10 — 4.0b done + 4.1 prepared (StarRocks on Minikube)
 Did (Bee): `expected_gold.py` → PASS, seeds 36/36/57/48/48 rows (= Claude's prediction); `make all` 100 passed; PR #82.
 Prepared (Claude, branch `task4/4.1-starrocks`): namespace `starrocks`; `STARROCKS_ROOT_PASSWORD` generated once into `secrets.env` → Secret `starrocks-root` (key `password`, the chart's `initPassword.passwordSecret`); `infra/helm/starrocks/values-local.yaml` (operator watches only `starrocks`, 128/256 Mi; FE 1/1.5 Gi, `-Xmx1024m`, `default_replication_num = 1`; BE 1.5/2 Gi, `mem_limit = 1600M`, storage 5 Gi; images pinned in full because spec values replace `componentValues`; time zone UTC); make `starrocks-chart` (GitHub asset + SHA-256), `starrocks-render` (fails on `4.1-latest` or a missing FE/BE image), `starrocks-install` (refuses while Spark runs, Trino → 0, waits for FE/BE pods: helm only waits for the operator), `starrocks-sql` (password via stdin, never in args). Read from the chart source v1.11.8: init job = `SET PASSWORD` with the mysql client of the FE image, no `set -x`, password from env. Predicted: lint + tests pass, recipes `bash -n` OK (extracted, not `make -n`, E60).
