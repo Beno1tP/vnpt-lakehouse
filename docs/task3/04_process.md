@@ -14,6 +14,15 @@ Time spent:
 
 ---
 
+### 2026-11-10 — 3.5 prepared: make trino-explore
+Prepared (Claude): `sql/trino/explore.sql` (session zone Asia/Ho_Chi_Minh; EXPLAIN ANALYZE without/with `event_date` filter; `$snapshots`, `$partitions`, `$files` of silver.chat_message; bronze.chatlog `$metadata_log_entries` + `$snapshots` to compare with Spark's `make catalog CMD=info`; time travel `FOR VERSION AS OF 'task2_v1'`; `$refs`; `SHOW STATS`), make `trino-explore` (query mode only; output saved outside Git), `07_explain_plans.md` rewritten to these sections. Adapted from the template: Spark comparison on Bronze (catalog_tool allows only Bronze names, no code change); MERGE demo kept as knowledge (would need new Spark write code). Predicted: recipe `bash -n` OK (my local run).
+Next (Bee): `make catalog CMD=info TABLE=bronze.chatlog` (pipeline mode) → `make mode-query` → `make trino-explore` → time travel by id + ANALYZE → `make mode-pipeline`.
+
+### 2026-11-10 — 3.4 done: Trino = pandas = Spark on every Silver number
+Did (Bee): PR #68 merged → `make mode-query` → `make trino-check` → `make mode-pipeline`.
+Observed: `191/191 values equal (Trino = pandas = Spark-validated), 18 days`; final_intent per day and in total (34 · 107 · 10,588) equal; the `CROSS JOIN UNNEST` unpivot ran first time; cluster back in pipeline mode.
+Learned: three independent computations agree: pandas on the Excel files (3.0), Spark's validator on Silver (3.2), Trino SQL on the same Iceberg files (3.4). Plan goal met. Next: 3.5 explore + explain.
+
 ### 2026-11-10 — 3.4 prepared: make trino-check
 Prepared (Claude, branch `task3/3.4-trino-check`): `sql/trino/reconcile.sql` (every Silver number per `event_date` in Trino SQL, unpivoted with `CROSS JOIN UNNEST` into day,key,value; final_intent as `final_intent.<intent>`), `tools/trino_check.py` (stdlib; per-day vs `silver_daily.json`, totals vs `silver.json`, missing or unexpected keys fail), make `trino-check` (refuses unless Trino has a ready replica; runs the SQL in the coordinator with `--output-format CSV_UNQUOTED`, pipes into the comparer; the Makefile's bash `-o pipefail` makes a Trino error fail the target); 3 unit tests. Predicted: lint clean, tests pass (my local run).
 Next (Bee): `make all` → PR → merge → `make mode-query` → `make trino-check` → `make mode-pipeline`.

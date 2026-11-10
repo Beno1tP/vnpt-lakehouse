@@ -20,6 +20,7 @@ AIRFLOW_CHART_SHA512 = 59a6b157949f37e96acd7351f795fd4347b2c4ac7f21d421542088b01
 SPARK_OPERATOR_CHART        = $(HOME)/.cache/vnpt-lake/charts/spark-operator-2.2.1.tgz
 # Trino chart 1.44.0 (appVersion 483): SHA-256 = GitHub asset digest = chart index digest (checked 2026-11-10)
 TRINO_CHART        = $(HOME)/.cache/vnpt-lake/charts/trino-1.44.0.tgz
+EVIDENCE_TRINO    ?= $(HOME)/data/vnpt-lab/evidence/task3-explore-$(shell date -u +%Y%m%dT%H%MZ).txt
 TRINO_CHART_SHA256 = ce3c2f6525d896513c5e20cac19a1260bf108f1d17f65188be45ccea9fb36caa
 SPARK_OPERATOR_CHART_SHA256 = 1c47c850c8d6ecc7eda4ede03e7932aa59f23fa6d186a10da3c8359df3671cf1
 include infra/k8s/images.env
@@ -43,7 +44,7 @@ SPARK_SUBMIT = $(COMPOSE) exec -T spark /opt/spark/bin/spark-submit --master $(S
 SPARK_SQL    = $(COMPOSE) exec -T spark /opt/spark/bin/spark-sql --master local[1]
 NOISE        = ^Time taken|^:: loading settings
 
-.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks ghcr-prune k8s-up k8s-demo airflow-viewer airflow-viewer-check minio-ui history-ui freeze freeze-check evidence evidence-export spark-operator-chart demo-task2 demo-pipeline demo-check trino-chart trino-install trino-cli trino-ui mode-query mode-pipeline trino-check
+.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks ghcr-prune k8s-up k8s-demo airflow-viewer airflow-viewer-check minio-ui history-ui freeze freeze-check evidence evidence-export spark-operator-chart demo-task2 demo-pipeline demo-check trino-chart trino-install trino-cli trino-ui mode-query mode-pipeline trino-check trino-explore
 
 help:          ## list targets and variables
 	@awk -F':.*## ' '/^[a-zA-Z0-9_-]+:.*## /{printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -152,6 +153,12 @@ trino-check:   ## Task 3 step 3.4: every Silver number per day computed by Trino
 	  { echo "Trino is not running: make mode-query"; exit 1; }
 	kubectl -n trino exec deploy/trino-coordinator -- trino --catalog lake --output-format CSV_UNQUOTED \
 	  --execute "$$(cat sql/trino/reconcile.sql)" | python3 -I tools/trino_check.py
+trino-explore: ## Task 3 step 3.5: plans (partition pruning), metadata tables, time travel, stats; output to EVIDENCE_TRINO (query mode)
+	@r=$$(kubectl -n trino get deploy/trino-coordinator -o jsonpath='{.status.readyReplicas}' 2>/dev/null); test "$${r:-0}" -ge 1 || \
+	  { echo "Trino is not running: make mode-query"; exit 1; }
+	mkdir -p $(dir $(EVIDENCE_TRINO))
+	kubectl -n trino exec deploy/trino-coordinator -- trino --catalog lake --execute "$$(cat sql/trino/explore.sql)" > $(EVIDENCE_TRINO)
+	@echo "saved $$(wc -l < $(EVIDENCE_TRINO)) lines to $(EVIDENCE_TRINO)"
 mode-query:    ## Task 3 (D12): query mode. Refuses while a run is active; Airflow scheduler/dag-processor/triggerer + History Server -> 0; Trino -> 1
 	@! kubectl -n spark-jobs get sparkapplications --no-headers -o custom-columns=S:.status.applicationState.state | grep -vE '^(COMPLETED|FAILED)$$' | grep -q . || \
 	  { echo "refusing: a SparkApplication is not finished; wait for it"; exit 1; }

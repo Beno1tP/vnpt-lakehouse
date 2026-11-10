@@ -1,13 +1,16 @@
 # Task 3 — Explain plans and Trino exploration (step 3.5)
 
-Run in query mode (`make mode-query`), from `sql/trino/explore.sql`. Paste the output under each heading, then explain it in 2–3 lines (what the number means, why).
+Run order (times: UTC with ICT = UTC+7):
+1. Pipeline mode: `make catalog CMD=info TABLE=bronze.chatlog` (Spark reports the table's current `metadata.json`).
+2. `make mode-query` → `make trino-explore` (runs `sql/trino/explore.sql`, saves the output to `~/data/vnpt-lab/evidence/task3-explore-<UTC>.txt`) → the two single statements below (time travel by ID, `ANALYZE`) → `make mode-pipeline`.
+
+Each section: the query, the result, 2–3 lines of explanation. Counts and metadata only.
 
 ## 1. Partition pruning
 
 ```sql
 EXPLAIN ANALYZE SELECT final_intent, count(*) FROM lake.silver.user_message GROUP BY 1;
-EXPLAIN ANALYZE SELECT final_intent, count(*) FROM lake.silver.user_message
-WHERE event_date = DATE '2024-07-24' GROUP BY 1;
+EXPLAIN ANALYZE SELECT final_intent, count(*) FROM lake.silver.user_message WHERE event_date = DATE '2024-07-24' GROUP BY 1;
 ```
 
 | Query | Splits | Input rows | Input bytes | Wall time |
@@ -17,34 +20,48 @@ WHERE event_date = DATE '2024-07-24' GROUP BY 1;
 
 Explain: the filter on the partition column removes whole files at planning time (manifest partition values), before any worker reads Parquet.
 
-## 2. Metadata tables and the same snapshots as Spark
+## 2. Metadata tables (`$snapshots`, `$partitions`, `$files`)
+
+| Item | Value |
+|---|---|
+| snapshots of silver.chat_message (first / last commit, ICT) | |
+| first snapshot id | |
+| partitions × files | |
+| data files / rows / bytes | |
+
+Explain: every Silver run = one Iceberg commit = one snapshot (two backfill passes + hand runs), visible without touching the data files.
+
+## 3. One table, two engines
+
+| Engine | Current `metadata.json` of bronze.chatlog | Snapshots |
+|---|---|---|
+| Spark (`make catalog CMD=info TABLE=bronze.chatlog`) | | |
+| Trino (`"chatlog$metadata_log_entries"`) | | |
+
+Explain: HMS stores one pointer per table (`metadata_location`); both engines resolve it to the same file, so they see the same snapshot.
+
+## 4. Time travel
 
 ```sql
-SELECT snapshot_id, committed_at, operation, summary['added-records'] FROM lake.silver."chat_message$snapshots" ORDER BY committed_at;
-SELECT partition, record_count, file_count FROM lake.silver."chat_message$partitions";
-SELECT file_path, record_count, file_size_in_bytes FROM lake.silver."chat_message$files";
+SELECT count(*) FROM lake.bronze.chatlog FOR VERSION AS OF 'task2_v1';            -- in explore.sql: expect 21224
+SELECT count(*) FROM lake.silver.chat_message FOR VERSION AS OF <first_snapshot_id>;  -- run by hand with the id from §2
 ```
-Compare with Spark: `SELECT snapshot_id, operation FROM lake.silver.chat_message.snapshots`.
 
-## 3. Time travel
+| Version | Rows | Meaning |
+|---|---|---|
+| tag `task2_v1` (bronze.chatlog) | | |
+| first Silver snapshot | | |
+| current Silver | 21,224 | |
+
+## 5. Statistics and read-only
 
 ```sql
-SELECT count(*) FROM lake.silver.chat_message FOR VERSION AS OF <first snapshot_id>;
+SHOW STATS FOR lake.silver.chat_message;   -- in explore.sql
+ANALYZE lake.silver.chat_message;          -- by hand: expected Access Denied (iceberg.security=read_only, D11)
 ```
 
-## 4. Statistics and read-only
+Explain: row count, null fraction and min/max come from Iceberg manifests without ANALYZE; distinct-value counts are what ANALYZE would add (it writes a Puffin file + new metadata, so it needs write access, which Trino deliberately lacks).
 
-```sql
-SHOW STATS FOR lake.silver.chat_message;
-ANALYZE lake.silver.chat_message;   -- expected: Access Denied (iceberg.security=read_only, D11)
-```
+## 6. MERGE (knowledge only, not run)
 
-## 5. MERGE demo (Spark, scratch table only — knowledge, not the pipeline: D7)
-
-```sql
-CREATE TABLE lake.scratch.chat_message_merge AS SELECT * FROM lake.silver.chat_message WHERE event_date = DATE '2024-07-02';
-MERGE INTO lake.scratch.chat_message_merge t USING (...) s ON t.id = s.id
-WHEN MATCHED AND s._ingested_at > t._ingested_at THEN UPDATE SET *
-WHEN NOT MATCHED THEN INSERT *;
-DROP TABLE lake.scratch.chat_message_merge PURGE;
-```
+D7 builds Silver with `overwritePartitions()` because one export = one event day. MERGE (`MERGE INTO t USING s ON t.id = s.id WHEN MATCHED … UPDATE … WHEN NOT MATCHED … INSERT`) is the tool for incremental loads (CDC, late events); it needs a deduplicated source (else `MERGE cardinality violation`) and, with copy-on-write, rewrites whole files per matched partition. A demo would need a Spark write job on a scratch table (new job code + image); optional, not part of the pipeline.

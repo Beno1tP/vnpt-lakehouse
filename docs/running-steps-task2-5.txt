@@ -120,12 +120,16 @@ changed) -> make k8s-up -> run -> verify. New errors from E56.
     make trino-cli                                 (SHOW SCHEMAS FROM lake; SELECT count(*) FROM silver.user_message;)
     make trino-ui                                  -> http://localhost:8081
     make mode-pipeline                             (back: Trino 0, Airflow up)
-3.4 Reconcile                                                                   [PLANNED: branch task3/3.4-trino-check]
+3.4 Reconcile                                                                   [DONE 2026-11-10: PR #68, 191/191]
     make mode-query
     make trino-check                               (every Silver number per day: Trino = pandas; N/N values equal)
     make mode-pipeline
 3.5 Explore + explain                                                           [PLANNED]
-    make trino-cli < sql/trino/explore.sql        (snapshots, time travel, EXPLAIN ANALYZE)
+    make catalog CMD=info TABLE=bronze.chatlog     (pipeline mode: Spark reports metadata.json + snapshots)
+    make mode-query
+    make trino-explore                             (EXPLAIN ANALYZE, metadata tables, tag time travel, stats; saved to evidence)
+    trino: time travel to the first Silver snapshot by id; ANALYZE -> Access Denied
+    make mode-pipeline
 3.7 Close                                                                       [PLANNED]
     make evidence ; decide from-zero option (a) or (b) (docs/task3/03_plan.md section I)
     make mode-pipeline
