@@ -130,7 +130,7 @@ changed) -> make k8s-up -> run -> verify. New errors from E56.
     make trino-explore                             (EXPLAIN ANALYZE, metadata tables, tag time travel, stats; saved to evidence)
     trino: time travel to the first Silver snapshot by id; ANALYZE -> Access Denied
     make mode-pipeline
-3.6 Trino reconcile in Airflow                                                  [PLANNED: branch task3/3.6-trino-in-airflow]
+3.6 Trino reconcile in Airflow                                                  [DONE 2026-11-10: PRs #72, #73; 191/191]
     after the bump + make k8s-up (pipeline mode):
     kubectl -n airflow exec deploy/airflow-api-server -c api-server -- airflow tasks clear chatbot_bronze --start-date 2024-07-09 --end-date 2024-07-09 --yes
     -> validate_silver updates asset lake_silver -> DAG trino_reconcile runs by itself:

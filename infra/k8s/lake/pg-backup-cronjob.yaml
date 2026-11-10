@@ -9,9 +9,9 @@ metadata:
   name: pg-backup
   namespace: lake
 spec:
-  schedule: "0 1 * * *"                    # 01:00 UTC daily
+  schedule: "30 6 * * *"                   # 06:30 UTC = 13:30 ICT daily (E66): after the 07:00 ICT load, laptop usually awake
   timeZone: Etc/UTC
-  startingDeadlineSeconds: 43200           # laptop off at 01:00 -> still runs if it is back within 12 h
+  startingDeadlineSeconds: 43200           # a missed slot still runs within 12 h; make k8s-up nudges the controller (E66)
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3

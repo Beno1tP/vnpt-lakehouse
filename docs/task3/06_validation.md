@@ -30,6 +30,7 @@ Generated 2026-11-09 by `.venv/bin/python tools/expected_silver.py` (Bee): `PASS
 | 3.2 `event_ts` type in all 3 tables | `timestamp_ntz` (D8 end to end) | — | `timestamp_ntz` | ✅ |
 | 3.3 row counts read by Trino (17:51 UTC = 00:51 ICT, 11-10) | bronze.chatlog 21,224 · chat_message 21,224 · nlu_prediction 10,729 · user_message 10,613 | ✅ same | pandas totals | ✅ |
 | 3.3 `event_ts` type seen by Trino | — | `timestamp(6)` (no zone, D8) | without zone | ✅ |
+| 3.6 `trino_reconcile` (Airflow, asset-triggered after `validate_silver` 07-09; 03:58:11–03:58:37 UTC = 10:58 ICT, 11-10) | — | **191/191** in task `reconcile`; `wait_no_spark` 0.3 s, `trino_up` 15.4 s, `reconcile` 2.6 s, `trino_down` 5.3 s → Trino 0/0 | `silver_daily.json`, `silver.json` | ✅ |
 | 3.4 `make trino-check`: every Silver number per day + totals (11-10) | (validated 28/28 × 18) | **191/191 equal** (18 days × 10 keys + 11 total keys) | `silver_daily.json`, `silver.json` | ✅ |
 | 3.5 explore (`07_explain_plans.md`): pruning 18 → 1 split, same metadata.json in Spark and Trino, tag + snapshot time travel, ANALYZE denied | — | ✅ | as designed | ✅ |
 | 3.2 DAG backfill pass 1 + 2, all 18 data days | `validate_silver 28/28` × 18, 0 failed runs, scheduler 0 restarts | — | 28/28 every day | ✅ |
