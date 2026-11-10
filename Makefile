@@ -391,6 +391,9 @@ k8s-up: deploy-guard ## Task 2: whole stack, idempotent (also from zero after mi
 	$(MAKE) --no-print-directory spark-operator-chart
 	helm upgrade --install spark-operator $(SPARK_OPERATOR_CHART) -n spark-operator \
 	  -f infra/helm/spark-operator/values-local.yaml --wait --timeout 10m
+	@apps=$$(kubectl -n spark-jobs get sparkapplications --no-headers -o custom-columns=N:.metadata.name,S:.status.applicationState.state 2>/dev/null | awk '$$2=="COMPLETED"||$$2=="FAILED"{print $$1}'); \
+	  for a in $$apps; do kubectl -n spark-jobs annotate sparkapplication $$a vnpt-lake/nudge="$$(date -u +%FT%TZ)" --overwrite >/dev/null; done; \
+	  echo "nudged $$(echo $$apps | wc -w) finished SparkApplications (E68: the operator re-checks their TTL after a sleep)"
 	$(MAKE) --no-print-directory airflow-install
 	$(MAKE) --no-print-directory airflow-admin
 	kubectl get pods -A --no-headers | awk '{print $$1, $$2, $$4}' | column -t

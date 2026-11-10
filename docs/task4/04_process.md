@@ -14,6 +14,12 @@ Time spent:
 
 ---
 
+### 2026-11-10 — E67 proven + E68 (Spark TTL late after sleep)
+Did (Bee): PR #79 → images run 42786011222 → bump PR #80 (airflow `95cb4511…` only; spark-job stays `3da7f249…`: no file it copies changed, the new digest only differs by build timestamps) → `make k8s-up` (git 65e23b1, Airflow rev 16) → `make backfill FROM=2024-07-24 TO=2024-07-25 REPROCESS=completed` (09:06–09:10 UTC = 16:06–16:10 ICT) → nudge of `catalog-081805` (Bee approved).
+Observed: 2 backfill runs success; 2 `trino_reconcile` runs success (the first waited `1; 1` → `0; 0`), both 210/210, `verdict` passed, no ❌ → E67 fixed. `catalog-081805` 54 min past its TTL → E68; annotate → deleted in seconds. `make dag-runs | head` → `Error 141` = SIGPIPE from `head` with pipefail (harmless).
+Learned: assets + a run-state sensor give "check once when the pipeline is idle"; the run state follows the leaves. Laptop sleep delays every in-process timer (E64, E66, E68).
+Prepared (Claude, branch `task4/e68-ttl-nudge`): `make k8s-up` nudges finished SparkApplications. Process slip (E60 again): to see the expanded recipe Claude ran `make -n k8s-up`, which executes the `$(MAKE)` lines; here those lines only call sub-makes, which inherit `-n` and print, so nothing ran (evidence: `infra/k8s/secrets/*` mtime still 16:01:23 ICT = Bee's k8s-up). Then checked properly: recipe extracted, `bash -n` OK, awk filter tested on sample lines. Next (Bee): PR → merge (Makefile only: no images) → `make k8s-up` (prints `nudged N finished SparkApplications`; expired ones disappear) → then 4.0b `docs/metrics.md`.
+
 ### 2026-11-10 — 4.0a deployed: step in Silver (18 days) + E67
 Did (Bee): PR #77 (CI green, `make all` 95 passed) → images run 42778808527 (spark-job `3da7f249…`, airflow `6de4988e…`) → bump PR → `make k8s-up` (git b525a70; Airflow rev 15, spark-operator rev 14) → `make backfill FROM=2024-07-02 TO=2024-07-25 REPROCESS=completed` (08:08–08:43 UTC = 15:08–15:43 ICT).
 Observed: 24 backfill runs `success`. `trino_reconcile`: 17 runs failed `reconcile` (FAIL keys `step` + `'None'`, 18 → 2), the run after the last day 08:43:05 UTC `210/210 values equal`; `list-runs` shows the failed runs as `success` → **E67**. Side notes: k8s-up reported StatefulSets/plain Secrets `configured` as in Task 2 (`docs/task2/04_process.md` 10-28); Telegram showed run `…08:33:38…_jfTLngWZ` twice (15:33 and 15:35 ICT) while the logs have a separate run 08:35:28: not explained yet (check the 15:35 message in Telegram).
