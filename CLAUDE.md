@@ -8,7 +8,7 @@
 - Bee starts in **Windows cmd** (not PowerShell), then `wsl` into Ubuntu-22.04 for all project commands. Verify user/home with `whoami; pwd` (observed `quang`, `/home/quang`; Bee calls it "user").
 
 ## Lab scope and data
-- Onboarding lab only. Tasks 1–5 are standalone mini-projects on the same data (1 Spark→Iceberg on MinIO, 2 K8s+Airflow, 3 Trino, 4 StarRocks/dbt Gold, 5 Superset). Current: **Task 3** (Task 1 done: tags task1-v1-lab, task1-v2-standard, task1-v3-operable; **Task 2 done: tag task2-v1, summary docs/task2/README.md**; `infra/compose/` stays unchanged and must keep running).
+- Onboarding lab only. Tasks 1–5 are standalone mini-projects on the same data (1 Spark→Iceberg on MinIO, 2 K8s+Airflow, 3 Trino, 4 StarRocks/dbt Gold, 5 Superset). Current: **Task 4** (Task 1 done: tags task1-v1-lab, task1-v2-standard, task1-v3-operable; **Task 2 done: tag task2-v1, summary docs/task2/README.md**; **Task 3 done: tag task3-v1, summary docs/task3/README.md**; `infra/compose/` stays unchanged and must keep running).
 - Data = **trial/imaginary chatbot logs for freshers, not real people**. Still keep it on the laptop: no uploads, no row contents in alerts/Git/public logs.
 - Raw files: `~/data/vnpt-lab/` (outside the repo).
 

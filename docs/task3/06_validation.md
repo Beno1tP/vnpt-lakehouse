@@ -23,6 +23,10 @@ Generated 2026-11-09 by `.venv/bin/python tools/expected_silver.py` (Bee): `PASS
 
 | Check | Spark (validator) | Trino (`make trino-check`) | Expected | Status |
 |---|---|---|---|---|
+| 3.7 freeze `task3_v1` (04:20 UTC = 11:20 ICT, 11-10): 5 tables, retain 365 d | bronze.chatlog 21,224 · bot_predict 10,729 · chat_message 21,224 · nlu_prediction 10,729 · user_message 10,613 | same 5 counts `FOR VERSION AS OF 'task3_v1'` (`demo-check DEMO_TASK=3`) | `bronze_daily.json`, `silver.json` totals | ✅ |
+| 3.7 `demo-check DEMO_TASK=3` (demo-task3 profile) | — | 6 workloads ready, airflow / minio-console / spark-history / trino HTTP 200, 5 tags PASS → ALL PASS | all pass | ✅ |
+| 3.7 evidence export | — | copied 417 of 417 (airflow-logs 411, backup 6) + 195 Spark event logs, 120 MB | copied = manifest | ✅ |
+| 3.7 `pg-backup` first 06:30 UTC slot (E66 fix) | — | `pg-backup-29904870` 06:30:00 → 06:30:12 UTC (13:30 ICT), `backup ts=20261110T063008Z` | runs on the new slot | ✅ |
 | 3.1 summary 2024-07-09 (job print, 11-09) | identical | — | `silver_daily.json` | ✅ |
 | 3.1 summary 2024-07-25 (job print, 11-09) | identical (116 without chat row) | — | `silver_daily.json` | ✅ |
 | 3.2 `validate_silver` 2024-07-09 by hand (16:02 UTC = 23:02 ICT) | 28/28 (9 counts, final_intent 6/18/19, 12 rules, 6 types) | — | `silver_daily.json`, `silver_rules.sql` | ✅ |

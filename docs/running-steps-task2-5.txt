@@ -137,15 +137,22 @@ changed) -> make k8s-up -> run -> verify. New errors from E56.
        wait_no_spark -> trino_up -> reconcile (191/191) -> trino_down (Trino back to 0)
     make airflow-ui  (Assets view; trino_reconcile Grid, reconcile log ends with 191/191)
 
-3.7 Close                                                                       [IN PROGRESS: branch task3/3.7-freeze]
+3.7 Close                                                                       [DONE 2026-11-10, summary docs/task3/README.md]
     Decided 11-10: from-zero deferred to after Task 5; full freeze; README then tag task3-v1
     PR -> images run (catalog_tool) -> bump spark-job -> make k8s-up
-    make freeze TASK=3                             (pipeline mode: tag task3_v1 on 2 Bronze + 3 Silver tables, verify rows)
-    make evidence TASK=3 ; make evidence-export TASK=3
-    make demo-task3 ; make demo-check DEMO_TASK=3  (tag checked through Trino)
-    kubectl describe node minikube | grep -A8 "Allocated resources"     (measure the profile)
+    make freeze TASK=3                             -> 5 x PASS, tag task3_v1 (04:20 UTC = 11:20 ICT)
+    make evidence TASK=3 ; make evidence-export TASK=3   -> 264 lines; copied 417 of 417, 195 event logs, 120 MB
+    D=~/data/vnpt-lab/evidence/task3-$(date -u +%Y%m%d)
+    kubectl -n airflow exec deploy/airflow-api-server -- airflow dags list-runs trino_reconcile -o plain > $D/dag-runs-trino_reconcile.txt
+    make demo-task3 ; make demo-check DEMO_TASK=3  -> ALL PASS (tag checked through Trino)
+    kubectl describe node minikube | grep -A8 "Allocated resources"     -> 4,964 Mi (68 %)
     make mode-pipeline
-    docs/task3/README.md -> git tag task3-v1 && git push origin task3-v1
+    Clean-up: kubectl get pods -A -o jsonpath=... imageID | sort | uniq -c   (what still uses an image)
+              minikube ssh -- sudo crictl rmi <old ids>   -> 5 removed, /var 19 G unchanged
+              make ghcr-prune ; gh auth refresh -h github.com -s read:packages,delete:packages ;
+              make ghcr-prune CONFIRM=yes ; gh auth refresh -h github.com -r delete:packages   -> 10 deleted
+    kubectl -n lake get jobs | tail -4             -> pg-backup-29904870 Complete (06:30 UTC = 13:30 ICT slot, E66)
+    docs PR -> git tag task3-v1 && git push origin task3-v1
 
 =====================================================================================================
 D. TASK 4 - StarRocks Gold with dbt (docs/task4/03_plan.md)
