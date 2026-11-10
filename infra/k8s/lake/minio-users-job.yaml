@@ -52,3 +52,4 @@ spec:
               - { key: lake-backup.json, path: lake-backup.json }
               - { key: lake-demo-viewer.json, path: lake-demo-viewer.json }
               - { key: lake-trino-read.json, path: lake-trino-read.json }
+              - { key: lake-starrocks-read.json, path: lake-starrocks-read.json }   # Task 4 (E70: every policy file must be listed here)

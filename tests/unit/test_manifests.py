@@ -121,3 +121,22 @@ def test_trino_values_single_node_read_only_no_keys():
     assert lake["s3.aws-access-key"] == "${ENV:TRINO_S3_ACCESS_KEY}" and lake["s3.aws-secret-key"].startswith("${ENV:")
     res = values["coordinator"]["resources"]
     assert res["requests"]["memory"] == res["limits"]["memory"] == "2Gi"  # Guaranteed QoS, 02_config.md §2
+
+
+def test_minio_users_job_mounts_every_policy_file():
+    """E70: the Job mounts policies through an explicit items list; a policy file missing there is silently absent in
+    /policies, so attaching it fails the Job. Every policy file must be in the ConfigMap AND mounted."""
+    folder = ROOT / "infra/k8s/lake/minio-users"
+    files = {p.name for p in folder.glob("*.json")}
+    job = yaml.safe_load((ROOT / "infra/k8s/lake/minio-users-job.yaml").read_text())
+    vols = {v["name"]: v for v in job["spec"]["template"]["spec"]["volumes"]}
+    mounted = {i["key"] for i in vols["policies"]["configMap"]["items"]}
+    kust = (ROOT / "infra/k8s/kustomization.yaml").read_text()
+    assert mounted == files
+    assert all(f"lake/minio-users/{f}" in kust for f in files)
+    used = {
+        line.split()[3]
+        for line in (folder / "minio_users.sh").read_text().splitlines()
+        if line.startswith("ensure_user ")
+    }
+    assert used == {f.removesuffix(".json") for f in files}  # every policy is attached to a user, and vice versa
