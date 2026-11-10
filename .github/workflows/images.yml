@@ -5,7 +5,7 @@ name: images
 on:
   push:
     branches: [main]
-    paths: ["docker/**", "jobs/**", "dags/**", "plugins/**", "tests/expected/**", "tests/sql/**", ".github/workflows/images.yml"]
+    paths: ["docker/**", "jobs/**", "dags/**", "plugins/**", "tests/expected/**", "tests/sql/**", "sql/**", ".github/workflows/images.yml"]
   workflow_dispatch:
 permissions:
   contents: read
@@ -133,7 +133,10 @@ jobs:
         with:
           context: dags
           file: docker/airflow/Dockerfile
-          build-contexts: plugins=plugins
+          build-contexts: |
+            plugins=plugins
+            expected=tests/expected
+            trino_sql=sql/trino
           push: true
           provenance: false
           tags: ${{ env.REGISTRY }}/vnpt-lake-airflow:${{ github.sha }}

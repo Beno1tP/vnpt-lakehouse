@@ -6,3 +6,6 @@ ARG BASE_IMAGE=apache/airflow:3.3.2-python3.12@sha256:9df9c8be4096b9cc626bd7cb1f
 FROM ${BASE_IMAGE}
 COPY --chown=airflow:0 . /opt/airflow/dags/
 COPY --from=plugins --chown=airflow:0 . /opt/airflow/plugins/
+# Task 3.6 (DAG trino_reconcile): the reconcile SQL + the pandas expectations, read-only resources
+COPY --from=expected --chown=airflow:0 silver.json silver_daily.json /opt/airflow/resources/expected/
+COPY --from=trino_sql --chown=airflow:0 reconcile.sql /opt/airflow/resources/sql/

@@ -1,0 +1,30 @@
+# Task 3 step 3.6: the DAG trino_reconcile (LocalExecutor tasks run in the scheduler pod, service account
+# airflow-scheduler) may scale the Trino coordinator and read its status, nothing else in namespace trino.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: airflow-trino-scaler
+  namespace: trino
+rules:
+  - apiGroups: [apps]
+    resources: [deployments]
+    resourceNames: [trino-coordinator]
+    verbs: [get]
+  - apiGroups: [apps]
+    resources: [deployments/scale]
+    resourceNames: [trino-coordinator]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: airflow-trino-scaler
+  namespace: trino
+subjects:
+  - kind: ServiceAccount
+    name: airflow-scheduler
+    namespace: airflow
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: airflow-trino-scaler

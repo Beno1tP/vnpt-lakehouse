@@ -12,6 +12,7 @@ resources:
   - lake/pg-backup-cronjob.yaml
   - spark-jobs/spark-events-pvc.yaml
   - spark-jobs/spark-history.yaml
+  - trino-rbac-airflow.yaml
 images:                                # GHCR digests (2.0c); keep equal to infra/k8s/images.env (checked by CI)
   - name: ghcr.io/beno1tp/vnpt-lake-hms
     digest: sha256:9446f7d1e0ab211f1fe32b0f8def318699e6afa40a5e1fcebfa3d07d134b91ff

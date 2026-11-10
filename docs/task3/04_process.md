@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-11-10 — 3.6 prepared: Trino reconcile orchestrated by Airflow
+Decided (Bee): do 3.6 now, before the freeze ("Airflow checks are important"). Resolved the plan's blocker: query mode stops the scheduler, but Airflow idle (4,036 Mi) + Trino (2,048 Mi) = 6,084 Mi fits; only Trino + a Spark run does not (D12).
+Prepared (Claude, branch `task3/3.6-trino-in-airflow`): asset `LAKE_SILVER` (`dags/lake_assets.py`), emitted by `validate_silver` (outlets); DAG `trino_reconcile` scheduled on it: `wait_no_spark` (sensor, reschedule mode) → `trino_up` (scale 0 → 1) → `reconcile` (Trino REST, `sql/trino/reconcile.sql`, vs `silver_daily.json` + `silver.json`, fails on any mismatch, retries 0) → `trino_down` (`all_done`: always back to 0). `plugins/lake_reconcile.py` = the one comparison used by Airflow and `tools/trino_check.py` + stdlib Trino REST client + Kubernetes helpers. RBAC Role `airflow-trino-scaler` (ns trino: get the deployment, get/patch its scale, only `trino-coordinator`). Airflow image gets `/opt/airflow/resources/{expected,sql}` via named build contexts (CI + images; `sql/**` added to the images paths). Predicted: lint clean, tests pass, kustomize render OK (my local runs); DAG import is checked by CI inside the image.
+Next (Bee): `make all` → PR → images (airflow + spark-job) → one bump → `make k8s-up` → trigger a Silver update (clear one day) → `trino_reconcile` runs by itself.
+
 ### 2026-11-10 — E64 (deadline alert) + resource check
 Observed (Bee): ⏰ for logical date 11-09 at 02:24:17 UTC (09:24:17 ICT); run failed at 01:06 UTC: `check_landing` frozen 41 min by laptop sleep, then `403 Invalid auth token` (expired task JWT) → **E64**. Claude's first hypothesis (`mode-query` at 01:44 UTC) was disproved by the timeline. Resource check (02_config.md §4): RAM fine (requests 55 %, usage 59 %, WSL 5.3 Gi available), node disk +1 GB (Trino), **Windows C: 60 G free (88 %)** = the risk to watch.
 Prepared (branch `task3/e64-check-landing-retry`): `check_landing` retries=1 (1 min); run guards also refuse on `queued`; E64 + measurements in docs. One images run will then give both images for a single bump (catalog_tool from #70 + this DAG change).

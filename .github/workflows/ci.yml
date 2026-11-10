@@ -52,7 +52,10 @@ jobs:
         with:
           context: dags
           file: docker/airflow/Dockerfile
-          build-contexts: plugins=plugins
+          build-contexts: |
+            plugins=plugins
+            expected=tests/expected
+            trino_sql=sql/trino
           load: true
           tags: vnpt-lake-airflow:ci
       - name: Import every DAG and check the rules
