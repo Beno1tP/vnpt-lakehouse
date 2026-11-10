@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-11-10 — 4.0b prepared: metrics + expected Gold values
+Decided (Bee): M1 `unmatched` for the 116 predict rows without a chat row; M2 UC7 = users(D) − users(D−30), % NULL when the base is 0; M3 UC8 averages over the 24 calendar days (0 on days without messages); M4 user filter = internal / external (a `/home`-only user still counts).
+Prepared (Claude, branch `task4/4.0b-metrics`): `docs/metrics.md` (common definitions, UC4–UC8 formula + Gold grain, M1–M4, leader questions); `tools/expected_gold.py` (pandas, reuses `expected_silver.py`; one seed per UC at the Gold grain → `dbt/seeds/expected_gold_uc{4..8}.csv`; fails unless predict rows, final_intent and step equal `silver.json` and UC7's last day = sum of UC8 new users); 5 unit tests (`traffic_class` order, intent groups, 24 calendar days, a user counted once, NULL %, zero days). Predicted (my local run into a scratch folder): PASS; traffic home 10,378 · real 219 · unmatched 116 · internal 16; 89 users (87 + 2); seed rows 36 / 36 / 57 / 48 / 48.
+Next (Bee): run it into `dbt/seeds` → `make all` → PR. Then 4.1 StarRocks.
+
 ### 2026-11-10 — E67 proven + E68 (Spark TTL late after sleep)
 Did (Bee): PR #79 → images run 42786011222 → bump PR #80 (airflow `95cb4511…` only; spark-job stays `3da7f249…`: no file it copies changed, the new digest only differs by build timestamps) → `make k8s-up` (git 65e23b1, Airflow rev 16) → `make backfill FROM=2024-07-24 TO=2024-07-25 REPROCESS=completed` (09:06–09:10 UTC = 16:06–16:10 ICT) → nudge of `catalog-081805` (Bee approved).
 Observed: 2 backfill runs success; 2 `trino_reconcile` runs success (the first waited `1; 1` → `0; 0`), both 210/210, `verdict` passed, no ❌ → E67 fixed. `catalog-081805` 54 min past its TTL → E68; annotate → deleted in seconds. `make dag-runs | head` → `Error 141` = SIGPIPE from `head` with pipefail (harmless).
