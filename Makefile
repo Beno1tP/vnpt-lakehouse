@@ -48,7 +48,7 @@ SPARK_SUBMIT = $(COMPOSE) exec -T spark /opt/spark/bin/spark-submit --master $(S
 SPARK_SQL    = $(COMPOSE) exec -T spark /opt/spark/bin/spark-sql --master local[1]
 NOISE        = ^Time taken|^:: loading settings
 
-.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks ghcr-prune k8s-up k8s-demo airflow-viewer airflow-viewer-check minio-ui history-ui freeze freeze-check evidence evidence-export spark-operator-chart demo-task2 demo-pipeline demo-check trino-chart trino-install trino-cli trino-ui mode-query mode-pipeline trino-check trino-explore trino-tag-check demo-task3 starrocks-chart starrocks-render starrocks-install starrocks-sql starrocks-up starrocks-down starrocks-ready mode-gold
+.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks ghcr-prune k8s-up k8s-demo airflow-viewer airflow-viewer-check minio-ui history-ui freeze freeze-check evidence evidence-export spark-operator-chart demo-task2 demo-pipeline demo-check trino-chart trino-install trino-cli trino-ui mode-query mode-pipeline trino-check trino-explore trino-tag-check demo-task3 starrocks-chart starrocks-render starrocks-install starrocks-sql starrocks-up starrocks-down starrocks-ready starrocks-init dbt mode-gold
 
 help:          ## list targets and variables
 	@awk -F':.*## ' '/^[a-zA-Z0-9_-]+:.*## /{printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -105,7 +105,7 @@ landing:       ## Task 2: split the Excel files by day -> s3://landing/<table>/d
 	  --expected /opt/tests/expected/bronze_daily.json
 s3-access-test: ## Task 2: prove least privilege of the MinIO users spark-jobs, landing-writer, demo-viewer (allowed AND denied ops)
 	kubectl -n spark-jobs create configmap s3-access-check --from-file=tests/k8s/s3_access_check.py --dry-run=client -o yaml | kubectl apply -f -
-	@set -e; rc=0; for p in spark-jobs:s3-credentials landing-writer:landing-writer-credentials demo-viewer:demo-viewer-credentials trino:trino-access-test-credentials; do \
+	@set -e; rc=0; for p in spark-jobs:s3-credentials landing-writer:landing-writer-credentials demo-viewer:demo-viewer-credentials trino:trino-access-test-credentials starrocks:starrocks-access-test-credentials; do \
 	  prof=$${p%%:*}; sec=$${p#*:}; \
 	  kubectl -n spark-jobs delete pod s3-access-test-$$prof --ignore-not-found >/dev/null; \
 	  sed -e "s|__PROFILE__|$$prof|g" -e "s|__SECRET__|$$sec|" -e 's|__IMAGE__|$(JOB_IMAGE)|' tests/k8s/s3-access-test-pod.yaml | kubectl apply -f - >/dev/null; \
@@ -186,6 +186,20 @@ trino-explore: ## Task 3 step 3.5: plans (partition pruning), metadata tables, t
 	mkdir -p $(dir $(EVIDENCE_TRINO))
 	kubectl -n trino exec deploy/trino-coordinator -- trino --catalog lake --execute "$$(cat sql/trino/explore.sql)" > $(EVIDENCE_TRINO)
 	@echo "saved $$(wc -l < $(EVIDENCE_TRINO)) lines to $(EVIDENCE_TRINO)"
+starrocks-init: deploy-guard ## Task 4 step 4.2 (D17): Job starrocks-init (catalog lake_iceberg, database gold, users dbt_rw/bi_ro, checks); gold mode
+	@test -n "$(DBT_IMAGE_REF)" || { echo "DBT_IMAGE_REF missing in infra/k8s/images.env (images run + bump first)"; exit 1; }
+	kubectl -n starrocks delete job starrocks-init --ignore-not-found --wait=true
+	sed 's|__IMAGE__|$(DBT_IMAGE_REF)|' infra/k8s/starrocks/starrocks-init-job.yaml | kubectl apply -f -
+	@for i in $$(seq 1 120); do s=$$(kubectl -n starrocks get job starrocks-init -o jsonpath='{.status.succeeded}{.status.failed}'); \
+	  [ -n "$$s" ] && break; sleep 5; done; kubectl -n starrocks logs job/starrocks-init; \
+	  test "$$(kubectl -n starrocks get job starrocks-init -o jsonpath='{.status.succeeded}')" = 1
+dbt:           ## Task 4: one dbt command in a one-off pod (dbt image, user dbt_rw): make dbt CMD="debug" | CMD="compile --select stg_user_message"
+	@test -n "$(DBT_IMAGE_REF)" || { echo "DBT_IMAGE_REF missing in infra/k8s/images.env"; exit 1; }
+	@test -n "$(CMD)" || { echo 'set CMD=, e.g. make dbt CMD="debug"'; exit 1; }
+	@n=dbt-$$(date -u +%H%M%S); args=$$(python3 -c 'import json,shlex,sys; print(json.dumps(shlex.split(sys.argv[1])))' "$(CMD)"); \
+	  sed -e "s|__NAME__|$$n|" -e 's|__IMAGE__|$(DBT_IMAGE_REF)|' -e "s|__ARGS__|$$args|" infra/k8s/starrocks/dbt-pod.yaml | kubectl apply -f - >/dev/null; \
+	  for i in $$(seq 1 360); do p=$$(kubectl -n starrocks get pod $$n -o jsonpath='{.status.phase}'); case "$$p" in Succeeded|Failed) break;; esac; sleep 5; done; \
+	  kubectl -n starrocks logs $$n; echo "[dbt] pod $$n: $$p"; kubectl -n starrocks delete pod $$n --wait=false >/dev/null; test "$$p" = Succeeded
 starrocks-down: ## Task 4: StarRocks -> 0: operator first, then FE/BE StatefulSets; waits until the pods are gone (graceful stop up to 120 s); PVCs + metadata stay
 	-@kubectl -n starrocks scale deploy/kube-starrocks-operator --replicas=0 2>/dev/null
 	-@kubectl -n starrocks scale statefulset/starrocks-be statefulset/starrocks-fe --replicas=0 2>/dev/null

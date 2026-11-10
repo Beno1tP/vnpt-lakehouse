@@ -1,0 +1,11 @@
+version: 2
+# Silver read through the StarRocks external catalog (3-part name catalog.database.table). Step 4.2 tests whether
+# dbt-starrocks renders `database:` as the catalog; if not, the init Job adds raw.* views (01_knowledge.md A4).
+sources:
+  - name: silver
+    database: lake_iceberg
+    schema: silver
+    tables:
+      - name: chat_message
+      - name: nlu_prediction
+      - name: user_message

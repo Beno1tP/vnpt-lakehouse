@@ -1,0 +1,25 @@
+# Task 4 step 4.2 (D17): idempotent setup of StarRocks: external catalog lake_iceberg, database gold, users dbt_rw
+# and bi_ro with their grants, then checks. Not in kustomization (image from images.env): make starrocks-init.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: starrocks-init
+  namespace: starrocks
+spec:
+  backoffLimit: 0                          # one retry layer: rerun make starrocks-init (E41 rule: no hidden retries)
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{ name: ghcr-pull }]
+      containers:
+        - name: init
+          image: __IMAGE__
+          imagePullPolicy: IfNotPresent
+          command: ["python", "/opt/scripts/starrocks_init.py"]
+          envFrom: [{ secretRef: { name: starrocks-init-credentials } }]
+          env:
+            - { name: STARROCKS_HOST, value: "starrocks-fe-service.starrocks.svc.cluster.local" }
+          resources:
+            requests: { memory: 128Mi, cpu: 50m }
+            limits:   { memory: 256Mi }

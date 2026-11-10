@@ -34,4 +34,5 @@ ensure_user airflow-logs    MINIO_AIRFLOW_LOGS_SECRET    lake-airflow-logs
 ensure_user backup-writer   MINIO_BACKUP_SECRET          lake-backup
 ensure_user demo-viewer     MINIO_DEMO_VIEWER_SECRET     lake-demo-viewer     # demo console login: list + read, no backup
 ensure_user trino           MINIO_TRINO_SECRET           lake-trino-read      # Task 3: Trino reads lakehouse/ only
+ensure_user starrocks       MINIO_STARROCKS_SECRET       lake-starrocks-read  # Task 4: StarRocks catalog reads lakehouse/ only
 echo "minio users ok"

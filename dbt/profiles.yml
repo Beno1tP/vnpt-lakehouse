@@ -1,0 +1,13 @@
+# Connects as dbt_rw (writes database gold, reads catalog lake_iceberg). Password from the env (Secret
+# starrocks-dbt-credentials), never in this file.
+vnpt_gold:
+  target: lab
+  outputs:
+    lab:
+      type: starrocks
+      host: starrocks-fe-service.starrocks.svc.cluster.local
+      port: 9030
+      schema: gold
+      username: dbt_rw
+      password: "{{ env_var('STARROCKS_PASSWORD') }}"
+      threads: 1

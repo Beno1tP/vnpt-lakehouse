@@ -39,6 +39,14 @@ PROFILES = {  # operation -> expected result for each user
         "create bucket": False,
         "read backup": False,
     },
+    "starrocks": {  # Task 4: the StarRocks catalog reads Iceberg files in lakehouse/ (StarRocks could write Iceberg)
+        "read landing": False,
+        "read lakehouse": True,
+        "write landing": False,
+        "write+delete lakehouse": False,
+        "create bucket": False,
+        "read backup": False,
+    },
 }
 fs = pafs.S3FileSystem(
     endpoint_override=os.environ["S3_ENDPOINT"], scheme="http", region="us-east-1", allow_bucket_creation=True

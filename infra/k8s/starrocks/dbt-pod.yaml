@@ -1,0 +1,22 @@
+# Task 4: one dbt command in a one-off pod (make dbt CMD="..."), user dbt_rw. Not in kustomization:
+# __NAME__, __IMAGE__ (DBT_IMAGE_REF from images.env) and __ARGS__ (JSON list) are filled in by make.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: __NAME__
+  namespace: starrocks
+  labels: { app: dbt }
+spec:
+  restartPolicy: Never
+  imagePullSecrets: [{ name: ghcr-pull }]
+  activeDeadlineSeconds: 1800
+  containers:
+    - name: dbt
+      image: __IMAGE__
+      imagePullPolicy: IfNotPresent
+      command: ["dbt"]
+      args: __ARGS__
+      envFrom: [{ secretRef: { name: starrocks-dbt-credentials } }]
+      resources:
+        requests: { memory: 256Mi, cpu: 100m }
+        limits:   { memory: 512Mi }
