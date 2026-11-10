@@ -1,0 +1,15 @@
+# Task 4: Gold layer in StarRocks, built by dbt (docs/task4/01_knowledge.md A4). Database (= dbt schema) `gold`.
+name: vnpt_gold
+version: "1.0.0"
+config-version: 2
+profile: vnpt_gold
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+target-path: /tmp/dbt-target        # the image's project folder is read-only for the dbt user at run time
+log-path: /tmp/dbt-logs
+models:
+  vnpt_gold:
+    staging:
+      +materialized: view

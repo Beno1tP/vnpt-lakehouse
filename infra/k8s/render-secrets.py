@@ -42,6 +42,9 @@ GENERATED = {
     "MINIO_TRINO_SECRET": lambda: secrets.token_hex(24),  # Task 3: Trino reads lakehouse/ only (D11)
     "AIRFLOW_VIEWER_PASSWORD": lambda: secrets.token_urlsafe(18),  # Airflow UI user "viewer" (Viewer role) for demos
     "STARROCKS_ROOT_PASSWORD": lambda: secrets.token_hex(24),  # Task 4: StarRocks root (hex: safe inside SQL quotes)
+    "STARROCKS_DBT_PASSWORD": lambda: secrets.token_hex(24),  # Task 4 4.2: StarRocks user dbt_rw (writes gold)
+    "STARROCKS_BI_PASSWORD": lambda: secrets.token_hex(24),  # Task 4 4.2: StarRocks user bi_ro (reads gold, Task 5)
+    "MINIO_STARROCKS_SECRET": lambda: secrets.token_hex(24),  # Task 4 4.2: StarRocks catalog reads lakehouse/ only
 }
 
 
@@ -93,6 +96,7 @@ def main():
         "MINIO_BACKUP_SECRET",
         "MINIO_DEMO_VIEWER_SECRET",
         "MINIO_TRINO_SECRET",
+        "MINIO_STARROCKS_SECRET",
     )
     write_private("minio-service-users.env", "".join(f"{k}={env[k]}\n" for k in users))
 
@@ -106,6 +110,14 @@ def main():
     write_private("trino-s3.env", f"TRINO_S3_ACCESS_KEY=trino\nTRINO_S3_SECRET_KEY={env['MINIO_TRINO_SECRET']}\n")
     write_private("trino-access-test.env", s3_keys("trino", "MINIO_TRINO_SECRET"))  # same user, AWS names
     write_private("starrocks-root.env", f"password={env['STARROCKS_ROOT_PASSWORD']}\n")  # key read by the chart
+    write_private(  # Job starrocks-init (4.2): root to create catalog/users, their passwords, the catalog's S3 key
+        "starrocks-init.env",
+        f"STARROCKS_ROOT_PASSWORD={env['STARROCKS_ROOT_PASSWORD']}\nSTARROCKS_DBT_PASSWORD={env['STARROCKS_DBT_PASSWORD']}\n"
+        f"STARROCKS_BI_PASSWORD={env['STARROCKS_BI_PASSWORD']}\nS3_ACCESS_KEY=starrocks\n"
+        f"S3_SECRET_KEY={env['MINIO_STARROCKS_SECRET']}\n",
+    )
+    write_private("starrocks-dbt.env", f"STARROCKS_PASSWORD={env['STARROCKS_DBT_PASSWORD']}\n")  # dbt pod: dbt_rw only
+    write_private("starrocks-access-test.env", s3_keys("starrocks", "MINIO_STARROCKS_SECRET"))  # s3-access-test
     # Airflow (namespace airflow): metadata DB connection + keys, one file per Secret the Helm chart expects
     pw = urllib.parse.quote(env["AIRFLOW_DB_PASSWORD"], safe="")
     write_private(

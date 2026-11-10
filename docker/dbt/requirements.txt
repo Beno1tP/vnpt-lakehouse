@@ -1,0 +1,5 @@
+# Task 4 (02_config.md §1, checked 2026-11-10): dbt-starrocks 1.12.2 requires dbt-core>=1.9.0 (Python < 3.14) and
+# mysql-connector-python>=8.1; CI proves the pair with `dbt parse` inside this image. mysql-connector also serves
+# scripts/starrocks_init.py (D17: one image for dbt and the init Job).
+dbt-core==1.12.6
+dbt-starrocks==1.12.2
