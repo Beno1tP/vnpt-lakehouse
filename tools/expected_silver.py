@@ -7,6 +7,7 @@ Rules (docs/task3/01_knowledge.md A1, decisions D7-D9):
 - is_client: SOURCE = 'client'; is_home: TEXT = '/home'; is_internal_sender: SENDER_ID looks like an e-mail address
 - final_intent: INTENT_NAME = 'fallback' -> fallback; INTENT_CONFIDENCE < the row's NLU_THRESHOLD -> bot_khong_hieu;
   else COALESCE(UPDATED_INTENT, INTENT_NAME)
+- step: predict STEP as delivered (the bot scenario; Task 4 step 4.0a, UC4), counted per value
 - nlu_prediction.has_chat_row: ID_CHATLOG found in chatlog ID (116 are not); user_message = client chat rows LEFT JOIN
   their prediction
 Fails (exit 1) unless the totals equal the Task 1 numbers in docs/task1/06_validation.md.
@@ -34,6 +35,7 @@ TASK1 = {  # docs/task1/06_validation.md: the totals this script must reproduce
     "predict_rows": 10729,
     "predict_without_chat_row": 116,
     "final_intent": {"xin_chao": 10588, "fallback": 107, "bot_khong_hieu": 34},
+    "step": {"406665": 10494, "406666": 235},  # profiled 2026-11-10 (docs/task4/04_process.md)
 }
 
 
@@ -91,6 +93,7 @@ def counts(chat: pd.DataFrame, pred: pd.DataFrame, um: pd.DataFrame) -> dict:
         "predict_rows": int(len(pred)),
         "predict_without_chat_row": int((~pred["has_chat_row"]).sum()),
         "final_intent": {k: int(v) for k, v in sorted(pred["final_intent"].value_counts().items())},
+        "step": {k: int(v) for k, v in sorted(pred["STEP"].value_counts().items())},
         "user_message_rows": int(len(um)),
         "user_message_with_prediction": int(um["has_prediction"].sum()),
     }
@@ -115,7 +118,7 @@ def main() -> None:
         "tools/expected_silver.py. Day = date as written in CREATED_TIME (Vietnam local). Counts only.",
         "rules": "is_client SOURCE='client'; is_home TEXT='/home'; is_internal_sender SENDER_ID contains '@'; "
         "final_intent fallback > (confidence < row NLU_THRESHOLD -> bot_khong_hieu) "
-        "> COALESCE(UPDATED_INTENT, INTENT_NAME)",
+        "> COALESCE(UPDATED_INTENT, INTENT_NAME); step = predict STEP as delivered",
     }
     with open(os.path.join(args.out, "silver.json"), "w") as f:
         json.dump({**meta, "totals": totals}, f, indent=2)

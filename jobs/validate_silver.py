@@ -75,6 +75,10 @@ def main() -> None:
         "GROUP BY final_intent"
     ).collect()
     check("final_intent", {r[0]: r[1] for r in sorted(rows)}, want["final_intent"])
+    rows = spark.sql(
+        f"SELECT step, count(*) FROM lake.silver.nlu_prediction WHERE event_date = DATE '{day}' GROUP BY step"
+    ).collect()
+    check("step", {r[0]: r[1] for r in sorted(rows)}, want["step"])
 
     for name, sql in load_checks(args.rules, marker="rule").items():
         check(f"rule {name}", spark.sql(sql.replace("${ingest_date}", day)).collect()[0][0], 0)

@@ -5,10 +5,12 @@
 Reads both Bronze partitions of the day, checks they come from one Bronze run (same _batch_id: Iceberg has no
 cross-table transaction), then writes three Silver tables partitioned by event_date with overwritePartitions() (D7):
   silver.chat_message    one chatlog row: typed, deduplicated, flags is_client / is_home / is_internal_sender
-  silver.nlu_prediction  one predict row: confidence + threshold as double, final_intent, has_chat_row
+  silver.nlu_prediction  one predict row: confidence + threshold as double, final_intent, has_chat_row, step
   silver.user_message    one client message + its prediction (left join), has_prediction
 event_ts = TIMESTAMP_NTZ (wall clock as written, Vietnam local; D8); event_date = its date. final_intent uses the
-row's NLU_THRESHOLD (D9). Rules = tools/expected_silver.py (pandas), whose numbers the validator checks.
+row's NLU_THRESHOLD (D9). `step` = the bot scenario (predict STEP, Task 4 step 4.0a: UC4), added to existing
+tables by schema evolution (ADD COLUMN, metadata only) before the first write that carries it.
+Rules = tools/expected_silver.py (pandas), whose numbers the validator checks.
 Prints counts only, never row contents.
 """
 
@@ -22,6 +24,10 @@ from datetime import date
 CREATED_FMT = "dd-MMM-yy hh.mm.ss.SSSSSSSSS a"  # Oracle text, 9 fraction digits (Spark keeps microseconds)
 SOURCE_TZ = "Asia/Ho_Chi_Minh"  # documentation only (table property): values are stored without a zone
 TABLES = ("chat_message", "nlu_prediction", "user_message")
+ADDED_COLUMNS = {  # schema evolution: columns added after the table was created (Task 4 4.0a)
+    "nlu_prediction": {"step": "string"},
+    "user_message": {"step": "string"},
+}
 
 
 def check_day(day: str) -> str:
@@ -72,7 +78,7 @@ SELECT p.ID AS id, p.ID_CHATLOG AS chat_id, p.BOT_ID AS bot_id, p.SENDER_ID AS s
        CASE WHEN p.INTENT_NAME = 'fallback' THEN 'fallback'
             WHEN CAST(p.INTENT_CONFIDENCE AS DOUBLE) < CAST(p.NLU_THRESHOLD AS DOUBLE) THEN 'bot_khong_hieu'
             ELSE coalesce(nullif(p.UPDATED_INTENT, ''), p.INTENT_NAME) END AS final_intent,
-       c.chat_ref IS NOT NULL AS has_chat_row,
+       c.chat_ref IS NOT NULL AS has_chat_row, p.STEP AS step,
        {ts.replace("CREATED_TIME", "p.CREATED_TIME")} AS event_ts,
        to_date({ts.replace("CREATED_TIME", "p.CREATED_TIME")}) AS event_date,
        p._batch_id, p._ingest_date
@@ -84,7 +90,7 @@ WHERE p._rn = 1"""
 
 USER_MESSAGE_SQL = """
 SELECT c.id, c.sender_id, c.text, c.is_home, c.is_internal_sender, c.input_channel, c.session_id,
-       c.event_ts, c.event_date, p.id AS prediction_id, p.final_intent, p.confidence,
+       c.event_ts, c.event_date, p.id AS prediction_id, p.final_intent, p.confidence, p.step,
        p.id IS NOT NULL AS has_prediction, c._batch_id
 FROM chat_message c LEFT JOIN nlu_prediction p ON p.chat_id = c.id
 WHERE c.is_client"""
@@ -108,13 +114,31 @@ def summary(spark) -> dict:
     out = spark.sql(SUMMARY_SQL).collect()[0].asDict()
     rows = spark.sql("SELECT final_intent, count(*) FROM nlu_prediction GROUP BY final_intent").collect()
     out["final_intent"] = {r[0]: r[1] for r in sorted(rows)}
+    rows = spark.sql("SELECT step, count(*) FROM nlu_prediction GROUP BY step").collect()
+    out["step"] = {r[0]: r[1] for r in sorted(rows)}
     return out
+
+
+def add_columns_sql(table: str, existing: list[str]) -> list[str]:
+    """ALTER statements for the ADDED_COLUMNS the table does not have yet (idempotent: [] once added)."""
+    if table not in TABLES:
+        raise ValueError(f"unknown Silver table {table!r}")
+    have = {c.lower() for c in existing}
+    return [
+        f"ALTER TABLE lake.silver.{table} ADD COLUMN {col} {typ}"
+        for col, typ in ADDED_COLUMNS.get(table, {}).items()
+        if col.lower() not in have
+    ]
 
 
 def write(spark, df, table: str) -> None:
     full = f"lake.silver.{table}"
     if spark.catalog.tableExists(full):
-        df.writeTo(full).overwritePartitions()  # replaces exactly the event_date partitions in df (D7)
+        for stmt in add_columns_sql(table, spark.table(full).columns):
+            spark.sql(stmt)  # Iceberg schema evolution: new column id, old data files read it as NULL
+            print(f"[silver] schema evolution: {stmt}", flush=True)
+        # replaces exactly the event_date partitions in df (D7); DataFrameWriterV2 matches columns by name
+        df.writeTo(full).overwritePartitions()
     else:
         from pyspark.sql import functions as F
 
