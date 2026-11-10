@@ -17,6 +17,7 @@ import urllib.request
 TRINO_URL = "http://trino.trino.svc.cluster.local:8080"
 TRINO_NS, TRINO_DEPLOY = "trino", "trino-coordinator"
 SPARK_NS = "spark-jobs"
+PIPELINE_DAG = "chatbot_bronze"  # writes Silver; trino_reconcile waits until it has no running/queued run (E67)
 
 
 # --- comparison (pure, unit-tested) ---------------------------------------------------------------------------------

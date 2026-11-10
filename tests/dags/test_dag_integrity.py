@@ -53,6 +53,11 @@ for dag_id, dag in sorted(bag.dags.items()):
             for t in dag.tasks
             if "validate" in t.task_id and t.retries > 1
         ]
+    # E67: a clean-up task with trigger_rule all_done as the ONLY leaf hides failures (the run state follows the leaves)
+    leaves = [t for t in dag.tasks if not t.downstream_task_ids]
+    rules = {getattr(t.trigger_rule, "value", t.trigger_rule) for t in leaves}
+    if len(dag.tasks) > 1 and rules == {"all_done"}:
+        problems.append("only all_done leaves: a failed task would leave the run 'success' (E67); add a verdict leaf")
     # E47: render every application_file template like Airflow does (strict Jinja), with AND without a logical date.
     # Without one, a template may only use ds if a check_landing task upstream stops such runs first.
     env = (

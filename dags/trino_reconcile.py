@@ -1,9 +1,12 @@
 """Task 3 step 3.6: Trino reconciliation orchestrated by Airflow (make trino-check, automated).
 
 Scheduled on the asset LAKE_SILVER: runs after chatbot_bronze.validate_silver succeeded. Trino (2 Gi) and a Spark run
-do not fit the node together (D12), so: wait until no Spark application is unfinished -> scale Trino 0 -> 1 ->
+do not fit the node together (D12), and a check in the middle of a multi-day backfill compares a half-rewritten lake
+(E67), so: wait until no Spark application is unfinished AND no chatbot_bronze run is running or queued (asset events
+that arrive meanwhile are merged into the next run) -> scale Trino 0 -> 1 ->
 reconcile every Silver number per day in Trino (sql/trino/reconcile.sql) against the pandas expectations -> ALWAYS
-scale Trino back to 0 (also after a failure). A mismatch fails the reconcile task -> Telegram alert.
+scale Trino back to 0 (also after a failure). A mismatch fails the reconcile task -> Telegram alert, and the leaf
+`verdict` makes the RUN fail too (E67: with the all_done clean-up as the only leaf the run showed success).
 If a Spark run starts meanwhile it waits Pending for ~1-2 min until Trino is down again (safe, not an OOM).
 Files baked into the image under /opt/airflow/resources/ (docker/airflow/Dockerfile). Counts only.
 """
@@ -38,12 +41,13 @@ RESOURCES = Path("/opt/airflow/resources")
 )
 def trino_reconcile():
     @task.sensor(poke_interval=60, timeout=3 * 3600, mode="reschedule", execution_timeout=timedelta(hours=3))
-    def wait_no_spark() -> bool:
+    def wait_pipeline_idle(ti=None) -> bool:
         import lake_reconcile as lr
 
-        n = lr.unfinished_spark_apps()
-        print(f"[trino-reconcile] unfinished SparkApplications: {n}")
-        return n == 0
+        apps = lr.unfinished_spark_apps()
+        runs = ti.get_dr_count(dag_id=lr.PIPELINE_DAG, states=["running", "queued"])  # a backfill queues its runs
+        print(f"[trino-reconcile] unfinished SparkApplications: {apps}; {lr.PIPELINE_DAG} runs running/queued: {runs}")
+        return apps == 0 and runs == 0
 
     @task
     def trino_up():
@@ -70,7 +74,14 @@ def trino_reconcile():
         lr.scale_trino(0)
         print("[trino-reconcile] trino-coordinator scaled to 0")
 
-    wait_no_spark() >> trino_up() >> reconcile() >> trino_down()
+    @task
+    def verdict():  # leaf: upstream_failed when reconcile or trino_down failed -> the run fails (E67)
+        print("[trino-reconcile] reconcile passed and Trino is back to 0")
+
+    checked = reconcile()
+    down = trino_down()
+    wait_pipeline_idle() >> trino_up() >> checked >> down
+    [checked, down] >> verdict()
 
 
 trino_reconcile()
