@@ -88,10 +88,17 @@ def main() -> None:
             print(f"[starrocks-init] FAIL  {masked(sql, secrets).splitlines()[0]}: {masked(str(e), secrets)}")
     root.close()
 
-    dbt = connect(host, "dbt_rw", env["STARROCKS_DBT_PASSWORD"]).cursor()
-    dbt.execute("REFRESH EXTERNAL TABLE lake_iceberg.silver.user_message")
-    dbt.execute("SELECT count(*) FROM lake_iceberg.silver.user_message")
-    n = dbt.fetchone()[0]
+    # E71: keep each connection in a variable. connect(...).cursor() leaves the connection unreferenced; Python frees
+    # it at once and the C cursor (weak reference) fails with 2055 "Cursor is not connected".
+    try:
+        dbt_conn = connect(host, "dbt_rw", env["STARROCKS_DBT_PASSWORD"])
+        dbt = dbt_conn.cursor()
+        dbt.execute("REFRESH EXTERNAL TABLE lake_iceberg.silver.user_message")
+        dbt.execute("SELECT count(*) FROM lake_iceberg.silver.user_message")
+        n = dbt.fetchone()[0]
+        dbt_conn.close()
+    except Exception as e:  # noqa: BLE001 - a check that cannot run is a FAIL line, not a traceback
+        n = f"error {masked(str(e), secrets)[:200]}"
     ok = n == EXPECTED_USER_MESSAGE
     failed += not ok
     print(
@@ -99,17 +106,23 @@ def main() -> None:
         f"(expected {EXPECTED_USER_MESSAGE})"
     )
 
-    bi = connect(host, "bi_ro", env["STARROCKS_BI_PASSWORD"]).cursor()
+    bi_conn = connect(host, "bi_ro", env["STARROCKS_BI_PASSWORD"])
+    bi = bi_conn.cursor()
     for sql in (
         "CREATE TABLE gold.bi_ro_should_fail (id INT) DISTRIBUTED BY HASH(id) BUCKETS 1",
         "INSERT INTO lake_iceberg.silver.user_message SELECT * FROM lake_iceberg.silver.user_message LIMIT 0",
     ):
+        verb = sql.split(" ")[0]
         try:
             bi.execute(sql)
             failed += 1
-            print(f"[starrocks-init] FAIL  bi_ro was allowed: {sql.split('(')[0].strip()}")
-        except Exception as e:  # noqa: BLE001 - a denial is the expected outcome
-            print(f"[starrocks-init] PASS  bi_ro denied: {sql.split(' ')[0]} … ({type(e).__name__})")
+            print(f"[starrocks-init] FAIL  bi_ro was allowed: {verb}")
+        except Exception as e:  # noqa: BLE001 - only a privilege error counts as the expected denial
+            denied = "access denied" in str(e).lower()
+            failed += not denied
+            why = "privilege error" if denied else f"other error, not a denial: {masked(str(e), secrets)[:200]}"
+            print(f"[starrocks-init] {'PASS' if denied else 'FAIL'}  bi_ro denied: {verb} ({why})")
+    bi_conn.close()
     print(f"[starrocks-init] {'done' if not failed else f'{failed} failures'}")
     sys.exit(1 if failed else 0)
 
