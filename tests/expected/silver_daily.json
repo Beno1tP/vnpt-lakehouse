@@ -1,6 +1,6 @@
 {
   "_comment": "Expected Silver counts (Task 3 step 3.0), pandas on the two Excel files; tools/expected_silver.py. Day = date as written in CREATED_TIME (Vietnam local). Counts only.",
-  "rules": "is_client SOURCE='client'; is_home TEXT='/home'; is_internal_sender SENDER_ID contains '@'; final_intent fallback > (confidence < row NLU_THRESHOLD -> bot_khong_hieu) > COALESCE(UPDATED_INTENT, INTENT_NAME)",
+  "rules": "is_client SOURCE='client'; is_home TEXT='/home'; is_internal_sender SENDER_ID contains '@'; final_intent fallback > (confidence < row NLU_THRESHOLD -> bot_khong_hieu) > COALESCE(UPDATED_INTENT, INTENT_NAME); step = predict STEP as delivered",
   "days": {
     "2024-07-02": {
       "chat_rows": 12,
@@ -15,6 +15,10 @@
         "fallback": 2,
         "xin_chao": 3
       },
+      "step": {
+        "406665": 3,
+        "406666": 3
+      },
       "user_message_rows": 6,
       "user_message_with_prediction": 6
     },
@@ -28,6 +32,9 @@
       "predict_without_chat_row": 0,
       "final_intent": {
         "fallback": 1
+      },
+      "step": {
+        "406666": 1
       },
       "user_message_rows": 1,
       "user_message_with_prediction": 1
@@ -44,6 +51,10 @@
         "fallback": 5,
         "xin_chao": 2
       },
+      "step": {
+        "406665": 2,
+        "406666": 5
+      },
       "user_message_rows": 7,
       "user_message_with_prediction": 7
     },
@@ -57,6 +68,9 @@
       "predict_without_chat_row": 0,
       "final_intent": {
         "xin_chao": 2
+      },
+      "step": {
+        "406665": 2
       },
       "user_message_rows": 2,
       "user_message_with_prediction": 2
@@ -74,6 +88,10 @@
         "fallback": 7,
         "xin_chao": 1
       },
+      "step": {
+        "406665": 1,
+        "406666": 8
+      },
       "user_message_rows": 9,
       "user_message_with_prediction": 9
     },
@@ -88,6 +106,9 @@
       "final_intent": {
         "fallback": 3,
         "xin_chao": 3
+      },
+      "step": {
+        "406666": 6
       },
       "user_message_rows": 6,
       "user_message_with_prediction": 6
@@ -105,6 +126,10 @@
         "fallback": 18,
         "xin_chao": 19
       },
+      "step": {
+        "406665": 13,
+        "406666": 30
+      },
       "user_message_rows": 43,
       "user_message_with_prediction": 43
     },
@@ -120,6 +145,10 @@
         "bot_khong_hieu": 1,
         "fallback": 1,
         "xin_chao": 5
+      },
+      "step": {
+        "406665": 3,
+        "406666": 4
       },
       "user_message_rows": 7,
       "user_message_with_prediction": 7
@@ -137,6 +166,10 @@
         "fallback": 2,
         "xin_chao": 2
       },
+      "step": {
+        "406665": 1,
+        "406666": 4
+      },
       "user_message_rows": 5,
       "user_message_with_prediction": 5
     },
@@ -152,6 +185,10 @@
         "bot_khong_hieu": 3,
         "fallback": 3,
         "xin_chao": 12
+      },
+      "step": {
+        "406665": 10,
+        "406666": 8
       },
       "user_message_rows": 18,
       "user_message_with_prediction": 18
@@ -169,6 +206,10 @@
         "fallback": 30,
         "xin_chao": 41
       },
+      "step": {
+        "406665": 17,
+        "406666": 61
+      },
       "user_message_rows": 78,
       "user_message_with_prediction": 78
     },
@@ -184,6 +225,10 @@
         "bot_khong_hieu": 5,
         "fallback": 20,
         "xin_chao": 23
+      },
+      "step": {
+        "406665": 12,
+        "406666": 36
       },
       "user_message_rows": 48,
       "user_message_with_prediction": 48
@@ -201,6 +246,10 @@
         "fallback": 12,
         "xin_chao": 72
       },
+      "step": {
+        "406665": 36,
+        "406666": 57
+      },
       "user_message_rows": 93,
       "user_message_with_prediction": 93
     },
@@ -215,6 +264,10 @@
       "final_intent": {
         "fallback": 1,
         "xin_chao": 19
+      },
+      "step": {
+        "406665": 11,
+        "406666": 9
       },
       "user_message_rows": 20,
       "user_message_with_prediction": 20
@@ -231,6 +284,10 @@
         "fallback": 1,
         "xin_chao": 2
       },
+      "step": {
+        "406665": 2,
+        "406666": 1
+      },
       "user_message_rows": 3,
       "user_message_with_prediction": 3
     },
@@ -246,6 +303,10 @@
         "fallback": 1,
         "xin_chao": 5
       },
+      "step": {
+        "406665": 4,
+        "406666": 2
+      },
       "user_message_rows": 6,
       "user_message_with_prediction": 6
     },
@@ -260,6 +321,9 @@
       "final_intent": {
         "xin_chao": 6485
       },
+      "step": {
+        "406665": 6485
+      },
       "user_message_rows": 6485,
       "user_message_with_prediction": 6485
     },
@@ -273,6 +337,9 @@
       "predict_without_chat_row": 116,
       "final_intent": {
         "xin_chao": 3892
+      },
+      "step": {
+        "406665": 3892
       },
       "user_message_rows": 3776,
       "user_message_with_prediction": 3776

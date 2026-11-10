@@ -1,6 +1,6 @@
 {
   "_comment": "Expected Silver counts (Task 3 step 3.0), pandas on the two Excel files; tools/expected_silver.py. Day = date as written in CREATED_TIME (Vietnam local). Counts only.",
-  "rules": "is_client SOURCE='client'; is_home TEXT='/home'; is_internal_sender SENDER_ID contains '@'; final_intent fallback > (confidence < row NLU_THRESHOLD -> bot_khong_hieu) > COALESCE(UPDATED_INTENT, INTENT_NAME)",
+  "rules": "is_client SOURCE='client'; is_home TEXT='/home'; is_internal_sender SENDER_ID contains '@'; final_intent fallback > (confidence < row NLU_THRESHOLD -> bot_khong_hieu) > COALESCE(UPDATED_INTENT, INTENT_NAME); step = predict STEP as delivered",
   "totals": {
     "chat_rows": 21224,
     "client_rows": 10613,
@@ -13,6 +13,10 @@
       "bot_khong_hieu": 34,
       "fallback": 107,
       "xin_chao": 10588
+    },
+    "step": {
+      "406665": 10494,
+      "406666": 235
     },
     "user_message_rows": 10613,
     "user_message_with_prediction": 10613,
