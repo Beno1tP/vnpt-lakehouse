@@ -83,6 +83,10 @@ secretGenerator:                       # from files rendered by `make k8s-secret
   - { name: ghcr-pull, namespace: airflow, type: kubernetes.io/dockerconfigjson, files: [.dockerconfigjson=secrets/ghcr-dockerconfig.json], options: { disableNameSuffixHash: true } }
   - { name: ghcr-pull, namespace: starrocks, type: kubernetes.io/dockerconfigjson, files: [.dockerconfigjson=secrets/ghcr-dockerconfig.json], options: { disableNameSuffixHash: true } }
 configMapGenerator:
+  - name: starrocks-init-sql            # Task 4: statements of the Job starrocks-init (applied by make, fixed name)
+    namespace: starrocks
+    files: [starrocks/init.sql]
+    options: { disableNameSuffixHash: true }
   - name: postgres-initdb
     namespace: lake
     files: [lake/postgres-initdb/10-airflow-db.sh]

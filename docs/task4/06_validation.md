@@ -16,7 +16,7 @@ Source of truth: `dbt/seeds/expected_gold_uc*.csv` from `tools/expected_gold.py`
 
 | Count | Silver (Spark) | Trino | StarRocks catalog | `fct_user_message` | Expected |
 |---|---|---|---|---|---|
-| client messages | | | | | 10,613 |
+| client messages | 10,613 | 10,613 | **10,613** (`starrocks-init` as dbt_rw, 11-11; `gold.stg_user_message` via dbt 3-part source) | | 10,613 |
 | with prediction | | | | | |
 
 ## 3. dbt build results
@@ -31,3 +31,12 @@ Source of truth: `dbt/seeds/expected_gold_uc*.csv` from `tools/expected_gold.py`
 | `dbt build` twice → identical `gold_uc*` | |
 | `dim_sender` keys unchanged after `--full-refresh` of downstream models | |
 | `gold_build` started by the Asset event (no manual trigger) | |
+
+## 5. Step 4.2 checks (2026-11-11)
+
+| Check | Result |
+|---|---|
+| `make s3-access-test` | 5 profiles × 6/6; `starrocks`: read lakehouse only (after E70) |
+| `make starrocks-init` | 16/16 statements OK (catalog, database, users, grants incl. REFRESH, E72); dbt_rw reads 10,613 rows; bi_ro CREATE + INSERT → privilege error (E71: only an `Access denied` counts) |
+| dbt 3-part source | `source('silver','user_message')` with `database: lake_iceberg` renders `lake_iceberg.silver.user_message`: `dbt run` created view `gold.stg_user_message`, count 10,613 → no `raw.*` views needed (A4 open point closed) |
+| `dbt debug` | connection OK; `git [ERROR]` only (no git in the image on purpose: hub packages do not need it) → use `debug --connection` |

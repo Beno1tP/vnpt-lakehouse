@@ -193,7 +193,7 @@ starrocks-init: deploy-guard ## Task 4 step 4.2 (D17): Job starrocks-init (catal
 	@for i in $$(seq 1 120); do s=$$(kubectl -n starrocks get job starrocks-init -o jsonpath='{.status.succeeded}{.status.failed}'); \
 	  [ -n "$$s" ] && break; sleep 5; done; kubectl -n starrocks logs job/starrocks-init; \
 	  test "$$(kubectl -n starrocks get job starrocks-init -o jsonpath='{.status.succeeded}')" = 1
-dbt:           ## Task 4: one dbt command in a one-off pod (dbt image, user dbt_rw): make dbt CMD="debug" | CMD="compile --select stg_user_message"
+dbt:           ## Task 4: one dbt command in a one-off pod (dbt image, user dbt_rw): make dbt CMD="debug --connection" | CMD="build --select +fct_user_message"
 	@test -n "$(DBT_IMAGE_REF)" || { echo "DBT_IMAGE_REF missing in infra/k8s/images.env"; exit 1; }
 	@test -n "$(CMD)" || { echo 'set CMD=, e.g. make dbt CMD="debug"'; exit 1; }
 	@n=dbt-$$(date -u +%H%M%S); args=$$(python3 -c 'import json,shlex,sys; print(json.dumps(shlex.split(sys.argv[1])))' "$(CMD)"); \
