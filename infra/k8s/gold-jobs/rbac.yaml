@@ -1,0 +1,66 @@
+# Task 4 step 4.5: dbt pods run in their own namespace gold-jobs. Creating pods in a namespace = being able to mount
+# any Secret of that namespace, so this namespace holds only the dbt_rw password and the GHCR pull secret (never the
+# StarRocks root password, which stays in namespace starrocks). LocalExecutor runs tasks in the scheduler pod, so the
+# KubernetesPodOperator acts as service account airflow-scheduler.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dbt
+  namespace: gold-jobs
+automountServiceAccountToken: false        # dbt never calls the Kubernetes API
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: airflow-gold-runner
+  namespace: gold-jobs
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [create, get, list, watch, patch, delete]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: airflow-gold-runner
+  namespace: gold-jobs
+subjects:
+  - kind: ServiceAccount
+    name: airflow-scheduler
+    namespace: airflow
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: airflow-gold-runner
+---
+# The DAGs read the mode from the cluster (single source of truth: is the StarRocks FE up?), nothing else in starrocks
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: airflow-starrocks-reader
+  namespace: starrocks
+rules:
+  - apiGroups: [apps]
+    resources: [statefulsets]
+    resourceNames: [starrocks-fe, starrocks-be]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: airflow-starrocks-reader
+  namespace: starrocks
+subjects:
+  - kind: ServiceAccount
+    name: airflow-scheduler
+    namespace: airflow
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: airflow-starrocks-reader

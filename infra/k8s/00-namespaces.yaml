@@ -34,3 +34,9 @@ kind: Namespace
 metadata:
   name: starrocks           # StarRocks 3.5.21 (kube-starrocks 1.11.8): operator, FE, BE; Gold layer (Task 4)
   labels: { app.kubernetes.io/part-of: vnpt-lakehouse }
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gold-jobs           # dbt pods (Airflow gold_build, make dbt): only the dbt_rw Secret lives here (4.5)
+  labels: { app.kubernetes.io/part-of: vnpt-lakehouse }

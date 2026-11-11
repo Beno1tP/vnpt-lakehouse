@@ -34,6 +34,7 @@ GRANT SELECT ON ALL TABLES IN ALL DATABASES TO USER 'dbt_rw'@'%';
 GRANT REFRESH ON ALL TABLES IN ALL DATABASES TO USER 'dbt_rw'@'%';
 SET CATALOG default_catalog;
 
--- bi_ro: read gold only (Superset, Task 5). Rerun after dbt creates new tables: ALL TABLES covers existing ones
+-- bi_ro: read gold only (Superset, Task 5). Stored as a wildcard: also covers tables dbt drops and recreates
+-- (tested 11-11: bi_ro read gold_uc5 right after a rebuild)
 GRANT SELECT ON ALL TABLES IN DATABASE gold TO USER 'bi_ro'@'%';
 GRANT SELECT ON ALL VIEWS IN DATABASE gold TO USER 'bi_ro'@'%';

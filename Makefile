@@ -198,16 +198,16 @@ dbt:           ## Task 4: one dbt command in a one-off pod (dbt image, user dbt_
 	@test -n "$(CMD)" || { echo 'set CMD=, e.g. make dbt CMD="debug"'; exit 1; }
 	@n=dbt-$$(date -u +%H%M%S); args=$$(python3 -c 'import json,shlex,sys; print(json.dumps(shlex.split(sys.argv[1])))' "$(CMD)"); \
 	  sed -e "s|__NAME__|$$n|" -e 's|__IMAGE__|$(DBT_IMAGE_REF)|' -e "s|__ARGS__|$$args|" infra/k8s/starrocks/dbt-pod.yaml | kubectl apply -f - >/dev/null; \
-	  for i in $$(seq 1 360); do p=$$(kubectl -n starrocks get pod $$n -o jsonpath='{.status.phase}'); case "$$p" in Succeeded|Failed) break;; esac; sleep 5; done; \
-	  kubectl -n starrocks logs $$n; echo "[dbt] pod $$n: $$p"; kubectl -n starrocks delete pod $$n --wait=false >/dev/null; test "$$p" = Succeeded
+	  for i in $$(seq 1 360); do p=$$(kubectl -n gold-jobs get pod $$n -o jsonpath='{.status.phase}'); case "$$p" in Succeeded|Failed) break;; esac; sleep 5; done; \
+	  kubectl -n gold-jobs logs $$n; echo "[dbt] pod $$n: $$p"; kubectl -n gold-jobs delete pod $$n --wait=false >/dev/null; test "$$p" = Succeeded
 dbt-parse:     ## Task 4: dbt parse of the LOCAL dbt/ folder in the current dbt image (no connection, no writes): run before a dbt PR
 	@test -n "$(DBT_IMAGE_REF)" || { echo "DBT_IMAGE_REF missing in infra/k8s/images.env"; exit 1; }
 	@n=dbt-parse-$$(date -u +%H%M%S); \
 	  sed -e "s|__NAME__|$$n|" -e 's|__IMAGE__|$(DBT_IMAGE_REF)|' infra/k8s/starrocks/dbt-parse-pod.yaml | kubectl apply -f - >/dev/null; \
-	  trap 'kubectl -n starrocks delete pod '"$$n"' --wait=false >/dev/null' EXIT; \
-	  kubectl -n starrocks wait --for=condition=Ready pod/$$n --timeout=300s >/dev/null; \
-	  kubectl -n starrocks cp dbt $$n:/tmp/dbt-local >/dev/null; \
-	  kubectl -n starrocks exec $$n -- dbt parse --project-dir /tmp/dbt-local --profiles-dir /tmp/dbt-local
+	  trap 'kubectl -n gold-jobs delete pod '"$$n"' --wait=false >/dev/null' EXIT; \
+	  kubectl -n gold-jobs wait --for=condition=Ready pod/$$n --timeout=300s >/dev/null; \
+	  kubectl -n gold-jobs cp dbt $$n:/tmp/dbt-local >/dev/null; \
+	  kubectl -n gold-jobs exec $$n -- dbt parse --project-dir /tmp/dbt-local --profiles-dir /tmp/dbt-local
 starrocks-down: ## Task 4: StarRocks -> 0: operator first, then FE/BE StatefulSets; waits until the pods are gone (graceful stop up to 120 s); PVCs + metadata stay
 	-@kubectl -n starrocks scale deploy/kube-starrocks-operator --replicas=0 2>/dev/null
 	-@kubectl -n starrocks scale statefulset/starrocks-be statefulset/starrocks-fe --replicas=0 2>/dev/null
@@ -248,6 +248,7 @@ airflow-install: airflow-chart deploy-guard ## Task 2: helm upgrade --install Ai
 	  -f infra/helm/airflow/values-local.yaml \
 	  --set images.airflow.digest=$(lastword $(subst @, ,$(AIRFLOW_IMAGE_REF))) \
 	  --set env[0].name=AIRFLOW_VAR_SPARK_JOB_IMAGE --set env[0].value=$(SPARK_JOB_IMAGE_REF) \
+  --set env[1].name=AIRFLOW_VAR_DBT_IMAGE --set env[1].value=$(DBT_IMAGE_REF) \
 	  --description "git $$(git rev-parse --short HEAD)" \
 	  --wait --timeout 15m
 deploy-guard:  ## Task 2: refuse to deploy unless on main with a clean tree (deployed = reviewed + merged, E39); ALLOW_BRANCH=yes overrides

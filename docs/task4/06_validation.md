@@ -40,3 +40,7 @@ Source of truth: `dbt/seeds/expected_gold_uc*.csv` from `tools/expected_gold.py`
 | `make starrocks-init` | 16/16 statements OK (catalog, database, users, grants incl. REFRESH, E72); dbt_rw reads 10,613 rows; bi_ro CREATE + INSERT → privilege error (E71: only an `Access denied` counts) |
 | dbt 3-part source | `source('silver','user_message')` with `database: lake_iceberg` renders `lake_iceberg.silver.user_message`: `dbt run` created view `gold.stg_user_message`, count 10,613 → no `raw.*` views needed (A4 open point closed) |
 | `dbt debug` | connection OK; `git [ERROR]` only (no git in the image on purpose: hub packages do not need it) → use `debug --connection` |
+
+## 6. Grants survive rebuilds (4.5 design check, 2026-11-11)
+
+`make dbt CMD="run --select gold_uc5"` (drop + recreate), then `SHOW GRANTS FOR 'bi_ro'@'%'` → `GRANT SELECT ON ALL TABLES IN DATABASE gold` (stored as a wildcard) and `EXECUTE AS 'bi_ro'@'%'` → `SELECT count(*) FROM gold.gold_uc5` = 36: no grant step after dbt runs. dbt-starrocks 1.12.2 has no grant macros (repository tree read 11-11), so dbt's `grants:` config would not apply anyway.

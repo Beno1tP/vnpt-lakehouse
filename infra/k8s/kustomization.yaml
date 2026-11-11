@@ -13,6 +13,7 @@ resources:
   - spark-jobs/spark-events-pvc.yaml
   - spark-jobs/spark-history.yaml
   - trino-rbac-airflow.yaml
+  - gold-jobs/rbac.yaml
 images:                                # GHCR digests (2.0c); keep equal to infra/k8s/images.env (checked by CI)
   - name: ghcr.io/beno1tp/vnpt-lake-hms
     digest: sha256:9446f7d1e0ab211f1fe32b0f8def318699e6afa40a5e1fcebfa3d07d134b91ff
@@ -48,8 +49,8 @@ secretGenerator:                       # from files rendered by `make k8s-secret
     namespace: starrocks
     envs: [secrets/starrocks-init.env]
     options: { disableNameSuffixHash: true }
-  - name: starrocks-dbt-credentials     # Task 4: dbt pods connect as dbt_rw (STARROCKS_PASSWORD)
-    namespace: starrocks
+  - name: starrocks-dbt-credentials     # Task 4: dbt pods connect as dbt_rw (STARROCKS_PASSWORD); 4.5: in gold-jobs
+    namespace: gold-jobs
     envs: [secrets/starrocks-dbt.env]
     options: { disableNameSuffixHash: true }
   - name: starrocks-access-test-credentials # MinIO user starrocks with AWS_* names, only for make s3-access-test
@@ -81,6 +82,7 @@ secretGenerator:                       # from files rendered by `make k8s-secret
   - { name: ghcr-pull, namespace: lake, type: kubernetes.io/dockerconfigjson, files: [.dockerconfigjson=secrets/ghcr-dockerconfig.json], options: { disableNameSuffixHash: true } }
   - { name: ghcr-pull, namespace: spark-jobs, type: kubernetes.io/dockerconfigjson, files: [.dockerconfigjson=secrets/ghcr-dockerconfig.json], options: { disableNameSuffixHash: true } }
   - { name: ghcr-pull, namespace: airflow, type: kubernetes.io/dockerconfigjson, files: [.dockerconfigjson=secrets/ghcr-dockerconfig.json], options: { disableNameSuffixHash: true } }
+  - { name: ghcr-pull, namespace: gold-jobs, type: kubernetes.io/dockerconfigjson, files: [.dockerconfigjson=secrets/ghcr-dockerconfig.json], options: { disableNameSuffixHash: true } }
   - { name: ghcr-pull, namespace: starrocks, type: kubernetes.io/dockerconfigjson, files: [.dockerconfigjson=secrets/ghcr-dockerconfig.json], options: { disableNameSuffixHash: true } }
 configMapGenerator:
   - name: starrocks-init-sql            # Task 4: statements of the Job starrocks-init (applied by make, fixed name)

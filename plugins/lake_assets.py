@@ -6,3 +6,5 @@ sys.path for sibling imports, while the plugins folder is on the import path of 
 from airflow.sdk import Asset
 
 LAKE_SILVER = Asset(name="lake_silver", uri="s3://lakehouse/warehouse/silver.db")
+# Task 4 4.5: updated by gold_build after dbt build passed (models + tests); Task 5 (Superset) can react to it
+LAKE_GOLD = Asset(name="lake_gold", uri="starrocks://starrocks-fe-service.starrocks:9030/gold")

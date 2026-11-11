@@ -36,3 +36,8 @@ seeds:
       +column_types: { event_date: date, user_class: varchar(16), new_users: bigint, active_users: bigint }
     scenario_labels:
       +column_types: { step: varchar(32), scenario: varchar(64), label_source: varchar(32) }
+# 4.5: drop the FE's cached Iceberg metadata before every run, so dbt reads the newest Silver snapshot (E72 grant)
+on-run-start:
+  - "REFRESH EXTERNAL TABLE lake_iceberg.silver.chat_message"
+  - "REFRESH EXTERNAL TABLE lake_iceberg.silver.nlu_prediction"
+  - "REFRESH EXTERNAL TABLE lake_iceberg.silver.user_message"

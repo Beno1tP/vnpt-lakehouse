@@ -5,10 +5,11 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: __NAME__
-  namespace: starrocks
+  namespace: gold-jobs
   labels: { app: dbt-parse }
 spec:
   restartPolicy: Never
+  serviceAccountName: dbt                   # no API token (gold-jobs/rbac.yaml)
   imagePullSecrets: [{ name: ghcr-pull }]
   activeDeadlineSeconds: 600
   containers:

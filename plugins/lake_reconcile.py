@@ -17,6 +17,7 @@ import urllib.request
 TRINO_URL = "http://trino.trino.svc.cluster.local:8080"
 TRINO_NS, TRINO_DEPLOY = "trino", "trino-coordinator"
 SPARK_NS = "spark-jobs"
+STARROCKS_NS = "starrocks"  # gold mode = StarRocks FE up (Task 4 4.5); Trino and StarRocks never run together
 PIPELINE_DAG = "chatbot_bronze"  # writes Silver; trino_reconcile waits until it has no running/queued run (E67)
 
 
@@ -120,6 +121,19 @@ def unfinished_spark_apps() -> int:
     )
     states = [((i.get("status") or {}).get("applicationState") or {}).get("state") for i in items]
     return sum(s not in ("COMPLETED", "FAILED") for s in states)
+
+
+def starrocks_ready() -> tuple[int, int]:
+    """Ready replicas of the StarRocks FE and BE StatefulSets = the cluster's mode (Task 4 4.5): FE up = gold mode.
+    Read-only (Role airflow-starrocks-reader); a missing StatefulSet counts as 0."""
+    apps = _k8s().AppsV1Api()
+    out = []
+    for name in ("starrocks-fe", "starrocks-be"):
+        try:
+            out.append(apps.read_namespaced_stateful_set(name, STARROCKS_NS).status.ready_replicas or 0)
+        except Exception:  # noqa: BLE001 - not installed / no permission = not gold mode
+            out.append(0)
+    return out[0], out[1]
 
 
 def scale_trino(replicas: int, wait_s: int = 600) -> None:
