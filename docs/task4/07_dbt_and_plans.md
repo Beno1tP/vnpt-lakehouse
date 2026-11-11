@@ -49,3 +49,13 @@ Distinct counts are not additive: a person active on several days is counted onc
 stable integer `sender_key` per day can be unioned over ANY range of days and still counts each person once (UC7:
 "một người chỉ được đếm một lần"). With 89 users `COUNT(DISTINCT)` on the fact table would be instant too; the bitmap
 is the pattern that keeps pre-aggregated tables exact at production scale (01_knowledge.md A2).
+
+## 4. Time travel by tag in StarRocks (2026-11-11, gold mode)
+
+| Query (through `lake_iceberg`) | Result | Meaning |
+|---|---|---|
+| `SELECT count(*) FROM lake_iceberg.silver.nlu_prediction FOR VERSION AS OF 'task3_v1'` | 10,729 | StarRocks 3.5.21 resolves an Iceberg **tag** (not only a snapshot id) |
+| `SELECT count(step) … FOR VERSION AS OF 'task3_v1'` | 0 | the old snapshot is read with the **current** table schema: `step` (added in 4.0a, after `task3_v1`) exists and is NULL for every old row (Iceberg schema evolution: columns are matched by field id, a missing field reads as NULL) |
+
+Consequence for the freeze (4.6 stage 3): Gold can be rebuilt FROM a tag by pointing the staging views at
+`FOR VERSION AS OF '<tag>'`; a tag taken before a schema change still answers with today's columns (NULL-filled).

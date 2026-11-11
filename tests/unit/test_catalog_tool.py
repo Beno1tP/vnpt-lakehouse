@@ -67,3 +67,12 @@ def test_trino_tag_check_uses_the_same_expectations():
     import trino_tag_check as ttc
 
     assert ttc.EXPECTED_KEY == ct.EXPECTED_KEY  # Spark and Trino verify a freeze against the same numbers
+
+
+@pytest.mark.parametrize("table", ["bronze.chatlog", "silver.user_message", "scratch.other"])
+def test_scratch_commands_refuse_every_real_table(monkeypatch, table):
+    """Task 4 tag drill: scratch-* may only ever touch lake.scratch.tag_drill (exits before Spark starts)."""
+    monkeypatch.setattr("sys.argv", ["catalog_tool.py", "scratch-drop", "--table", table])
+    with pytest.raises(SystemExit) as e:
+        ct.main()
+    assert "works only on --table scratch.tag_drill" in str(e.value)
