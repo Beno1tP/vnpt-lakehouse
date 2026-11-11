@@ -136,6 +136,26 @@ def starrocks_ready() -> tuple[int, int]:
     return out[0], out[1]
 
 
+def starrocks_ready_seconds() -> float:
+    """E76: seconds BOTH starrocks-fe-0 and starrocks-be-0 have been Ready (0 if either is not). Right after a start
+    the FE briefly blacklists the BE ("inBlacklist: true") although the heartbeat says alive, so a query fails;
+    gold_build waits for a stable window instead of the first Ready. Read-only (pods get, two names)."""
+    import datetime as dt
+
+    core = _k8s().CoreV1Api()
+    ages = []
+    for name in ("starrocks-fe-0", "starrocks-be-0"):
+        try:
+            conds = core.read_namespaced_pod(name, STARROCKS_NS).status.conditions or []
+        except Exception:  # noqa: BLE001 - no pod = not ready
+            return 0.0
+        ready = [c for c in conds if c.type == "Ready" and c.status == "True"]
+        if not ready:
+            return 0.0
+        ages.append((dt.datetime.now(dt.timezone.utc) - ready[0].last_transition_time).total_seconds())
+    return min(ages)
+
+
 def scale_trino(replicas: int, wait_s: int = 600) -> None:
     apps = _k8s().AppsV1Api()
     apps.patch_namespaced_deployment_scale(TRINO_DEPLOY, TRINO_NS, {"spec": {"replicas": replicas}})

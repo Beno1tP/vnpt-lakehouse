@@ -50,6 +50,10 @@ rules:
     resources: [statefulsets]
     resourceNames: [starrocks-fe, starrocks-be]
     verbs: [get]
+  - apiGroups: [""]
+    resources: [pods]
+    resourceNames: [starrocks-fe-0, starrocks-be-0]   # E76: how long they have been Ready (no Secret values in a pod)
+    verbs: [get]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
