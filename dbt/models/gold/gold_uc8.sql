@@ -1,7 +1,8 @@
 -- UC8 new and active users per calendar day x user_class (days without messages = 0, M3). users = BITMAP of the
 -- stable sender_key: BITMAP_UNION_COUNT(users) over any range of days gives EXACT distinct users (distinct counts are
 -- not additive: summing active_users double-counts people active on several days; 01_knowledge.md A2).
-{{ config(table_type='DUPLICATE', keys=['event_date', 'user_class'], distributed_by=['event_date'], buckets=1) }}
+-- Primary Key table: a BITMAP value column is not allowed in a Duplicate table (E75; tested in a scratch database).
+{{ config(table_type='PRIMARY', keys=['event_date', 'user_class'], distributed_by=['event_date'], buckets=1) }}
 with days as (
     select d.date_day, c.user_class
     from {{ ref('dim_date') }} d
