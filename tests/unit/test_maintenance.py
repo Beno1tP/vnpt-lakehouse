@@ -35,3 +35,11 @@ def test_template_renders_for_make_and_keeps_safe_defaults():
     doc = yaml.safe_load(text)
     assert doc["spec"]["restartPolicy"]["type"] == "Never"
     assert doc["spec"]["mainApplicationFile"].endswith("/maintenance.py")
+
+
+def test_maintenance_accepts_the_scratch_drill_table_only_by_name():
+    import maintenance as m
+
+    assert m.check_table("scratch.tag_drill") == "scratch.tag_drill"
+    with pytest.raises(ValueError):
+        m.check_table("silver.user_message")  # Silver is not maintained by this job

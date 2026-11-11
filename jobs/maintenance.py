@@ -18,7 +18,7 @@ import argparse
 import re
 from datetime import datetime, timedelta, timezone
 
-TABLE_RE = re.compile(r"^bronze\.(chatlog|bot_predict)$")
+TABLE_RE = re.compile(r"^(bronze\.(chatlog|bot_predict)|scratch\.tag_drill)$")  # scratch: Task 4 tag drill (TABLES=)
 
 
 def ts_literal(hours_ago: float, now: datetime | None = None) -> str:

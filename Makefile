@@ -431,12 +431,15 @@ evidence-export: ## Freeze (B2): copy airflow-logs + backup (MinIO) and Spark ev
 	kubectl -n spark-jobs cp $$pod:/spark-events $(EVIDENCE_DIR)/spark-events >/dev/null; \
 	echo "[evidence] spark event logs: $$(find $(EVIDENCE_DIR)/spark-events -type f | wc -l) files"
 	@du -sh $(EVIDENCE_DIR)
-maintenance:   ## Task 2 2.5c: Iceberg maintenance now (same template as DAG lake_maintenance): [SNAP_HOURS=168] [RETAIN=5] [ORPHAN_HOURS=72] [DRY=yes]
+comma := ,
+MAINT_TABLES = $(if $(TABLES),$(foreach t,$(subst $(comma), ,$(TABLES)),"--table", "$(t)", ),"--table", "bronze.chatlog", "--table", "bronze.bot_predict", )
+maintenance:   ## Task 2 2.5c: Iceberg maintenance now (same template as DAG lake_maintenance): [SNAP_HOURS=168] [RETAIN=5] [ORPHAN_HOURS=72] [DRY=yes] [TABLES=scratch.tag_drill]
 	@test $(or $(ORPHAN_HOURS),72) -ge 24 || { echo "refusing: ORPHAN_HOURS must be >= 24 (Iceberg guard against deleting files of a running write, E46)"; exit 1; }
 	kubectl -n spark-jobs delete sparkapplication maintenance-manual --ignore-not-found --wait=true
 	sed -e 's/name: maintenance  /name: maintenance-manual  /' -e 's|{{ var.value.spark_job_image }}|$(JOB_IMAGE)|' \
 	    -e 's/{{ params.snapshot_hours }}/$(or $(SNAP_HOURS),168)/' -e 's/{{ params.retain_last }}/$(or $(RETAIN),5)/' \
 	    -e 's/{{ params.orphan_hours }}/$(or $(ORPHAN_HOURS),72)/' -e 's/{{ params.dry_run }}/$(if $(filter yes,$(DRY)),true,false)/' \
+	    -e 's|"--table", "bronze.chatlog", "--table", "bronze.bot_predict",|$(MAINT_TABLES)|' \
 	    dags/templates/maintenance_sparkapp.yaml | kubectl apply -f -
 	@for i in $$(seq 1 180); do s=$$(kubectl -n spark-jobs get sparkapplication maintenance-manual -o jsonpath='{.status.applicationState.state}'); \
 	  case "$$s" in COMPLETED|FAILED|SUBMISSION_FAILED) break;; esac; sleep 5; done; echo "[maint] state=$$s"; \

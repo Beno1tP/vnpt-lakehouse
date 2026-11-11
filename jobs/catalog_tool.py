@@ -12,7 +12,12 @@
     verify-tag --table … --tag task2_v1          rows VERSION AS OF the tag = expected totals (bronze_daily.json,
                                                  silver.json for the Silver tables, Task 3);
                                                  exit 1 on a mismatch or a missing tag
-Inputs are validated before they reach SQL (identifiers and paths only from a strict pattern).
+    scratch-create --table scratch.tag_drill    Task 4 tag drill: throwaway table, 3 inserts = 3 snapshots, tag
+                                                 drill_v1 on the 2nd (not the current one)
+    scratch-check  --table scratch.tag_drill    snapshots, refs, rows at the tag (2) and now (3); exit 1 otherwise
+    scratch-drop   --table scratch.tag_drill    DROP TABLE … PURGE + DROP NAMESPACE scratch
+Inputs are validated before they reach SQL (identifiers and paths only from a strict pattern). The scratch commands
+accept only that one table, so they can never touch Bronze or Silver.
 """
 
 from __future__ import annotations
@@ -22,6 +27,8 @@ import re
 import sys
 
 TABLE_RE = re.compile(r"^(bronze\.(chatlog|bot_predict)|silver\.(chat_message|nlu_prediction|user_message))$")
+SCRATCH, SCRATCH_TAG = "scratch.tag_drill", "drill_v1"  # Task 4 4.6: maintenance-vs-tag drill on a throwaway table
+SCRATCH_COMMANDS = ("scratch-create", "scratch-check", "scratch-drop")
 TAG_RE = re.compile(r"^task[2-5]_v[0-9]{1,3}$")  # one freeze tag per task version, e.g. task2_v1
 EXPECTED_DIR = "/opt/tests/expected"  # baked into the spark-job image
 EXPECTED_KEY = {  # table -> (expected file, key in its "totals")
@@ -95,14 +102,65 @@ def info(spark, table: str) -> None:
     print(f"[catalog] {table}: metadata={meta} snapshots={snaps[0]} last_commit={snaps[1]} rows={rows}", flush=True)
 
 
+def scratch_create(spark) -> None:
+    t = f"lake.{SCRATCH}"
+    spark.sql("CREATE NAMESPACE IF NOT EXISTS lake.scratch")
+    spark.sql(f"DROP TABLE IF EXISTS {t} PURGE")
+    spark.sql(f"CREATE TABLE {t} (id INT) USING iceberg TBLPROPERTIES ('format-version' = '2')")
+    for i in (1, 2):
+        spark.sql(f"INSERT INTO {t} VALUES ({i})")
+    spark.sql(f"ALTER TABLE {t} CREATE TAG {SCRATCH_TAG} RETAIN 1 DAYS")  # on snapshot 2 (2 rows)
+    spark.sql(f"INSERT INTO {t} VALUES (3)")  # snapshot 3 = current: the tag is NOT on the current snapshot
+    print(f"[catalog] {SCRATCH}: created, 3 snapshots, tag {SCRATCH_TAG} on the 2nd", flush=True)
+
+
+def scratch_check(spark) -> bool:
+    t = f"lake.{SCRATCH}"
+    snaps = [r[0] for r in spark.sql(f"SELECT snapshot_id FROM {t}.snapshots ORDER BY committed_at").collect()]
+    refs = {r[0]: (r[1], r[2]) for r in spark.sql(f"SELECT name, type, snapshot_id FROM {t}.refs").collect()}
+    at_tag = spark.sql(f"SELECT count(*) FROM {t} VERSION AS OF '{SCRATCH_TAG}'").collect()[0][0]
+    now = spark.sql(f"SELECT count(*) FROM {t}").collect()[0][0]
+    ok = at_tag == 2 and now == 3 and SCRATCH_TAG in refs and refs[SCRATCH_TAG][1] in snaps
+    print(f"[catalog] {SCRATCH}: snapshots {len(snaps)} {snaps}; refs {refs}", flush=True)
+    print(
+        f"[catalog] {'PASS' if ok else 'FAIL'} {SCRATCH}: rows at tag {SCRATCH_TAG} {at_tag} (expected 2), now {now} "
+        f"(expected 3), tagged snapshot still listed: {SCRATCH_TAG in refs and refs[SCRATCH_TAG][1] in snaps}",
+        flush=True,
+    )
+    return ok
+
+
+def scratch_drop(spark) -> None:
+    spark.sql(f"DROP TABLE IF EXISTS lake.{SCRATCH} PURGE")
+    spark.sql("DROP NAMESPACE IF EXISTS lake.scratch")
+    print(f"[catalog] {SCRATCH}: dropped with PURGE, namespace scratch removed", flush=True)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("command", choices=["info", "forget", "register", "tag", "verify-tag"])
+    ap.add_argument("command", choices=["info", "forget", "register", "tag", "verify-tag", *SCRATCH_COMMANDS])
     ap.add_argument("--table", action="append", required=True)
     ap.add_argument("--metadata", help="register: s3a://…/metadata/<file>.metadata.json")
     ap.add_argument("--tag", help="tag / verify-tag: e.g. task2_v1")
     ap.add_argument("--retain-days", type=int, default=365)
     args = ap.parse_args()
+    if args.command in SCRATCH_COMMANDS:
+        if args.table != [SCRATCH]:
+            sys.exit(f"{args.command} works only on --table {SCRATCH}")
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.builder.appName(f"catalog_{args.command}").getOrCreate()
+        spark.sparkContext.setLogLevel("ERROR")
+        ok = True
+        if args.command == "scratch-create":
+            scratch_create(spark)
+            ok = scratch_check(spark)
+        elif args.command == "scratch-check":
+            ok = scratch_check(spark)
+        else:
+            scratch_drop(spark)
+        spark.stop()
+        sys.exit(0 if ok else 1)
     if args.command in ("tag", "verify-tag") and not args.tag:
         sys.exit(f"{args.command} needs --tag")
     if args.command == "tag":
