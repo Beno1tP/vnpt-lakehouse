@@ -40,6 +40,18 @@ RESOURCES = Path("/opt/airflow/resources")
     tags=["task3", "trino", "reconcile"],
 )
 def trino_reconcile():
+    @task.short_circuit
+    def not_gold_mode() -> bool:  # Task 4 4.5: the mode decides, DAGs never scale the other engine
+        import lake_reconcile as lr
+
+        fe, be = lr.starrocks_ready()
+        if fe:
+            print(
+                f"[trino-reconcile] skipped: gold mode (StarRocks FE {fe}, BE {be} ready); Silver is reconciled by "
+                "gold_build through StarRocks (dbt test assert_silver_counts). Rerun in pipeline mode if needed"
+            )
+        return fe == 0
+
     @task.sensor(poke_interval=60, timeout=3 * 3600, mode="reschedule", execution_timeout=timedelta(hours=3))
     def wait_pipeline_idle(ti=None) -> bool:
         import lake_reconcile as lr
@@ -80,7 +92,7 @@ def trino_reconcile():
 
     checked = reconcile()
     down = trino_down()
-    wait_pipeline_idle() >> trino_up() >> checked >> down
+    not_gold_mode() >> wait_pipeline_idle() >> trino_up() >> checked >> down
     [checked, down] >> verdict()
 
 
