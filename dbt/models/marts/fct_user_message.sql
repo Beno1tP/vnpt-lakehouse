@@ -3,7 +3,7 @@
 {{ config(
     table_type='PRIMARY',
     keys=['message_id', 'event_date'],
-    partition_by="date_trunc('day', event_date)",
+    partition_by=["date_trunc('day', event_date)"],  # a LIST: a string is split at its comma (E73)
     partition_type='Expr',
     distributed_by=['message_id'],
     buckets=1
