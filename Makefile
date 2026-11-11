@@ -48,7 +48,7 @@ SPARK_SUBMIT = $(COMPOSE) exec -T spark /opt/spark/bin/spark-submit --master $(S
 SPARK_SQL    = $(COMPOSE) exec -T spark /opt/spark/bin/spark-sql --master local[1]
 NOISE        = ^Time taken|^:: loading settings
 
-.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks ghcr-prune k8s-up k8s-demo airflow-viewer airflow-viewer-check minio-ui history-ui freeze freeze-check evidence evidence-export spark-operator-chart demo-task2 demo-pipeline demo-check trino-chart trino-install trino-cli trino-ui mode-query mode-pipeline trino-check trino-explore trino-tag-check demo-task3 starrocks-chart starrocks-render starrocks-install starrocks-sql starrocks-up starrocks-down starrocks-ready starrocks-init dbt dbt-parse mode-gold
+.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks ghcr-prune k8s-up k8s-demo airflow-viewer airflow-viewer-check minio-ui history-ui freeze freeze-check evidence evidence-export spark-operator-chart demo-task2 demo-pipeline demo-check trino-chart trino-install trino-cli trino-ui mode-query mode-pipeline trino-check trino-explore trino-tag-check demo-task3 starrocks-chart starrocks-render starrocks-install starrocks-sql starrocks-up starrocks-down starrocks-ready starrocks-init dbt dbt-parse dbt-docs mode-gold
 
 help:          ## list targets and variables
 	@awk -F':.*## ' '/^[a-zA-Z0-9_-]+:.*## /{printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -208,6 +208,17 @@ dbt-parse:     ## Task 4: dbt parse of the LOCAL dbt/ folder in the current dbt 
 	  kubectl -n gold-jobs wait --for=condition=Ready pod/$$n --timeout=300s >/dev/null; \
 	  kubectl -n gold-jobs cp dbt $$n:/tmp/dbt-local >/dev/null; \
 	  kubectl -n gold-jobs exec $$n -- dbt parse --project-dir /tmp/dbt-local --profiles-dir /tmp/dbt-local
+EVIDENCE_DBT ?= $(HOME)/data/vnpt-lab/evidence/task4-dbt-docs-$(shell date -u +%Y%m%dT%H%MZ)
+dbt-docs:      ## Task 4 step 4.6: dbt docs generate --static in gold-jobs (gold mode) -> EVIDENCE_DBT/lineage.html + manifest/catalog (outside Git)
+	@test -n "$(DBT_IMAGE_REF)" || { echo "DBT_IMAGE_REF missing in infra/k8s/images.env"; exit 1; }
+	@n=dbt-docs-$$(date -u +%H%M%S); \
+	  sed -e "s|__NAME__|$$n|" -e 's|__IMAGE__|$(DBT_IMAGE_REF)|' infra/k8s/starrocks/dbt-docs-pod.yaml | kubectl apply -f - >/dev/null; \
+	  trap 'kubectl -n gold-jobs delete pod '"$$n"' --wait=false >/dev/null' EXIT; \
+	  kubectl -n gold-jobs wait --for=condition=Ready pod/$$n --timeout=300s >/dev/null; \
+	  kubectl -n gold-jobs exec $$n -- dbt docs generate --static; \
+	  mkdir -p $(EVIDENCE_DBT); \
+	  for f in static_index.html manifest.json catalog.json; do kubectl -n gold-jobs cp $$n:/tmp/dbt-target/$$f $(EVIDENCE_DBT)/$$f >/dev/null; done; \
+	  mv $(EVIDENCE_DBT)/static_index.html $(EVIDENCE_DBT)/lineage.html; ls -la $(EVIDENCE_DBT)
 starrocks-down: ## Task 4: StarRocks -> 0: operator first, then FE/BE StatefulSets; waits until the pods are gone (graceful stop up to 120 s); PVCs + metadata stay
 	-@kubectl -n starrocks scale deploy/kube-starrocks-operator --replicas=0 2>/dev/null
 	-@kubectl -n starrocks scale statefulset/starrocks-be statefulset/starrocks-fe --replicas=0 2>/dev/null

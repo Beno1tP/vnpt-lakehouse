@@ -14,6 +14,11 @@ Time spent:
 
 ---
 
+### 2026-11-11 — 4.5 done (E76 proven) + 4.6 stage 1 (plans, bitmap) + stage 2 prepared (dbt docs)
+Did (Bee): PR #103 → images → bump #104 → `make k8s-up` (Airflow rev 22) → `mode-pipeline` → `mode-gold` (`a BE query runs`) → manual `gold_build`: sensor 108 s waiting → 171 s, dbt_build attempt 1 PASS=56, verdict, lake_gold (03:23:56–03:25:51 UTC = 10:23–10:25 ICT); EXPLAIN Gold vs catalog; bitmap query.
+Observed: `gold_uc5` partitions 1/1, tablets 1/1, expected 9 rows; Iceberg scan expected 7,153 (no stats); bitmap 87 / 2 exact vs 106 / 6 summed (23 double counts) → `07_dbt_and_plans.md` §2–3.
+Prepared (Claude, branch `task4/4.6-docs-plans`): `make dbt-docs` (`dbt docs generate --static` → one HTML file outside Git); 07 rewritten with the results.
+
 ### 2026-11-11 — 4.5 proven end to end + E76
 Did (Bee): PR #101 → images → bump #102 → `make k8s-up` (gold-jobs, RBAC, Secrets, Airflow rev 21 with `AIRFLOW_VAR_DBT_IMAGE`) → unpause gold_build → `make mode-pipeline` → clear 07-24 (whole day; `-t "^silver$|^validate_silver$"` matched nothing, not explained: the CLI calls `dag.partial_subset(task_ids=…)` with no backfill filter, Airflow 3.3.2 source; and `-y` prints nothing, by design) → trino_reconcile success → `make mode-gold` → gold_build success 03:01:59 UTC (10:01 ICT).
 Observed: dbt_build attempt 1 failed (E76, BE blacklisted right after start), attempt 2 `PASS=56` (52 + Silver gate + 3 on-run-start operations), `assert_silver_counts` PASS; assets `lake_silver` → `lake_gold`; node 6,212 Mi after the pod.
