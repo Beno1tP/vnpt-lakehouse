@@ -14,6 +14,12 @@ Time spent:
 
 ---
 
+### 2026-11-11 — 4.3 done + 4.4 prepared (UC marts + reconcile)
+Did (Bee): PR #92 → images → bump #93 → `k8s-up` (ConfigMap starrocks-init-sql) → `starrocks-init` → build: E73 (partition_by string) → PR #94 merged with a red dbt-lint (E74: Jinja comment + unchained merge) → PR #95 → images → bump #96 → `make dbt CMD="build --exclude resource_type:seed"` PASS=35 → DDL check.
+Learned: generate_series and expression partitioning on a Primary Key table work in StarRocks 3.5.21; dbt-starrocks skips unchanged views; an incremental dim keeps its keys (0 new senders on the second run).
+Decided (Bee): add `make dbt-parse` (local `dbt/` parsed in the current image, no connection) before every dbt PR.
+Prepared (Claude, branch `task4/4.4-uc-marts`): `gold_uc4` (day × step × traffic, + scenario label seed), `gold_uc5` (understood / not), `gold_uc6` (intent, intent_group), `gold_uc7` (calendar day × user_class: cumulative users, D−30, change, NULL % — join with conditional sums, no correlated subquery), `gold_uc8` (new / active + BITMAP of sender_key); seed column types; macro `reconcile` (full outer join model vs seed, null-safe `<=>`) + `reconcile_uc4…uc8`; `assert_bitmap_users` (bitmap union over all days = last-day users = sum of new users); `make dbt-parse`. Predicted: recipes `bash -n` OK; dbt parse not run locally (that is what `make dbt-parse` is for).
+
 ### 2026-11-11 — 4.2 done + 4.3 prepared (core Gold models)
 Did (Bee): E70 fix (PR #88) → images → bump → `make k8s-up` (minio-users met) → `s3-access-test` 5 × 6/6 → `starrocks-init` (FAIL REFRESH → E72 → PR #90, images, bump #91) → `starrocks-init` 16 OK + 3 PASS → `make dbt CMD="debug"` (connection OK, git missing) → `make dbt CMD="run --select stg_user_message"` → count 10,613. Pod clock 00:51 UTC = 07:51 ICT (laptop slept between).
 Learned: four engines, one number (pandas = Spark = Trino = StarRocks: 10,613); dbt-starrocks renders `database:` of a source as the catalog; an RBAC check that performs every real operation finds the missing grant (E72).
