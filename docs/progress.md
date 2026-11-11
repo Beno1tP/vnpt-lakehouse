@@ -184,6 +184,13 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 - Open: **E17** (confirm in HMS log; hadoop-aws 3.1.0), infra redesign toward pulled images + compose config, disk audit (setup used 30–50 GB).
 - Data reminder: trial/imaginary data, lab only; keep local.
 
+## 8b. Status 2026-11-11 11:30 ICT (04:30 UTC): Task 4 paused before 4.6 stage 3
+
+- Done: 4.0 metrics + expected seeds, 4.0a `step` in Silver, 4.1 StarRocks on Minikube (modes), 4.2 catalog + users, 4.3 core models, 4.4 UC marts (PASS=52, all reconcile vs pandas), 4.5 DAG `gold_build` (asset-driven, proven end to end, E76 fixed), 4.6 stages 1–2 (plans, bitmap, dbt docs `~/data/vnpt-lab/evidence/task4-dbt-docs-20261111T0339Z/`). Errors E67–E76 in `docs/task4/05_errors_and_fixes.md`.
+- Next (resume here): check 1a `SELECT count(*) … FOR VERSION AS OF 'task3_v1'` via `make starrocks-sql` (tag syntax), then 1b `count(step)` (which schema); then stage 3 = Bee's option C: scratch Iceberg table `scratch.tag_drill` with tag `drill_v1` + `make maintenance TABLES=… SNAP_HOURS=0 RETAIN=1` + check + drop (real tables untouched), `FREEZE.md` (digests, tag snapshot IDs), Gold counts + measure sums, `demo-task4`, `demo-check DEMO_TASK=4` failing on unpaused asset-triggered DAGs; stage 4 README + tag `task4-v1`.
+- Open asks: delete failed pod `gold-jobs/dbt-build-cq1cl31g` and the unused Secret `starrocks/starrocks-dbt-credentials`; why `tasks clear -t` matched nothing (use the whole-day clear).
+- Resume: `minikube start` → `make k8s-up` (nudges pg-backup and finished SparkApplications) → `make mode-gold` (if StarRocks is needed).
+
 ## 8a. Status 2026-11-10 (Task 3 done and frozen)
 
 - Task 3 done, tag `task3-v1`; read `docs/task3/README.md` first. Steps 3.0–3.7 in `docs/task3/04_process.md`, commands in `docs/running-steps-task2-5.txt` C.
