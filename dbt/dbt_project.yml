@@ -17,3 +17,22 @@ models:
       +materialized: view
     marts:
       +materialized: table
+    gold:
+      +materialized: table
+seeds:
+  vnpt_gold:
+    # expected values from tools/expected_gold.py (pandas); explicit types so the reconcile tests compare like with like
+    expected_gold_uc4:
+      +column_types: { event_date: date, step: varchar(32), traffic_class: varchar(16), message_cnt: bigint }
+    expected_gold_uc5:
+      +column_types: { event_date: date, traffic_class: varchar(16), understood_cnt: bigint, not_understood_cnt: bigint }
+    expected_gold_uc6:
+      +column_types:
+        { event_date: date, final_intent: varchar(64), intent_group: varchar(32), traffic_class: varchar(16), message_cnt: bigint }
+    expected_gold_uc7:
+      +column_types:
+        { event_date: date, user_class: varchar(16), cumulative_users: bigint, users_30d_before: bigint, change_abs: bigint, change_pct: double }
+    expected_gold_uc8:
+      +column_types: { event_date: date, user_class: varchar(16), new_users: bigint, active_users: bigint }
+    scenario_labels:
+      +column_types: { step: varchar(32), scenario: varchar(64), label_source: varchar(32) }

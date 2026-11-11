@@ -1,0 +1,23 @@
+# Task 4: `make dbt-parse`: parse the LOCAL dbt/ folder (copied in with kubectl cp) inside the current dbt image,
+# before a PR. No database connection, no Secret, nothing written outside the pod: compile/Jinja/YAML errors in
+# seconds instead of a CI + images cycle (E73, E74). Builds into gold still come only from reviewed images.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: __NAME__
+  namespace: starrocks
+  labels: { app: dbt-parse }
+spec:
+  restartPolicy: Never
+  imagePullSecrets: [{ name: ghcr-pull }]
+  activeDeadlineSeconds: 600
+  containers:
+    - name: dbt
+      image: __IMAGE__
+      imagePullPolicy: IfNotPresent
+      command: ["sleep", "600"]
+      env:
+        - { name: STARROCKS_PASSWORD, value: parse-only }   # profiles.yml needs a value; parse never connects
+      resources:
+        requests: { memory: 256Mi, cpu: 100m }
+        limits:   { memory: 512Mi }
