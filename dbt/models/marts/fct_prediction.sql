@@ -1,10 +1,11 @@
 -- Fact: one NLU prediction (10,729). Base of UC4 (step), UC5 (understood), UC6 (intents). traffic_class, first match
 -- wins (metrics.md): internal > unmatched (no chat row, M1) > home > real. Primary Key (prediction_id, event_date):
 -- StarRocks requires the partition column in the key; partitioned by day (expression partitioning).
+-- partition_by is a LIST: a string is split at its comma (E73). No comments inside the Jinja config call (E74).
 {{ config(
     table_type='PRIMARY',
     keys=['prediction_id', 'event_date'],
-    partition_by=["date_trunc('day', event_date)"],  # a LIST: a string is split at its comma (E73)
+    partition_by=["date_trunc('day', event_date)"],
     partition_type='Expr',
     distributed_by=['prediction_id'],
     buckets=1
