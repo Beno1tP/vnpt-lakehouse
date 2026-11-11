@@ -14,6 +14,12 @@ Time spent:
 
 ---
 
+### 2026-11-11 — 4.5 proven end to end + E76
+Did (Bee): PR #101 → images → bump #102 → `make k8s-up` (gold-jobs, RBAC, Secrets, Airflow rev 21 with `AIRFLOW_VAR_DBT_IMAGE`) → unpause gold_build → `make mode-pipeline` → clear 07-24 (whole day; `-t "^silver$|^validate_silver$"` matched nothing, not explained: the CLI calls `dag.partial_subset(task_ids=…)` with no backfill filter, Airflow 3.3.2 source; and `-y` prints nothing, by design) → trino_reconcile success → `make mode-gold` → gold_build success 03:01:59 UTC (10:01 ICT).
+Observed: dbt_build attempt 1 failed (E76, BE blacklisted right after start), attempt 2 `PASS=56` (52 + Silver gate + 3 on-run-start operations), `assert_silver_counts` PASS; assets `lake_silver` → `lake_gold`; node 6,212 Mi after the pod.
+Learned: the chain Silver write → asset → Trino check (pipeline mode) → Gold build (gold mode) runs without a manual trigger; the one infrastructure retry is what made it green.
+Prepared (Claude, branch `task4/e76-starrocks-warmup`): sensor stable window 120 s, starrocks-ready BE query, retry delay 2 min, Role get on the two StarRocks pods.
+
 ### 2026-11-11 — 4.4 done + 4.5 prepared (gold_build DAG)
 Did (Bee): `make dbt-parse` (clean) → PR #97 → images → bump #98 → `dbt build` (gold_uc8 failed: E75) → scratch-DB test of a BITMAP column in a Primary Key table (2 distinct) → PR #99 → images → bump #100 → `dbt build` PASS=52 → `starrocks-init` → grants test (wildcard grant survives a rebuild).
 Reviewed (Bee, pasted review) and decided: dbt pods in their own namespace `gold-jobs` (pod-create rights = Secret-read rights: no root password there); the mode is read from the cluster (StarRocks FE up = gold mode), DAGs never scale the other engine; Silver gate through StarRocks; `dbt build` (tests right after each model, downstream skipped); no grant step (wildcard grant); artifact upload later (dbt output already in s3://airflow-logs); WAP (staging + SWAP) = Could.

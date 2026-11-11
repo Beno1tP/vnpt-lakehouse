@@ -23,6 +23,7 @@ from lake_assets import LAKE_GOLD, LAKE_SILVER
 
 from lake_alerts import task_failure_alert
 
+STABLE_SECONDS = 120  # E76: FE and BE Ready for 2 min before dbt runs
 DBT_RESOURCES = k8s.V1ResourceRequirements(  # request = limit: shares the gold-mode margin (02_config.md §4)
     requests={"memory": "512Mi", "cpu": "200m"}, limits={"memory": "512Mi", "cpu": "1"}
 )
@@ -47,11 +48,13 @@ def gold_build():
         import lake_reconcile as lr
 
         fe, be = lr.starrocks_ready()
+        stable = lr.starrocks_ready_seconds() if fe and be else 0.0
+        ok = bool(fe and be) and stable >= STABLE_SECONDS  # E76: not the first Ready (BE blacklist window)
         print(
-            f"[gold-build] StarRocks FE ready {fe}, BE ready {be}"
-            + ("" if fe and be else ": waiting for make mode-gold")
+            f"[gold-build] StarRocks FE ready {fe}, BE ready {be}, both ready for {stable:.0f} s"
+            + ("" if ok else f": waiting (make mode-gold; need {STABLE_SECONDS} s stable)")
         )
-        return bool(fe and be)
+        return ok
 
     dbt_build = KubernetesPodOperator(
         task_id="dbt_build",
@@ -69,7 +72,7 @@ def gold_build():
         startup_timeout_seconds=600,
         on_finish_action="delete_succeeded_pod",  # a failed pod stays for debugging
         retries=1,
-        retry_delay=timedelta(minutes=1),
+        retry_delay=timedelta(minutes=2),  # E76 margin; a second failure = data, not infrastructure
         outlets=[LAKE_GOLD],
     )
 

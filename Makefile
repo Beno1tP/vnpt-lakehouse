@@ -219,8 +219,10 @@ starrocks-up:  ## Task 4: StarRocks -> 1: FE/BE StatefulSets to 1 ourselves (E69
 starrocks-ready: ## Task 4: wait for the CURRENT FE/BE revision (rollout status, not an old pod: E69) and for the BE heartbeat (Alive)
 	kubectl -n starrocks rollout status statefulset/starrocks-fe --timeout=900s
 	kubectl -n starrocks rollout status statefulset/starrocks-be --timeout=900s
-	@for i in $$(seq 1 36); do { sed -n 's/^password=//p' infra/k8s/secrets/starrocks-root.env; echo "SHOW BACKENDS"; } | $(SR_SQL) 2>/dev/null | grep -q '| true ' && { echo "starrocks-ready: FE + BE alive"; exit 0; }; sleep 5; done; \
-	  echo "starrocks-ready: BE not alive after 3 min (make starrocks-sql SQL='SHOW BACKENDS')"; exit 1
+	@for i in $$(seq 1 36); do { sed -n 's/^password=//p' infra/k8s/secrets/starrocks-root.env; echo "SHOW BACKENDS"; } | $(SR_SQL) 2>/dev/null | grep -q '| true ' && break; sleep 5; done; \
+	  for i in $$(seq 1 36); do { sed -n 's/^password=//p' infra/k8s/secrets/starrocks-root.env; echo "SELECT count(*) FROM TABLE(generate_series(1, 10))"; } | $(SR_SQL) >/dev/null 2>&1 && \
+	    { echo "starrocks-ready: FE + BE alive and a BE query runs (E76: past the blacklist window)"; exit 0; }; sleep 5; done; \
+	  echo "starrocks-ready: no query reached the BE after 3 min (make starrocks-sql SQL='SHOW BACKENDS')"; exit 1
 mode-gold:     ## Task 4 (D15): gold mode. Refuses while a run is active; Trino + History Server -> 0; StarRocks -> 1 (Airflow stays up; Spark cannot start)
 	@! kubectl -n spark-jobs get sparkapplications --no-headers -o custom-columns=S:.status.applicationState.state | grep -vE '^(COMPLETED|FAILED)$$' | grep -q . || \
 	  { echo "refusing: a SparkApplication is not finished; wait for it"; exit 1; }
