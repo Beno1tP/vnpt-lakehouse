@@ -1,0 +1,59 @@
+version: 2
+# Generic tests (plan step 4.3): keys, flags, accepted values, fact -> dimension relationships. Exact numbers vs the
+# expected files are singular tests in tests/ (assert_core_counts.sql here; reconcile_uc* in 4.4).
+models:
+  - name: dim_date
+    columns:
+      - name: date_day
+        data_tests: [unique, not_null]
+  - name: dim_intent
+    columns:
+      - name: final_intent
+        data_tests: [unique, not_null]
+      - name: intent_group
+        data_tests:
+          - accepted_values: { arguments: { values: [business, fallback, bot_khong_hieu] } }
+  - name: dim_sender
+    columns:
+      - name: sender_id
+        data_tests: [unique, not_null]
+      - name: sender_key
+        data_tests: [unique, not_null]
+      - name: user_class
+        data_tests:
+          - accepted_values: { arguments: { values: [internal, external] } }
+  - name: fct_prediction
+    columns:
+      - name: prediction_id
+        data_tests: [unique, not_null]
+      - name: event_date
+        data_tests:
+          - not_null
+          - relationships: { arguments: { to: ref('dim_date'), field: date_day } }
+      - name: final_intent
+        data_tests:
+          - not_null
+          - relationships: { arguments: { to: ref('dim_intent'), field: final_intent } }
+      - name: step
+        data_tests: [not_null]
+      - name: traffic_class
+        data_tests:
+          - accepted_values: { arguments: { values: [real, home, internal, unmatched] } }
+      - name: sender_key
+        data_tests:
+          - relationships: { arguments: { to: ref('dim_sender'), field: sender_key } }
+  - name: fct_user_message
+    columns:
+      - name: message_id
+        data_tests: [unique, not_null]
+      - name: event_date
+        data_tests:
+          - not_null
+          - relationships: { arguments: { to: ref('dim_date'), field: date_day } }
+      - name: sender_key
+        data_tests:
+          - not_null    # every client message has a user (dim_sender is built from client messages)
+          - relationships: { arguments: { to: ref('dim_sender'), field: sender_key } }
+      - name: traffic_class
+        data_tests:
+          - accepted_values: { arguments: { values: [real, home, internal] } }

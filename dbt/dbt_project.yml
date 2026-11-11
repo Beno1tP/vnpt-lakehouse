@@ -1,4 +1,5 @@
-# Task 4: Gold layer in StarRocks, built by dbt (docs/task4/01_knowledge.md A4). Database (= dbt schema) `gold`.
+# Task 4: Gold layer in StarRocks, built by dbt (docs/task4/01_knowledge.md A4/A5). Database (= dbt schema) `gold`.
+# Artifact and log paths come from DBT_TARGET_PATH / DBT_LOG_PATH in the image (dbt 1.12 deprecates them here).
 name: vnpt_gold
 version: "1.0.0"
 config-version: 2
@@ -7,9 +8,12 @@ model-paths: ["models"]
 seed-paths: ["seeds"]
 test-paths: ["tests"]
 macro-paths: ["macros"]
-target-path: /tmp/dbt-target        # the image's project folder is read-only for the dbt user at run time
-log-path: /tmp/dbt-logs
+vars:
+  period_start: "2024-07-02"     # the whole dataset (docs/metrics.md "Period"); dim_date spans it, zero days included
+  period_end: "2024-07-25"
 models:
   vnpt_gold:
     staging:
       +materialized: view
+    marts:
+      +materialized: table

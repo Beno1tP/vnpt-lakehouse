@@ -20,6 +20,12 @@ spec:
           envFrom: [{ secretRef: { name: starrocks-init-credentials } }]
           env:
             - { name: STARROCKS_HOST, value: "starrocks-fe-service.starrocks.svc.cluster.local" }
+            - { name: STARROCKS_INIT_SQL, value: /config/init.sql }
           resources:
             requests: { memory: 128Mi, cpu: 50m }
             limits:   { memory: 256Mi }
+          volumeMounts:
+            - { name: init-sql, mountPath: /config, readOnly: true }
+      volumes:
+        - name: init-sql
+          configMap: { name: starrocks-init-sql }   # infra/k8s/starrocks/init.sql via kustomize (make k8s-up)

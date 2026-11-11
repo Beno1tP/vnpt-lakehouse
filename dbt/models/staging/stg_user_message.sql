@@ -1,2 +1,14 @@
--- Step 4.2 test of the 3-part source name; becomes the real staging model in 4.3.
-select * from {{ source('silver', 'user_message') }}
+-- One client message + its prediction (left join in Silver): the base of UC7/UC8 (users).
+select
+    id as message_id,
+    sender_id,
+    is_home,
+    is_internal_sender,
+    input_channel,
+    event_ts,
+    event_date,
+    prediction_id,
+    final_intent,
+    step,
+    has_prediction
+from {{ source('silver', 'user_message') }}

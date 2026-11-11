@@ -1,65 +1,42 @@
-"""Task 4 step 4.2 (D17): idempotent StarRocks setup, run as the Job starrocks-init (make starrocks-init).
+"""Task 4 (D17): runner of the idempotent StarRocks setup, as the Job starrocks-init (make starrocks-init).
 
-1. external catalog lake_iceberg -> Iceberg tables via HMS + MinIO (MinIO user starrocks: read lakehouse/ only)
-2. database gold
-3. users dbt_rw (all on gold, SELECT on the catalog) and bi_ro (SELECT on gold only); passwords reset every run
-4. checks: dbt_rw reads lake_iceberg.silver.user_message (= silver.json), bi_ro cannot CREATE/INSERT
-
-Credentials come from the environment (Secret starrocks-init-credentials); statements are printed with every secret
-replaced by ***, results as counts only. Exit 1 on any failed statement or check.
+The statements live in infra/k8s/starrocks/init.sql, mounted from the ConfigMap starrocks-init-sql at
+STARROCKS_INIT_SQL (default /config/init.sql): changing a grant needs no image build. This runner
+1. reads the file, splits it into statements, fills ${NAME} placeholders from the environment (Secret
+   starrocks-init-credentials; values must be alphanumeric so they cannot break out of a SQL string),
+2. runs them as root, printing each first line with every secret replaced by ***,
+3. checks: dbt_rw refreshes + reads lake_iceberg.silver.user_message (= silver.json), bi_ro gets a privilege error
+   on CREATE in gold and on INSERT into Iceberg.
+Exit 1 on any failed statement or check. Counts only.
 """
 
 from __future__ import annotations
 
 import os
+import re
 import sys
 
-HMS = "thrift://hive-metastore.lake.svc.cluster.local:9083"
-S3 = "http://minio.lake.svc.cluster.local:9000"
 EXPECTED_USER_MESSAGE = 10613  # tests/expected/silver.json totals.user_message_rows
+PLACEHOLDER = re.compile(r"\$\{([A-Z0-9_]+)\}")
+SECRET_VARS = ("STARROCKS_DBT_PASSWORD", "STARROCKS_BI_PASSWORD", "S3_SECRET_KEY")
 
 
-def catalog_sql(access_key: str, secret_key: str) -> str:
-    props = {
-        "type": "iceberg",
-        "iceberg.catalog.type": "hive",
-        "hive.metastore.uris": HMS,
-        "aws.s3.endpoint": S3,
-        "aws.s3.enable_path_style_access": "true",
-        "aws.s3.enable_ssl": "false",
-        "aws.s3.region": "us-east-1",
-        "aws.s3.access_key": access_key,
-        "aws.s3.secret_key": secret_key,
-    }
-    body = ",\n  ".join(f'"{k}" = "{v}"' for k, v in props.items())
-    return f"CREATE EXTERNAL CATALOG IF NOT EXISTS lake_iceberg PROPERTIES (\n  {body}\n)"
+def split_statements(text: str) -> list[str]:
+    """Statements end with ';' at the end of a line; '--' comment lines are dropped."""
+    body = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("--"))
+    return [s.strip() for s in re.split(r";[ \t]*(?:\n|$)", body) if s.strip()]
 
 
-def setup_statements(env: dict) -> list[str]:
-    dbt, bi = env["STARROCKS_DBT_PASSWORD"], env["STARROCKS_BI_PASSWORD"]
-    for name, value in (("STARROCKS_DBT_PASSWORD", dbt), ("STARROCKS_BI_PASSWORD", bi)):
-        if not value.isalnum():  # generated as hex; anything else could break out of the SQL string
+def render(sql: str, env: dict) -> str:
+    def value(m: re.Match) -> str:
+        name = m.group(1)
+        if name not in env:
+            raise KeyError(f"placeholder ${{{name}}} has no value in the environment")
+        if not env[name].isalnum():  # generated as hex; anything else could break out of the SQL string
             raise ValueError(f"{name} must be alphanumeric")
-    return [
-        catalog_sql(env["S3_ACCESS_KEY"], env["S3_SECRET_KEY"]),
-        "CREATE DATABASE IF NOT EXISTS gold",
-        f"CREATE USER IF NOT EXISTS 'dbt_rw'@'%' IDENTIFIED BY '{dbt}'",
-        f"ALTER USER 'dbt_rw'@'%' IDENTIFIED BY '{dbt}'",
-        f"CREATE USER IF NOT EXISTS 'bi_ro'@'%' IDENTIFIED BY '{bi}'",
-        f"ALTER USER 'bi_ro'@'%' IDENTIFIED BY '{bi}'",
-        "GRANT ALL ON DATABASE gold TO USER 'dbt_rw'@'%'",
-        "GRANT ALL ON ALL TABLES IN DATABASE gold TO USER 'dbt_rw'@'%'",
-        "GRANT ALL ON ALL VIEWS IN DATABASE gold TO USER 'dbt_rw'@'%'",
-        "GRANT USAGE ON CATALOG lake_iceberg TO USER 'dbt_rw'@'%'",
-        "SET CATALOG lake_iceberg",
-        "GRANT SELECT ON ALL TABLES IN ALL DATABASES TO USER 'dbt_rw'@'%'",
-        # E72: REFRESH EXTERNAL TABLE (drop the cached Iceberg metadata, R8) is a privilege of its own; it does not
-        # allow writes. dbt_rw needs it before every build (gold_build.refresh_catalog, 4.5)
-        "GRANT REFRESH ON ALL TABLES IN ALL DATABASES TO USER 'dbt_rw'@'%'",
-        "SET CATALOG default_catalog",
-        "GRANT SELECT ON ALL TABLES IN DATABASE gold TO USER 'bi_ro'@'%'",
-        "GRANT SELECT ON ALL VIEWS IN DATABASE gold TO USER 'bi_ro'@'%'",
-    ]
+        return env[name]
+
+    return PLACEHOLDER.sub(value, sql)
 
 
 def masked(sql: str, secrets: list[str]) -> str:
@@ -76,23 +53,24 @@ def connect(host: str, user: str, password: str):
 
 
 def main() -> None:
-    env = os.environ
+    env = dict(os.environ)
     host = env.get("STARROCKS_HOST", "starrocks-fe-service.starrocks.svc.cluster.local")
-    secrets = [env.get(k, "") for k in ("STARROCKS_DBT_PASSWORD", "STARROCKS_BI_PASSWORD", "S3_SECRET_KEY")]
+    secrets = [env.get(k, "") for k in SECRET_VARS]
+    with open(env.get("STARROCKS_INIT_SQL", "/config/init.sql")) as f:
+        statements = [render(s, env) for s in split_statements(f.read())]
     failed = 0
-    root = connect(host, "root", env["STARROCKS_ROOT_PASSWORD"])
-    cur = root.cursor()
-    for sql in setup_statements(env):
+    # E71: keep every connection in a variable; a cursor alone (weak reference) loses its connection at once
+    root_conn = connect(host, "root", env["STARROCKS_ROOT_PASSWORD"])
+    cur = root_conn.cursor()
+    for sql in statements:
         try:
             cur.execute(sql)
             print(f"[starrocks-init] OK    {masked(sql, secrets).splitlines()[0]}", flush=True)
         except Exception as e:  # noqa: BLE001 - report every statement, then fail
             failed += 1
             print(f"[starrocks-init] FAIL  {masked(sql, secrets).splitlines()[0]}: {masked(str(e), secrets)}")
-    root.close()
+    root_conn.close()
 
-    # E71: keep each connection in a variable. connect(...).cursor() leaves the connection unreferenced; Python frees
-    # it at once and the C cursor (weak reference) fails with 2055 "Cursor is not connected".
     try:
         dbt_conn = connect(host, "dbt_rw", env["STARROCKS_DBT_PASSWORD"])
         dbt = dbt_conn.cursor()
