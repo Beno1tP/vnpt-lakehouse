@@ -254,13 +254,36 @@ superset-up:   ## Task 5: Superset web -> 1 (init container migrates), then Job 
 	@for i in $$(seq 1 120); do s=$$(kubectl -n superset get job superset-init -o jsonpath='{.status.succeeded}{.status.failed}'); \
 	  [ -n "$$s" ] && break; sleep 5; done; kubectl -n superset logs job/superset-init | grep -E "ok[: ]|PASS|FAIL|datasets:|rror"; \
 	  test "$$(kubectl -n superset get job superset-init -o jsonpath='{.status.succeeded}')" = 1
+CHECK_POD ?= superset-check
+CHECK_URL ?= http://superset.superset.svc.cluster.local:8088
 superset-check: ## Task 5 5.7: every dashboard chart through Superset's API as read-only user checker, filters on/off, vs dashboard_checks.yaml
 	@test -n "$(SUPERSET_IMAGE_REF)" || { echo "SUPERSET_IMAGE_REF missing in infra/k8s/images.env"; exit 1; }
-	kubectl -n superset delete pod superset-check --ignore-not-found --wait=true
-	sed 's|__IMAGE__|$(SUPERSET_IMAGE_REF)|' infra/k8s/superset/superset-check-pod.yaml | kubectl apply -f -
-	@for i in $$(seq 1 60); do p=$$(kubectl -n superset get pod superset-check -o jsonpath='{.status.phase}'); \
-	  case "$$p" in Succeeded|Failed) break;; esac; sleep 3; done; kubectl -n superset logs superset-check; \
-	  test "$$(kubectl -n superset get pod superset-check -o jsonpath='{.status.phase}')" = Succeeded
+	kubectl -n superset delete pod $(CHECK_POD) --ignore-not-found --wait=true
+	sed -e 's|__IMAGE__|$(SUPERSET_IMAGE_REF)|' -e 's|__NAME__|$(CHECK_POD)|' -e 's|__URL__|$(CHECK_URL)|' \
+	  infra/k8s/superset/superset-check-pod.yaml | kubectl apply -f -
+	@for i in $$(seq 1 60); do p=$$(kubectl -n superset get pod $(CHECK_POD) -o jsonpath='{.status.phase}'); \
+	  case "$$p" in Succeeded|Failed) break;; esac; sleep 3; done; kubectl -n superset logs $(CHECK_POD); \
+	  test "$$(kubectl -n superset get pod $(CHECK_POD) -o jsonpath='{.status.phase}')" = Succeeded
+PG_PSQL = kubectl -n lake exec postgres-0 -- sh -c 'psql -U "$$POSTGRES_USER" -d metastore -v ON_ERROR_STOP=1 -qAt -c "$$0"'
+superset-drill: ## Task 5 5.8c: reproduce the dashboard from Git on a SCRATCH metadata DB (superset_drill); real web -> 0 meanwhile; then superset-check on it
+	@r=$$(kubectl -n airflow get deploy/airflow-scheduler -o jsonpath='{.spec.replicas}'); test "$$r" = 0 || \
+	  { echo "refusing: Airflow scheduler is running; use make demo-task5 first (RAM)"; exit 1; }
+	$(MAKE) --no-print-directory superset-assets-zip
+	$(MAKE) --no-print-directory superset-down
+	$(PG_PSQL) 'DROP DATABASE IF EXISTS superset_drill WITH (FORCE)'
+	$(PG_PSQL) 'CREATE DATABASE superset_drill OWNER superset'
+	@echo "scratch metadata DB: $$($(PG_PSQL) "SELECT datname || ' owner ' || pg_get_userbyid(datdba) FROM pg_database WHERE datname = 'superset_drill'")"
+	kubectl apply -k infra/k8s/superset/drill
+	kubectl -n superset rollout status deploy/superset-drill --timeout=900s
+	@for i in $$(seq 1 120); do s=$$(kubectl -n superset get job superset-init-drill -o jsonpath='{.status.succeeded}{.status.failed}'); \
+	  [ -n "$$s" ] && break; sleep 5; done; kubectl -n superset logs job/superset-init-drill | grep -E "metadata db|ok[: ]|PASS|FAIL|datasets:|rror"; \
+	  test "$$(kubectl -n superset get job superset-init-drill -o jsonpath='{.status.succeeded}')" = 1
+	$(MAKE) --no-print-directory superset-check CHECK_POD=superset-check-drill CHECK_URL=http://superset-drill.superset.svc.cluster.local:8088
+superset-drill-clean: ## Task 5 5.8c: delete the drill objects (only *-drill) and the scratch DB superset_drill; then make superset-up brings the real web back
+	-kubectl delete -k infra/k8s/superset/drill --ignore-not-found --wait=true
+	-kubectl -n superset delete pod superset-check-drill --ignore-not-found
+	$(PG_PSQL) 'DROP DATABASE IF EXISTS superset_drill WITH (FORCE)'
+	@echo "left: $$($(PG_PSQL) "SELECT string_agg(datname, ', ' ORDER BY datname) FROM pg_database WHERE datname LIKE 'superset%'")"
 superset-export: ## Task 5 5.8a: export the dashboard (CLI in the web pod, as admin) -> infra/k8s/superset/assets/ (YAML, passwords masked), then check it
 	@tmp=$$(mktemp -d); trap 'rm -rf "$$tmp"' EXIT; \
 	kubectl -n superset exec deploy/superset -c superset -- sh -c 'superset export-dashboards -f /tmp/vnpt-export.zip >/tmp/vnpt-export.log 2>&1 || { tail -20 /tmp/vnpt-export.log >&2; exit 1; }; cat /tmp/vnpt-export.zip; rm -f /tmp/vnpt-export.zip /tmp/vnpt-export.log' > "$$tmp/export.zip" && \

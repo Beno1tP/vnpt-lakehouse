@@ -34,11 +34,13 @@ spec:
           args:
             - |
               set -euo pipefail
+              echo "metadata db: $DB_NAME | web: ${SUPERSET_URL:=http://superset.superset.svc.cluster.local:8088}"
+              export SUPERSET_URL
               python - <<'PY'
-              import time, urllib.request
+              import os, time, urllib.request
               for i in range(120):
                   try:
-                      if urllib.request.urlopen("http://superset.superset.svc.cluster.local:8088/health", timeout=5).status == 200:
+                      if urllib.request.urlopen(os.environ["SUPERSET_URL"] + "/health", timeout=5).status == 200:
                           print("web /health 200 (schema migrated)"); break
                   except OSError:
                       pass
