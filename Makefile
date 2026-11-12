@@ -50,7 +50,7 @@ SPARK_SUBMIT = $(COMPOSE) exec -T spark /opt/spark/bin/spark-submit --master $(S
 SPARK_SQL    = $(COMPOSE) exec -T spark /opt/spark/bin/spark-sql --master local[1]
 NOISE        = ^Time taken|^:: loading settings
 
-.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks ghcr-prune k8s-up k8s-demo airflow-viewer airflow-viewer-check minio-ui history-ui freeze freeze-check evidence evidence-export spark-operator-chart demo-task2 demo-pipeline demo-check trino-chart trino-install trino-cli trino-ui mode-query mode-pipeline trino-check trino-explore trino-tag-check demo-task3 starrocks-chart starrocks-render starrocks-install starrocks-sql starrocks-up starrocks-down starrocks-ready starrocks-init dbt dbt-parse dbt-docs mode-gold demo-task4 starrocks-tag-check gold-check
+.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks ghcr-prune k8s-up k8s-demo airflow-viewer airflow-viewer-check minio-ui history-ui freeze freeze-check evidence evidence-export spark-operator-chart demo-task2 demo-pipeline demo-check trino-chart trino-install trino-cli trino-ui mode-query mode-pipeline trino-check trino-explore trino-tag-check demo-task3 starrocks-chart starrocks-render starrocks-install starrocks-sql starrocks-up starrocks-down starrocks-ready starrocks-init dbt dbt-parse dbt-docs mode-gold demo-task4 starrocks-tag-check gold-check dbt-tag-rebuild
 
 help:          ## list targets and variables
 	@awk -F':.*## ' '/^[a-zA-Z0-9_-]+:.*## /{printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -221,6 +221,11 @@ dbt-docs:      ## Task 4 step 4.6: dbt docs generate --static in gold-jobs (gold
 	  mkdir -p $(EVIDENCE_DBT); \
 	  for f in static_index.html manifest.json catalog.json; do kubectl -n gold-jobs cp $$n:/tmp/dbt-target/$$f $(EVIDENCE_DBT)/$$f >/dev/null; done; \
 	  mv $(EVIDENCE_DBT)/static_index.html $(EVIDENCE_DBT)/lineage.html; ls -la $(EVIDENCE_DBT)
+dbt-tag-rebuild: ## Task 4 freeze: rebuild Gold FROM an Iceberg tag (gold mode): Silver gate on the tag first, then dbt build (E77, E78): make dbt-tag-rebuild TAG=task4_v1
+	@echo "$(TAG)" | grep -qE '^task[2-5]_v[0-9]{1,3}$$' || { echo "TAG must look like task4_v1"; exit 1; }
+	$(MAKE) --no-print-directory dbt CMD="test --select assert_silver_counts --vars '{silver_version: $(TAG)}'"
+	$(MAKE) --no-print-directory dbt CMD="build --vars '{silver_version: $(TAG)}'"
+	@echo "dbt-tag-rebuild: Gold now reflects tag $(TAG); make dbt CMD=build returns it to current Silver"
 starrocks-down: ## Task 4: StarRocks -> 0: operator first, then FE/BE StatefulSets; waits until the pods are gone (graceful stop up to 120 s); PVCs + metadata stay
 	-@kubectl -n starrocks scale deploy/kube-starrocks-operator --replicas=0 2>/dev/null
 	-@kubectl -n starrocks scale statefulset/starrocks-be statefulset/starrocks-fe --replicas=0 2>/dev/null
@@ -436,8 +441,9 @@ evidence:      ## Freeze (B2): save run states OUTSIDE Git to EVIDENCE_DIR (coun
 	kubectl -n lake get jobs,cronjobs > $(EVIDENCE_DIR)/lake-jobs.txt
 	$(if $(filter 3 4,$(TASK)),$(AF) airflow dags list-runs trino_reconcile -o plain > $(EVIDENCE_DIR)/dag-runs-trino_reconcile.txt)
 	$(if $(filter 4,$(TASK)),$(AF) airflow dags list-runs gold_build -o plain > $(EVIDENCE_DIR)/dag-runs-gold_build.txt)
-	$(if $(filter 4,$(TASK)),$(MAKE) --no-print-directory gold-check > $(EVIDENCE_DIR)/gold-check.txt)
 	$(if $(filter 4,$(TASK)),helm history starrocks -n starrocks > $(EVIDENCE_DIR)/helm-starrocks.txt)
+	$(if $(filter 4,$(TASK)),@if kubectl -n starrocks get pod starrocks-fe-0 >/dev/null 2>&1; then $(MAKE) --no-print-directory gold-check > $(EVIDENCE_DIR)/gold-check.txt; \
+	  else echo "StarRocks is down (pipeline mode): run make mode-gold and then make gold-check > $(EVIDENCE_DIR)/gold-check.txt"; fi)
 	@wc -l $(EVIDENCE_DIR)/*.txt
 evidence-export: ## Freeze (B2): copy airflow-logs + backup (MinIO) and Spark event logs (PVC) to EVIDENCE_DIR; checks the file count
 	mkdir -p $(EVIDENCE_DIR)

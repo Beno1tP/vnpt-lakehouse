@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-11-12 — freeze task4_v1, rebuild from the tag proven, FREEZE.md
+Did (Bee): bump #109 → `k8s-up` (Airflow rev 25) → `make freeze TASK=4` (02:28 UTC) → `evidence TASK=4` (stopped at gold-check: StarRocks down, Claude's design) → manual rest + `evidence-export` (648/648, 284 event logs, 180 MB) → `mode-gold` → `starrocks-tag-check` 5 × PASS → rebuild from the tag (views skipped: E77) → PR #110 → images → bump #111 → negative (E78) → restore → compile 2× + build PASS=53 → normal build PASS=56.
+Prepared (Claude, branch `task4/4.6-freeze-record`): `docs/task4/FREEZE.md` (tag snapshot IDs, all digests and chart checksums, Gold numbers, rebuild procedure, limits); `make dbt-tag-rebuild TAG=` (gate first, E78); `evidence TASK=4` writes gold-check only when StarRocks is up. Checked: tests; fake-SHELL expansion + `bash -n` (it caught a comma inside `$(if …)` splitting the recipe).
+
 ### 2026-11-12 — 4.6 stage 3: tag drill done + freeze prepared
 Did (Bee): `minikube start && make k8s-up` (git c13f38e, PR #106) → spark-job bump PR #107 → `k8s-up` (Airflow rev 24) → `mode-pipeline` → scratch drill: create → maintenance `TABLES=scratch.tag_drill SNAP_HOURS=0 RETAIN=1` → check PASS → drop (`06_validation.md` §7).
 Prepared (Claude, branch `task4/4.6-freeze`): `FREEZE_TABLES_4`; dbt macro `silver_version` (staging views read `FOR VERSION AS OF '<tag>'` when `--vars '{silver_version: task4_v1}'`, tag pattern validated); `make starrocks-tag-check TASK=4` (tag rows through StarRocks' catalog, same comparer as Trino's); `make gold-check` (`sql/starrocks/gold_check.sql`: 22 counts + measure sums incl. bitmap union 89, active 112); `make demo-task4`; demo profiles pause the asset DAGs, `demo-pipeline` unpauses them; `demo-check DEMO_TASK=4` adds StarRocks FE/BE ready, the StarRocks tag check, gold-check, and FAILS on an unpaused asset DAG; `evidence TASK=4` adds DAG runs, gold-check, helm history. Checked: lint + tests; every changed recipe expanded by make itself with a fake SHELL that only records lines (nothing runs, no `make -n`, E60) + `bash -n`.
