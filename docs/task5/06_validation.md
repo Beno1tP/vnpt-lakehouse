@@ -18,6 +18,6 @@ Expected values: Task 4 seeds (`dbt/seeds/expected_gold_*.csv`), definitions `do
 
 | Check | Result |
 |---|---|
-| Export → `superset/assets/` contains no password (`grep -ri password superset/assets`) | |
+| Export → `infra/k8s/superset/assets/` contains no password (`grep -ri password infra/k8s/superset/assets`) | |
 | Delete dashboard → import Job → same charts and filter | |
 | Fresh `superset` DB → init Job → same dashboard | |

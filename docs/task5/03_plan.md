@@ -24,7 +24,7 @@ namespace superset   Superset web ×1 (Gunicorn, 1 / 1.5 Gi), image vnpt-lake-su
                      = apache/superset:6.1.0@sha256:16b50bbe… + starrocks 1.3.4 + psycopg2-binary 2.9.13
                      (installed with Superset's own pins as constraints, pip check in CI)
                      Secrets: SUPERSET_SECRET_KEY, metadata-DB URI, admin password, bi_ro password (fixed names)
-                     Job superset-init: db upgrade, init, admin user (from the Secret), import superset/assets,
+                     Job superset-init: db upgrade, init, admin user (from the Secret), import infra/k8s/superset/assets,
                      set the StarRocks connection (starrocks://bi_ro:…@starrocks-fe-service.starrocks:9030/default_catalog.gold)
 namespace lake       Postgres: database + role `superset` (Job superset-db-init, idempotent; initdb never reruns, E27)
 reads                StarRocks FE :9030 as bi_ro → gold.*  (no Trino, no Iceberg directly)
@@ -44,7 +44,7 @@ modes                serving = demo-task4 profile + Superset 1 (≈ 6.1 Gi reque
 | **5.5 Datasets + metrics** | one dataset per `gold_uc*`; metrics defined on the dataset: `SUM(message_cnt)`, share = ratio of sums, not-understood rate = `SUM(not)/SUM(understood+not)`, users = `BITMAP_UNION_COUNT(users)` (never SUM of daily distincts) | every chart reuses dataset metrics | semantic layer in the BI tool vs in dbt |
 | **5.6 Charts + dashboard** | KPI row, UC4 (scenario share), UC5 (stacked bar + rate line), UC6 (top-N sorted bar, intent_group colour), UC7 (Big Number + change, NULL % shown as "no data"), UC8 (new/active per day + averages); native filters: **Traffic** on `traffic_class` (UC4–6, default `real`) and **Users** on `user_class` (UC7–8, default all); date range on `event_date`; freshness (D25) | every number = `06_validation.md` with the filters on **and** off | dashboard design rules (A3), filter scoping |
 | **5.7 Reconcile on screen** | `tools/superset_check.py`: read each chart's data through Superset's chart-data API as a read-only user, compare with the seeds / `gold-check` values | all charts PASS, filter on and off | testing a dashboard, not only its tables |
-| **5.8 As code + close** | `make superset-export` → `superset/assets/` (YAML, no passwords); drop + re-init → same dashboard; freeze (evidence, screenshots), `demo-task5`, `demo-check DEMO_TASK=5`, README, tag `task5-v1` | a fresh `superset` DB shows the same dashboard; demo-check ALL PASS | dashboards as code, reproducibility |
+| **5.8 As code + close** | `make superset-export` → `infra/k8s/superset/assets/` (YAML, no passwords); drop + re-init → same dashboard; freeze (evidence, screenshots), `demo-task5`, `demo-check DEMO_TASK=5`, README, tag `task5-v1` | a fresh `superset` DB shows the same dashboard; demo-check ALL PASS | dashboards as code, reproducibility |
 
 ## D. Decisions
 
@@ -70,7 +70,7 @@ modes                serving = demo-task4 profile + Superset 1 (≈ 6.1 Gi reque
 | distinct users differ | `SUM` of daily distincts | dataset metric `BITMAP_UNION_COUNT(users)` |
 | dates off by one | a chart uses `event_ts` | time axis = `event_date` |
 | pod `Pending` | wrong mode | `make demo-task5` / measure requests |
-| imported dashboard: "database not found" | DB name in YAML ≠ name set by the init Job | `superset/assets/databases/*.yaml` `database_name` |
+| imported dashboard: "database not found" | DB name in YAML ≠ name set by the init Job | `infra/k8s/superset/assets/databases/*.yaml` `database_name` |
 | after `make k8s-up` the profile is gone | `airflow-install` resets scheduler replicas | rerun the profile (`make demo-task5`) after every `k8s-up` |
 
 ## F. Repo paths
@@ -78,7 +78,7 @@ modes                serving = demo-task4 profile + Superset 1 (≈ 6.1 Gi reque
 ```
 docker/superset/{Dockerfile, requirements.txt}         ➕
 infra/k8s/superset/ (Deployment, Service, superset_config.py, init Job) ➕   infra/k8s/lake/superset-db-init-job.yaml ➕
-superset/assets/                                       ➕ exported YAML (no passwords)
+infra/k8s/superset/assets/                                       ➕ exported YAML (no passwords)
 tools/superset_check.py + tests                        ➕
 .github/workflows: build + check the superset image    ✏️
 Makefile: superset-up, superset-down, superset-init, superset-ui, superset-export,
