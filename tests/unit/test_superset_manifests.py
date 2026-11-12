@@ -105,5 +105,6 @@ def test_init_job_registers_read_only_starrocks_connection():  # 5.4
     ][0]
     assert "starrocks://bi_ro:" in script and "default_catalog.gold" in script
     assert "d.allow_dml = d.allow_ctas = d.allow_cvas = d.allow_file_upload" in script
+    assert "StarRocksEngineSpec.get_datatype(253)" in script  # E82: the BI tool's own result path
     assert "assert n == 10613" in script and "denied" in script  # positive and negative check through the connection
     assert 'os.environ["STARROCKS_BI_PASSWORD"]' in script and "STARROCKS_ROOT" not in script

@@ -69,7 +69,11 @@ spec:
               app = create_app()
               with app.app_context():
                   from superset import db
+                  from superset.db_engine_specs.starrocks import StarRocksEngineSpec
                   from superset.utils.database import get_or_create_db
+                  t = StarRocksEngineSpec.get_datatype(253)   # E82: SQL Lab's result typing path (MySQLdb shim)
+                  assert t == "VAR_STRING", f"get_datatype(253) = {t}"
+                  print("result typing ok: get_datatype(253) =", t)
                   pw = quote(os.environ["STARROCKS_BI_PASSWORD"], safe="")
                   uri = f"starrocks://bi_ro:{pw}@starrocks-fe-service.starrocks.svc.cluster.local:9030/default_catalog.gold"
                   d = get_or_create_db("StarRocks Gold", uri)   # creates, or updates the URI (password stored encrypted)

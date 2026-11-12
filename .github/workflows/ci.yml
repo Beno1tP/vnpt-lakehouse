@@ -134,7 +134,8 @@ jobs:
           docker run --rm -v "$PWD/infra/k8s/superset:/app/pythonpath:ro" -e SUPERSET_CONFIG_PATH=/app/pythonpath/superset_config.py \
             -e SUPERSET_SECRET_KEY=ci-dummy -e DB_USER=u -e DB_PASS=p -e DB_HOST=h -e DB_PORT=5432 -e DB_NAME=d vnpt-lake-superset:ci \
             python -c "from superset import config as c; assert c.SQL_MAX_ROW == 10000 and c.SECRET_KEY == 'ci-dummy', 'override not applied'; print('config loaded, db', c.SQLALCHEMY_DATABASE_URI.split('@')[1])"
-          # E82: result-set column typing for StarRocks needs MySQLdb (shim from our config); 253 = VAR_STRING
+          # E82: result-set column typing for StarRocks does `import MySQLdb` + MySQLdb.constants.FIELD_TYPE: after our
+          # config, that must resolve to PyMySQL. (The engine spec itself needs an app context: checked in Job superset-init)
           docker run --rm -v "$PWD/infra/k8s/superset:/app/pythonpath:ro" -e SUPERSET_CONFIG_PATH=/app/pythonpath/superset_config.py \
             -e SUPERSET_SECRET_KEY=ci-dummy -e DB_USER=u -e DB_PASS=p -e DB_HOST=h -e DB_PORT=5432 -e DB_NAME=d vnpt-lake-superset:ci \
-            python -c "from superset import config; from superset.db_engine_specs.starrocks import StarRocksEngineSpec as S; t = S.get_datatype(253); assert t == 'VAR_STRING', t; print('StarRocks get_datatype(253) =', t)"
+            python -c "from superset import config; import MySQLdb, pymysql; ft = MySQLdb.constants.FIELD_TYPE; assert MySQLdb is pymysql and ft.VAR_STRING == 253, (MySQLdb, ft.VAR_STRING); print('MySQLdb ->', MySQLdb.__name__, '| FIELD_TYPE.VAR_STRING =', ft.VAR_STRING)"
