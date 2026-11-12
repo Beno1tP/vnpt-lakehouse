@@ -1,4 +1,6 @@
 import importlib.util
+import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -11,6 +13,10 @@ DIR = ROOT / "infra/k8s/superset"
 def load_config(monkeypatch, **env):
     for k, v in env.items():
         monkeypatch.setenv(k, v)
+    fake = types.ModuleType("pymysql")  # the real PyMySQL is in the image, not in the dev venv
+    fake.calls = []
+    fake.install_as_MySQLdb = lambda: fake.calls.append("shim")
+    monkeypatch.setitem(sys.modules, "pymysql", fake)
     spec = importlib.util.spec_from_file_location("superset_config", DIR / "superset_config.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -25,6 +31,7 @@ ENV = dict(
 def test_config_reads_env_and_quotes_password(monkeypatch):
     cfg = load_config(monkeypatch, **ENV)
     assert cfg.SECRET_KEY == "k"
+    assert sys.modules["pymysql"].calls == ["shim"]  # E82: MySQLdb shim installed at config load
     assert cfg.SQLALCHEMY_DATABASE_URI == "postgresql+psycopg2://superset:p%40ss%2F%3Ax@h:5432/superset"
 
 

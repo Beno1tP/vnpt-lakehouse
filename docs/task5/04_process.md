@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-11-12 — 5.4 done, E82 (MySQLdb) prepared
+5.4 (Bee): PR #121 merged; `superset-up` → `connection ok: StarRocks Gold -> starrocks://bi_ro:XXXXXXXXXX@…`, `query ok as 'bi_ro'@'%' | fct_user_message = 10613`, `read-only ok: CREATE TABLE -> Access denied`. SQL Lab: a query on a wrong column (`message_cnt`: Claude's guess, the real columns are `understood_cnt` / `not_understood_cnt`) returned StarRocks' analysis error; the corrected query → `No module named 'MySQLdb'` (E82). Lesson for 5.5: dataset metrics generated from / tested against the dbt model columns.
+Prepared (Claude, branch `task5/e82-mysqldb-shim`): MySQLdb shim in `superset_config.py`, unit test, CI check of `get_datatype` inside the image.
+
 ### 2026-11-12 — 5.3b done (E81), 5.4 prepared: StarRocks connection
 5.3b (Bee): PR #120 merged; `make superset-up` → rolled out, `admin ok: role Admin, password = Secret`. Measured: web 192 Mi / 229m right after start, 0 restarts; node requests **6,116 Mi (84 %)** = D22 budget, limits 9,948 Mi (136 %); only warning `flask_limiter … in-memory storage` (expected without Redis, D24; correct with 1 replica).
 Prepared (Claude, branch `task5/5.4-connect`): Job superset-init registers "StarRocks Gold" (`starrocks://bi_ro:…@starrocks-fe-service…:9030/default_catalog.gold`, `get_or_create_db`, SQL Lab on, DML/CTAS/CVAS/upload/async off) and checks through the stored connection: `count(*) fct_user_message` = 10,613, `current_user()`, `CREATE TABLE` → Access denied (E71 rule). Predicted (my local run): ruff, pytest, `bash -n` of the Job script.

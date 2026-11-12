@@ -9,6 +9,14 @@ the metadata DB, SupersetMetastoreCache), so native filters work without Redis.
 import os
 from urllib.parse import quote
 
+import pymysql
+
+# E82: Superset's MySQLEngineSpec.get_datatype (inherited by StarRocksEngineSpec) does `import MySQLdb` to name the
+# column types of every result set; MySQLdb = mysqlclient (C extension, no Linux wheel) is not in the image, the
+# starrocks dialect uses PyMySQL. PyMySQL's official shim registers it as MySQLdb; FIELD_TYPE codes are the MySQL
+# protocol's, identical in both drivers. CI checks get_datatype(253) == "VAR_STRING" inside the image.
+pymysql.install_as_MySQLdb()
+
 # fail at start-up (KeyError) instead of running with Superset's built-in insecure default key
 SECRET_KEY = os.environ["SUPERSET_SECRET_KEY"]
 
