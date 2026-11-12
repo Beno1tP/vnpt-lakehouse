@@ -1,0 +1,97 @@
+table_name: gold_uc4
+main_dttm_col: event_date
+currency_code_column: null
+description: 'UC4 scenarios: predicted messages per day x scenario (step) x traffic_class'
+default_endpoint: null
+offset: 0
+cache_timeout: null
+catalog: default_catalog
+schema: gold
+sql: null
+params: null
+template_params: null
+filter_select_enabled: true
+fetch_values_predicate: null
+extra: null
+normalize_columns: false
+always_filter_main_dttm: false
+folders: null
+uuid: 6e0a0b84-53bc-5bc7-a812-7b9fd19aaffc
+metrics:
+- metric_name: messages
+  verbose_name: Messages
+  metric_type: null
+  expression: SUM(message_cnt)
+  description: null
+  d3format: ',d'
+  currency: null
+  extra: null
+  warning_text: null
+columns:
+- column_name: traffic_class
+  verbose_name: null
+  is_dttm: false
+  is_active: true
+  type: VARCHAR(1048576)
+  advanced_data_type: null
+  groupby: true
+  filterable: true
+  expression: ''
+  description: null
+  python_date_format: null
+  datetime_format: null
+  extra: null
+- column_name: scenario
+  verbose_name: null
+  is_dttm: false
+  is_active: true
+  type: VARCHAR(1048576)
+  advanced_data_type: null
+  groupby: true
+  filterable: true
+  expression: ''
+  description: null
+  python_date_format: null
+  datetime_format: null
+  extra: null
+- column_name: step
+  verbose_name: null
+  is_dttm: false
+  is_active: true
+  type: VARCHAR(1048576)
+  advanced_data_type: null
+  groupby: true
+  filterable: true
+  expression: ''
+  description: null
+  python_date_format: null
+  datetime_format: null
+  extra: null
+- column_name: message_cnt
+  verbose_name: null
+  is_dttm: false
+  is_active: true
+  type: BIGINT(20)
+  advanced_data_type: null
+  groupby: true
+  filterable: true
+  expression: ''
+  description: null
+  python_date_format: null
+  datetime_format: null
+  extra: null
+- column_name: event_date
+  verbose_name: null
+  is_dttm: true
+  is_active: true
+  type: DATE
+  advanced_data_type: null
+  groupby: true
+  filterable: true
+  expression: ''
+  description: null
+  python_date_format: null
+  datetime_format: null
+  extra: null
+version: 1.0.0
+database_uuid: bfb9628b-9ac5-49c2-a49e-9a85907ef13d
