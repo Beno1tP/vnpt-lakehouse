@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-11-13 — 5.8b done (PR #129), E85 prepared
+5.8b (Bee): `superset-up` → `zipped 22 files`, ConfigMap `superset-assets-5khbgdtmbt`, connect → **`import ok: dashboard 'VNPT chatbot – Gold' …, 14 charts, published True`** → connect again (password restored: query ok 10613, read-only ok) → 5 × dataset ok, viewer ok, `datasets: PASS`; `superset-check: PASS` (import onto the same Superset is idempotent, scopes intact). Noise: ~20 × `starrocks.dialect: Failed to get run_mode … OPERATE` (E85; logger name taken from the log line).
+Prepared (Claude, branch `task5/e85-run-mode-log`): targeted logging filter in `superset_config.py` + unit test. Predicted (my local run): ruff --no-cache, format, pytest (69).
+
 ### 2026-11-13 — 5.8b part 1 done, part 2 prepared: import from Git
 Part 1 (Bee): PR #128; Job → `connection ok: StarRocks Gold uuid cc56b846-…`; `superset-check: PASS` after the uuid change; re-export → exactly 7 changed lines (database uuid, 5 × database_uuid, export timestamp).
 Prepared (Claude, branch `task5/5.8b-import`, with the re-export): check requires the database uuid5; `zip` = deterministic bundle (sorted, fixed timestamps, top folder `assets/`, no README) → `make superset-assets-zip` (git-ignored `infra/k8s/superset/generated/assets.zip`, run by `superset-up`) → ConfigMap `superset-assets`; Job: `connect` (shell function) → `superset import-dashboards -p /assets/assets.zip -u admin` → `import ok` (dashboard + 14 chart names from dashboard_checks.yaml) → `connect` again (restores the real password over the masked import) → datasets + checks. CI manifests: setup-python + ZIP before the kustomize render. Predicted (my local run): ruff --no-cache, format, pytest (68), Job script bash -n, both Python blocks compile, check on the re-export PASS.

@@ -6,6 +6,7 @@ No Redis/Celery (D24): Superset's defaults are used for caches (NullCache) and f
 the metadata DB, SupersetMetastoreCache), so native filters work without Redis.
 """
 
+import logging
 import os
 from urllib.parse import quote
 
@@ -16,6 +17,18 @@ import pymysql
 # starrocks dialect uses PyMySQL. PyMySQL's official shim registers it as MySQLdb; FIELD_TYPE codes are the MySQL
 # protocol's, identical in both drivers. CI checks get_datatype(253) == "VAR_STRING" inside the image.
 pymysql.install_as_MySQLdb()
+
+
+class _DropRunModeWarning(logging.Filter):
+    """E85: the starrocks dialect reads the cluster's run_mode on every new connection; its fallback query
+    (ADMIN SHOW FRONTEND CONFIG) needs the OPERATE system privilege, which bi_ro deliberately lacks, so it logs a
+    warning and assumes shared_nothing = our deployment (FE + BE). Drop only that message; other warnings stay."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not record.getMessage().startswith("Failed to get run_mode")
+
+
+logging.getLogger("starrocks.dialect").addFilter(_DropRunModeWarning())
 
 # fail at start-up (KeyError) instead of running with Superset's built-in insecure default key
 SECRET_KEY = os.environ["SUPERSET_SECRET_KEY"]
