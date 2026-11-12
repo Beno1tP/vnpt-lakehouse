@@ -9,6 +9,7 @@
 | `starrocks` SQLAlchemy dialect | **1.3.4** (2026-08-01, Python ≥ 3.10): requires `sqlalchemy>=1.4`, `pymysql>=1.1.0`, `alembic>=1.14.0`, `lark>=1.3.1`, `asyncmy2>=0.2.20` | PyPI `requires_dist` |
 | `psycopg2-binary` | **2.9.13** (metadata DB in our Postgres) | `pip index versions` |
 | Install rule (D26) | the two packages are installed with Superset's own installed versions as constraints; CI `pip check` + import test; a conflict fails the build | — |
+| Built image (5.1) | `vnpt-lake-superset@sha256:a0307416…946b` from 4662349: SQLAlchemy stays **1.4.54** (Superset's pin), psycopg2 2.9.13, packages 157 → 162 (+5: the dialect, the driver and their new dependencies), none changed or removed, `superset version` 6.1.0 | CI `superset-image` (PR #115) |
 
 ## 2. RAM budget (Allocatable 7,268 Mi, measured values)
 
