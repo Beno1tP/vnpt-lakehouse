@@ -386,9 +386,9 @@ demo-pipeline: ## Demo profile (B3): building mode. Airflow scheduler, dag-proce
 	@for d in $(ASSET_DAGS); do $(AF) airflow dags unpause $$d >/dev/null 2>&1 && echo "unpaused $$d"; done
 	kubectl -n spark-jobs scale deploy/spark-history --replicas=0
 	for d in $(DEMO_STOP); do kubectl -n airflow rollout status $$d --timeout=600s; done
-demo-check:    ## Demo: before presenting. Workloads ready, UIs answer (temporary port-forwards), freeze tag of DEMO_TASK (2: Spark check; 3: + Trino, tag checked by Trino). Fails loudly
+demo-check:    ## Demo: before presenting. Workloads ready, UIs answer (temporary port-forwards), freeze tag of DEMO_TASK (2: Spark check; 3: + Trino; 4: StarRocks + gold-check; 5: + Superset + superset-check). Fails loudly
 	@set -u; fail=0; \
-	for w in lake:statefulset/postgres lake:statefulset/minio lake:deploy/hive-metastore airflow:deploy/airflow-api-server spark-jobs:deploy/spark-history $(if $(filter 3,$(DEMO_TASK)),trino:deploy/trino-coordinator) $(if $(filter 4,$(DEMO_TASK)),starrocks:statefulset/starrocks-fe starrocks:statefulset/starrocks-be); do \
+	for w in lake:statefulset/postgres lake:statefulset/minio lake:deploy/hive-metastore airflow:deploy/airflow-api-server spark-jobs:deploy/spark-history $(if $(filter 3,$(DEMO_TASK)),trino:deploy/trino-coordinator) $(if $(filter 4 5,$(DEMO_TASK)),starrocks:statefulset/starrocks-fe starrocks:statefulset/starrocks-be) $(if $(filter 5,$(DEMO_TASK)),superset:deploy/superset); do \
 	  ns=$${w%%:*}; obj=$${w#*:}; \
 	  r=$$(kubectl -n $$ns get $$obj -o jsonpath='{.status.readyReplicas}' 2>/dev/null); \
 	  if [ "$${r:-0}" -ge 1 ]; then echo "[demo-check] PASS ready  $$ns/$$obj ($$r ready)"; \
@@ -398,14 +398,16 @@ demo-check:    ## Demo: before presenting. Workloads ready, UIs answer (temporar
 	kubectl -n lake port-forward svc/minio 29001:9001 >/dev/null 2>&1 & p2=$$!; \
 	kubectl -n spark-jobs port-forward svc/spark-history 28081:18080 >/dev/null 2>&1 & p3=$$!; \
 	p4=; $(if $(filter 3,$(DEMO_TASK)),kubectl -n trino port-forward svc/trino 28082:8080 >/dev/null 2>&1 & p4=$$!;) \
-	trap 'kill $$p1 $$p2 $$p3 $$p4 2>/dev/null' EXIT; sleep 4; \
-	for u in airflow:http://localhost:28080/api/v2/monitor/health minio-console:http://localhost:29001/ spark-history:http://localhost:28081/ $(if $(filter 3,$(DEMO_TASK)),trino:http://localhost:28082/v1/info); do \
+	p5=; $(if $(filter 5,$(DEMO_TASK)),kubectl -n superset port-forward svc/superset 28088:8088 >/dev/null 2>&1 & p5=$$!;) \
+	trap 'kill $$p1 $$p2 $$p3 $$p4 $$p5 2>/dev/null' EXIT; sleep 4; \
+	for u in airflow:http://localhost:28080/api/v2/monitor/health minio-console:http://localhost:29001/ spark-history:http://localhost:28081/ $(if $(filter 3,$(DEMO_TASK)),trino:http://localhost:28082/v1/info) $(if $(filter 5,$(DEMO_TASK)),superset:http://localhost:28088/health); do \
 	  name=$${u%%:*}; url=$${u#*:}; code=$$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 $$url || true); \
 	  if [ "$$code" = 200 ]; then echo "[demo-check] PASS http   $$name ($$code)"; else echo "[demo-check] FAIL http   $$name ($$code)"; fail=1; fi; \
 	done; \
-	kill $$p1 $$p2 $$p3 $$p4 2>/dev/null; trap - EXIT; \
-	if $(MAKE) --no-print-directory $(if $(filter 3,$(DEMO_TASK)),trino-tag-check,$(if $(filter 4,$(DEMO_TASK)),starrocks-tag-check,freeze-check)) TASK=$(DEMO_TASK) | grep -E "^\[catalog\] (PASS|FAIL)"; then :; else fail=1; fi; \
-	$(if $(filter 4,$(DEMO_TASK)),if $(MAKE) --no-print-directory gold-check | grep -E "^\[gold\] (PASS|FAIL)"; then :; else fail=1; fi;) \
+	kill $$p1 $$p2 $$p3 $$p4 $$p5 2>/dev/null; trap - EXIT; \
+	if $(MAKE) --no-print-directory $(if $(filter 3,$(DEMO_TASK)),trino-tag-check,$(if $(filter 4 5,$(DEMO_TASK)),starrocks-tag-check,freeze-check)) TASK=$(if $(filter 5,$(DEMO_TASK)),4,$(DEMO_TASK)) | grep -E "^\[catalog\] (PASS|FAIL)"; then :; else fail=1; fi; \
+	$(if $(filter 4 5,$(DEMO_TASK)),if $(MAKE) --no-print-directory gold-check | grep -E "^\[gold\] (PASS|FAIL)"; then :; else fail=1; fi;) \
+	$(if $(filter 5,$(DEMO_TASK)),if $(MAKE) --no-print-directory superset-check | grep -E "^(FAIL|filter |superset-check: )"; then :; else fail=1; fi;) \
 	for d in $(ASSET_DAGS); do p=$$($(AF) airflow dags list -o plain 2>/dev/null | awk -v d=$$d '$$1==d{print $$(NF-1)}'); \
 	  if [ "$$p" = True ]; then echo "[demo-check] PASS paused $$d (asset-triggered: nothing starts during the demo)"; \
 	  else echo "[demo-check] FAIL paused $$d is_paused=$${p:-?} (make demo-task$(DEMO_TASK) pauses it)"; fail=1; fi; \
@@ -501,6 +503,12 @@ evidence:      ## Freeze (B2): save run states OUTSIDE Git to EVIDENCE_DIR (coun
 	$(if $(filter 3 4,$(TASK)),$(AF) airflow dags list-runs trino_reconcile -o plain > $(EVIDENCE_DIR)/dag-runs-trino_reconcile.txt)
 	$(if $(filter 4,$(TASK)),$(AF) airflow dags list-runs gold_build -o plain > $(EVIDENCE_DIR)/dag-runs-gold_build.txt)
 	$(if $(filter 4,$(TASK)),helm history starrocks -n starrocks > $(EVIDENCE_DIR)/helm-starrocks.txt)
+	$(if $(filter 5,$(TASK)),$(MAKE) --no-print-directory superset-check > $(EVIDENCE_DIR)/superset-check.txt)
+	$(if $(filter 5,$(TASK)),$(MAKE) --no-print-directory gold-check > $(EVIDENCE_DIR)/gold-check.txt)
+	$(if $(filter 5,$(TASK)),.venv/bin/python -I tools/superset_assets.py check infra/k8s/superset/assets > $(EVIDENCE_DIR)/superset-assets.txt)
+	$(if $(filter 5,$(TASK)),kubectl -n superset get deploy,pods,jobs,configmaps,secrets -o wide > $(EVIDENCE_DIR)/superset-objects.txt)
+	$(if $(filter 5,$(TASK)),kubectl top pod -n superset > $(EVIDENCE_DIR)/superset-top.txt)
+	$(if $(filter 5,$(TASK)),git rev-parse HEAD > $(EVIDENCE_DIR)/git-head.txt)
 	$(if $(filter 4,$(TASK)),@if kubectl -n starrocks get pod starrocks-fe-0 >/dev/null 2>&1; then $(MAKE) --no-print-directory gold-check > $(EVIDENCE_DIR)/gold-check.txt; \
 	  else echo "StarRocks is down (pipeline mode): run make mode-gold and then make gold-check > $(EVIDENCE_DIR)/gold-check.txt"; fi)
 	@wc -l $(EVIDENCE_DIR)/*.txt
