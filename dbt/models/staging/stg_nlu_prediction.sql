@@ -1,4 +1,6 @@
 -- One NLU prediction (10,729 incl. the 116 without a chat row, kept and flagged: docs/metrics.md base of UC4-UC6).
+-- E77: a StarRocks view drops FOR VERSION AS OF from its stored definition, so a tag rebuild inlines staging (ephemeral)
+{{ config(materialized=('ephemeral' if var('silver_version', none) else 'view')) }}
 select
     id as prediction_id,
     chat_id,
