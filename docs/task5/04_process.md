@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-11-13 — freeze: demo-check ALL PASS, docs, E87
+Bee (PR #132): `demo-task5` → `demo-check DEMO_TASK=5` **ALL PASS** (8 ready incl. superset, 4 × http 200 incl. superset /health, 5 × task4_v1 via StarRocks, 22 × gold, superset-check PASS with the real scopes, 2 × paused); requests 6,116 Mi (84 %), limits 9,948 Mi (136 %); `evidence TASK=5` → `task5-20261112/` (80 KB; Superset 212 Mi; assets check PASS; git `7efc186`). `superset-objects.txt` missing (E87).
+Prepared (Claude, branch `task5/5.8e-freeze-docs`): E87 fix; `README.md`, `FREEZE.md`, `06_validation.md`, `07_demo.md`; decisions D21–D26 marked done; `progress.md` §8d; CLAUDE.md Task 5 section. Then the git tag `task5-v1` on the merge commit.
+
 ### 2026-11-13 — 5.8c done (PR #131, E86): reproduction drill PASS; freeze checks prepared
 Drill (Bee, `make superset-drill`): scratch DB `superset_drill owner superset`; Job `metadata db: superset_drill`; connection uuid `cc56b846…`; **`import ok: dashboard 'VNPT chatbot – Gold' uuid 3a0a5a6e…, 14 charts, published True`** (same uuid as the real one, from Git); viewer ok; `datasets: PASS`; filter scopes on NEW chart ids (Traffic excluded `[1, 8, 10, 9, 14, 12, 11, 13]` vs real `[13, 14, 3, 4, 5, 6, 7, 8]`: the importer remapped them) with the same 6 / 7 chart names; **`superset-check: PASS`**. `superset-drill-clean`: only *-drill objects deleted, `left: superset`; real `superset-up` → import ok (idempotent), `datasets: PASS`, `superset-check: PASS`.
 Prepared (Claude, branch `task5/5.8d-demo-check`): `demo-check DEMO_TASK=5` = Task 4 checks (StarRocks ready, tag `task4_v1` via StarRocks: Task 5 shows Task 4's frozen data, gold-check) + Superset ready + `/health` 200 + `superset-check`; `evidence TASK=5` adds superset-check, gold-check, assets check, Superset objects, `top`, git HEAD. Predicted (my local run): fake-SHELL + `bash -n` for DEMO_TASK 2/4/5 and evidence 5; DEMO_TASK=4 expansion unchanged (no Superset).
