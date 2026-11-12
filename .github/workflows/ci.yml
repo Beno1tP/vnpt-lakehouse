@@ -76,6 +76,7 @@ jobs:
           docker build --check -f docker/spark-job/Dockerfile --build-context tests=tests \
             --build-arg BASE_IMAGE=apache/spark:3.5.9-scala2.12-java17-python3-ubuntu@sha256:f3d6eaa8bab8ec2e38f3c3918a5b2f8b253c95bcb19f9e87ad0e0cdacf9df2d5 jobs/
           docker build --check -f docker/dbt/Dockerfile --build-context req=docker/dbt --build-context scripts=scripts dbt/
+          docker build --check docker/superset
 
   dbt-lint:
     name: dbt-lint (dbt parse inside the dbt image)
@@ -98,3 +99,28 @@ jobs:
           docker run --rm vnpt-lake-dbt:ci dbt --version
           docker run --rm -e STARROCKS_PASSWORD=ci-dummy vnpt-lake-dbt:ci dbt parse
           docker run --rm vnpt-lake-dbt:ci python -c "import mysql.connector; print('mysql-connector', mysql.connector.__version__)"
+
+  superset-image:
+    name: superset-image (build, pip check, StarRocks dialect, superset CLI)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build the Superset image locally on the runner (not pushed; uv pip check runs inside the build, D26)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: docker/superset
+          load: true
+          tags: vnpt-lake-superset:ci
+      - name: Dialect registered, drivers import, Superset's own pins unchanged, CLI runs
+        run: |
+          docker run --rm vnpt-lake-superset:ci python -c "import sqlalchemy as sa, starrocks, psycopg2; e = sa.create_engine('starrocks://u:p@h:9030/default_catalog.gold'); print('dialect', e.dialect.name, '| sqlalchemy', sa.__version__, '| psycopg2', psycopg2.__version__)"
+          docker run --rm -e UV_NO_CACHE=1 apache/superset:6.1.0@sha256:16b50bbef6648912a79e3293d418fefa743ce555d36c5af6b85d859119ed7f88 sh -c ". /app/.venv/bin/activate && uv pip freeze --exclude-editable" | sort > base.txt
+          docker run --rm -e UV_NO_CACHE=1 vnpt-lake-superset:ci sh -c ". /app/.venv/bin/activate && uv pip freeze --exclude-editable" | sort > ours.txt
+          for f in base.txt ours.txt; do n=$(wc -l < $f); echo "$f: $n packages"; [ "$n" -gt 50 ] || { echo "FAIL: the freeze for $f returned too few packages (E79: check the command, not a package change)"; exit 1; }; done
+          docker run --rm vnpt-lake-superset:ci sh -c "find /app/superset_home -maxdepth 2 ! -user superset" | tee root-owned.txt
+          if [ -s root-owned.txt ]; then echo "FAIL: files in /app/superset_home not owned by superset (E79)"; exit 1; fi
+          echo "packages added (only the dialect, the drivers and their new dependencies may appear; nothing removed or changed):"
+          comm -13 base.txt ours.txt
+          if comm -23 base.txt ours.txt | grep .; then echo "FAIL: a Superset package was changed or removed (above)"; exit 1; fi
+          docker run --rm -e SUPERSET_SECRET_KEY=ci-dummy-key-not-used-anywhere vnpt-lake-superset:ci superset version
