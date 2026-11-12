@@ -40,3 +40,9 @@ kind: Namespace
 metadata:
   name: gold-jobs           # dbt pods (Airflow gold_build, make dbt): only the dbt_rw Secret lives here (4.5)
   labels: { app.kubernetes.io/part-of: vnpt-lakehouse }
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: superset            # Superset 6.1.0 web + init Job (Task 5); reads StarRocks gold as bi_ro
+  labels: { app.kubernetes.io/part-of: vnpt-lakehouse }

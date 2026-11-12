@@ -1,0 +1,44 @@
+# Task 5 step 5.2: role + database `superset` (Superset's metadata DB: users, charts, dashboards, encrypted
+# connection passwords) in the existing Postgres. Not an initdb script: those run only on an empty data dir (E27),
+# and this Postgres already has data. Idempotent: creates what is missing, then re-sets the password from the
+# Secret (secrets.env stays the source of truth) and proves the login over the network. Runs from make k8s-up.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: superset-db-init
+  namespace: lake
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext: { runAsNonRoot: true, runAsUser: 999, runAsGroup: 999 }   # user postgres of the image
+      containers:
+        - name: superset-db-init
+          image: postgres:16@sha256:1a6ab3f5345eb6dbe04a1349529caabdb0ab09293a09590fad07b2246bfa4b54   # = server
+          imagePullPolicy: IfNotPresent
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              H=postgres.lake.svc.cluster.local
+              for i in $(seq 1 60); do pg_isready -q -h $H -t 5 && break; echo "waiting for postgres ($i/60)"; sleep 5; done
+              [ -n "${SUPERSET_DB_PASSWORD:-}" ] || { echo "ERROR: SUPERSET_DB_PASSWORD is empty" >&2; exit 1; }
+              psql -h $H -d metastore -v ON_ERROR_STOP=1 -q -v pw="$SUPERSET_DB_PASSWORD" <<'SQL'
+              SELECT 'CREATE ROLE superset LOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'superset')\gexec
+              ALTER ROLE superset LOGIN PASSWORD :'pw';
+              SELECT 'CREATE DATABASE superset OWNER superset'
+                WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'superset')\gexec
+              SQL
+              # the check uses the new role's own login, over TCP, like Superset will
+              PGUSER=superset PGPASSWORD="$SUPERSET_DB_PASSWORD" psql -h $H -d superset -At -v ON_ERROR_STOP=1 \
+                -c "SELECT 'login ok: ' || current_user || ' on ' || current_database() || ', owner ' || pg_get_userbyid(datdba) FROM pg_database WHERE datname = current_database()"
+          env:
+            - name: PGUSER
+              valueFrom: { secretKeyRef: { name: postgres-credentials, key: PG_USER } }
+            - name: PGPASSWORD                    # process env only; never printed
+              valueFrom: { secretKeyRef: { name: postgres-credentials, key: PG_PASSWORD } }
+            - name: SUPERSET_DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: superset-db-credentials, key: SUPERSET_DB_PASSWORD } }
+          resources: { requests: { memory: 64Mi, cpu: 50m }, limits: { memory: 256Mi } }

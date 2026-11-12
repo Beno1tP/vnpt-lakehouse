@@ -38,7 +38,7 @@ spec:
                   done
                   pg_isready -h postgres.lake.svc.cluster.local -t 5
                   ts=$(date -u +%Y%m%dT%H%M%SZ); mkdir -p /backup/postgres/$ts
-                  for db in metastore airflow; do
+                  for db in metastore airflow superset; do   # superset: Task 5 (users, dashboards, connections)
                     pg_dump -Fc -h postgres.lake.svc.cluster.local -U "$PGUSER" -d "$db" -f /backup/postgres/$ts/$db.dump
                   done
                   echo "backup ts=$ts"; ls -l /backup/postgres/$ts

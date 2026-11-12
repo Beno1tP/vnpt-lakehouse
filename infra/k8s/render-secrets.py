@@ -45,6 +45,11 @@ GENERATED = {
     "STARROCKS_DBT_PASSWORD": lambda: secrets.token_hex(24),  # Task 4 4.2: StarRocks user dbt_rw (writes gold)
     "STARROCKS_BI_PASSWORD": lambda: secrets.token_hex(24),  # Task 4 4.2: StarRocks user bi_ro (reads gold, Task 5)
     "MINIO_STARROCKS_SECRET": lambda: secrets.token_hex(24),  # Task 4 4.2: StarRocks catalog reads lakehouse/ only
+    # Task 5 5.2. SUPERSET_SECRET_KEY signs sessions AND encrypts the stored StarRocks password: never rotate it
+    # without `superset re-encrypt-secrets` (Superset docs: openssl rand -base64 42)
+    "SUPERSET_SECRET_KEY": lambda: base64.b64encode(os.urandom(42)).decode(),
+    "SUPERSET_ADMIN_PASSWORD": lambda: secrets.token_urlsafe(18),  # Superset UI user "admin" (init Job, D21)
+    "SUPERSET_DB_PASSWORD": lambda: secrets.token_hex(24),  # Postgres role superset (hex: safe in a URI)
 }
 
 
@@ -118,6 +123,18 @@ def main():
     )
     write_private("starrocks-dbt.env", f"STARROCKS_PASSWORD={env['STARROCKS_DBT_PASSWORD']}\n")  # dbt pod: dbt_rw only
     write_private("starrocks-access-test.env", s3_keys("starrocks", "MINIO_STARROCKS_SECRET"))  # s3-access-test
+    # Task 5 5.2: Postgres role superset (Job superset-db-init in lake); Superset pods get the web/DB keys, only the
+    # init Job gets the admin and bi_ro passwords (D21)
+    write_private("superset-db.env", f"SUPERSET_DB_PASSWORD={env['SUPERSET_DB_PASSWORD']}\n")
+    write_private(
+        "superset-env.env",
+        f"SUPERSET_SECRET_KEY={env['SUPERSET_SECRET_KEY']}\nDB_HOST=postgres.lake.svc.cluster.local\nDB_PORT=5432\n"
+        f"DB_USER=superset\nDB_PASS={env['SUPERSET_DB_PASSWORD']}\nDB_NAME=superset\n",
+    )
+    write_private(
+        "superset-init.env",
+        f"SUPERSET_ADMIN_PASSWORD={env['SUPERSET_ADMIN_PASSWORD']}\nSTARROCKS_BI_PASSWORD={env['STARROCKS_BI_PASSWORD']}\n",
+    )
     # Airflow (namespace airflow): metadata DB connection + keys, one file per Secret the Helm chart expects
     pw = urllib.parse.quote(env["AIRFLOW_DB_PASSWORD"], safe="")
     write_private(
