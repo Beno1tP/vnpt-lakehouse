@@ -50,12 +50,12 @@ modes                serving = demo-task4 profile + Superset 1 (≈ 6.1 Gi reque
 
 | ID | Decision | Alternative rejected | Why |
 |---|---|---|---|
-| D21 (proposed, was D19) | Own init Job (admin from a Secret, import assets, set the connection) | the chart's `init.adminUser` | E35: chart values are stored in the release Secret and can be printed |
-| D22 (proposed, was D20, revised) | **Serving mode = demo-task4 profile + Superset** (scheduler/dag-processor/triggerer 0, Airflow api-server + History up) | Airflow fully at 0 (11-06 plan) | measured: demo-task4 5,092 Mi + Superset 1,024 ≈ 6,116 Mi < 7,268; the Airflow UI stays viewable during the demo |
-| D23 (proposed, was D21, revised) | Freshness from data: a Big Number on `max(event_date)` of Gold; a dbt load-time column (`_built_at`) only if the leader asks for it | hand-typed text | Gold has no `_loaded_at`; adding one costs a dbt image cycle; `max(event_date)` is honest and needs no change |
-| D24 (proposed, was D22) | No Redis cache, no Celery | Redis subchart | one pod less; Gold is pre-aggregated; Bitnami chart images moved (`bitnamilegacy`), another pin |
-| D25 (proposed) | Two native filters (Traffic on `traffic_class`, Users on `user_class`), scoped per chart | one filter for all | UC7/UC8 count users (a person is internal or external), UC4–6 count messages: different columns by design (Task 4 M4) |
-| D26 (proposed) | Dialect + driver installed against Superset's own pins (`-c` constraints), `pip check` in CI | plain `pip install starrocks` | `starrocks` 1.3.4 requires `alembic>=1.14`, `sqlalchemy>=1.4`: an unconstrained install can upgrade Superset's own pins |
+| D21 (done, was D19) | Own init Job (admin from a Secret, import assets, set the connection) | the chart's `init.adminUser` | E35: chart values are stored in the release Secret and can be printed |
+| D22 (done, was D20) | **Serving mode = demo-task4 profile + Superset** (scheduler/dag-processor/triggerer 0, Airflow api-server + History up) | Airflow fully at 0 (11-06 plan) | measured: demo-task4 5,092 Mi + Superset 1,024 ≈ 6,116 Mi < 7,268; the Airflow UI stays viewable during the demo |
+| D23 (done, was D21) | Freshness from data: a Big Number on `max(event_date)` of Gold; a dbt load-time column (`_built_at`) only if the leader asks for it | hand-typed text | Gold has no `_loaded_at`; adding one costs a dbt image cycle; `max(event_date)` is honest and needs no change |
+| D24 (done, was D22) | No Redis cache, no Celery | Redis subchart | one pod less; Gold is pre-aggregated; Bitnami chart images moved (`bitnamilegacy`), another pin |
+| D25 (done) | Two native filters (Traffic on `traffic_class`, Users on `user_class`), scoped per chart | one filter for all | UC7/UC8 count users (a person is internal or external), UC4–6 count messages: different columns by design (Task 4 M4) |
+| D26 (done) | Dialect + driver installed against Superset's own pins (`-c` constraints), `pip check` in CI | plain `pip install starrocks` | `starrocks` 1.3.4 requires `alembic>=1.14`, `sqlalchemy>=1.4`: an unconstrained install can upgrade Superset's own pins |
 | D27 (Bee, 11-12) | **Own kustomize manifests** for Superset web (Deployment, Service, ConfigMap `superset_config.py`), applied by `make superset-up` | (a) chart 0.22.8 with workarounds; (b) Superset Kubernetes Operator v0.3.0 | the chart is deprecated upstream and needed overrides for almost everything; the operator is 0.x (5 months, 4 releases) and adds a controller pod + CRDs on 7 Gi; we keep only what we use, pinned like Postgres/MinIO |
 
 ## E. Risks and first checks

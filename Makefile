@@ -506,7 +506,7 @@ evidence:      ## Freeze (B2): save run states OUTSIDE Git to EVIDENCE_DIR (coun
 	$(if $(filter 5,$(TASK)),$(MAKE) --no-print-directory superset-check > $(EVIDENCE_DIR)/superset-check.txt)
 	$(if $(filter 5,$(TASK)),$(MAKE) --no-print-directory gold-check > $(EVIDENCE_DIR)/gold-check.txt)
 	$(if $(filter 5,$(TASK)),.venv/bin/python -I tools/superset_assets.py check infra/k8s/superset/assets > $(EVIDENCE_DIR)/superset-assets.txt)
-	$(if $(filter 5,$(TASK)),kubectl -n superset get deploy,pods,jobs,configmaps,secrets -o wide > $(EVIDENCE_DIR)/superset-objects.txt)
+	$(if $(filter 5,$(TASK)),kubectl -n superset get deploy$(comma)pods$(comma)jobs$(comma)configmaps$(comma)secrets -o wide > $(EVIDENCE_DIR)/superset-objects.txt)
 	$(if $(filter 5,$(TASK)),kubectl top pod -n superset > $(EVIDENCE_DIR)/superset-top.txt)
 	$(if $(filter 5,$(TASK)),git rev-parse HEAD > $(EVIDENCE_DIR)/git-head.txt)
 	$(if $(filter 4,$(TASK)),@if kubectl -n starrocks get pod starrocks-fe-0 >/dev/null 2>&1; then $(MAKE) --no-print-directory gold-check > $(EVIDENCE_DIR)/gold-check.txt; \

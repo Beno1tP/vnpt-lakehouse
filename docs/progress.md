@@ -184,6 +184,13 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 - Open: **E17** (confirm in HMS log; hadoop-aws 3.1.0), infra redesign toward pulled images + compose config, disk audit (setup used 30–50 GB).
 - Data reminder: trial/imaginary data, lab only; keep local.
 
+## 8d. Status 2026-11-13 (Task 5 done and frozen)
+
+- Task 5 done, tag `task5-v1`; read `docs/task5/README.md` and `FREEZE.md` first. All five lab tasks are done.
+- Cluster: demo-task5 profile (StarRocks + Superset up, scheduler 0, asset DAGs paused), 6,116 Mi requests (84 %). `make mode-pipeline` returns to building (scales Superset and StarRocks to 0). Tags `task2_v1`, `task3_v1`, `task4_v1` (Task 5 adds no data). Evidence `~/data/vnpt-lab/evidence/task5-20261112/` + PDFs in `task5/`.
+- Next: prepare the final presentation (all tasks from one cluster, switching profiles); after it the one-time from-zero acceptance, then the cleanup (`minikube delete` only then). Errors continue from **E88**.
+- Open: leader questions (STEP scenario names, M2/M3, default filter, roles/RLS); `airflow tasks clear -t` matched nothing (unexplained); dbt artifacts to S3 (Should); WAP with `SWAP` (Could); GHCR prune deliberately postponed until after the presentation.
+
 ## 8c. Status 2026-11-12 (Task 4 done and frozen)
 
 - Task 4 done, tag `task4-v1`; read `docs/task4/README.md` and `FREEZE.md` first.
