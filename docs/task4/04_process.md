@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-11-12 — Task 4 closed
+Did (Bee): PR #112 → `k8s-up` (Airflow rev 26) → `make dbt-tag-rebuild TAG=task4_v1` (gate PASS, build PASS=53) → `make dbt CMD="build"` PASS=56 → `gold-check` 22/22 into the evidence → `make demo-task4` → `make demo-check DEMO_TASK=4` ALL PASS (7 ready, 3 http, 5 tag rows via StarRocks, 22 gold, 2 paused) → measured requests 5,092 Mi (70 %), limits 8,412 Mi, cpu 2,400m, `/var` 24 G.
+Prepared (Claude, branch `task4/close`): `docs/task4/README.md`, progress §4 + §8c, CLAUDE.md (Task 4 section), running-steps D. Next (Bee): PR → `git tag task4-v1` → Task 5.
+
 ### 2026-11-12 — freeze task4_v1, rebuild from the tag proven, FREEZE.md
 Did (Bee): bump #109 → `k8s-up` (Airflow rev 25) → `make freeze TASK=4` (02:28 UTC) → `evidence TASK=4` (stopped at gold-check: StarRocks down, Claude's design) → manual rest + `evidence-export` (648/648, 284 event logs, 180 MB) → `mode-gold` → `starrocks-tag-check` 5 × PASS → rebuild from the tag (views skipped: E77) → PR #110 → images → bump #111 → negative (E78) → restore → compile 2× + build PASS=53 → normal build PASS=56.
 Prepared (Claude, branch `task4/4.6-freeze-record`): `docs/task4/FREEZE.md` (tag snapshot IDs, all digests and chart checksums, Gold numbers, rebuild procedure, limits); `make dbt-tag-rebuild TAG=` (gate first, E78); `evidence TASK=4` writes gold-check only when StarRocks is up. Checked: tests; fake-SHELL expansion + `bash -n` (it caught a comma inside `$(if …)` splitting the recipe).
