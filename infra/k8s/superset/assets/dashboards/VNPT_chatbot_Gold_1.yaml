@@ -1,0 +1,552 @@
+dashboard_title: "VNPT chatbot \u2013 Gold"
+description: null
+css: ''
+slug: null
+certified_by: ''
+certification_details: ''
+published: true
+uuid: 3a0a5a6e-fba4-4d99-9df7-cc9f80db0c72
+position:
+  CHART-explore-1-1:
+    children: []
+    id: CHART-explore-1-1
+    meta:
+      chartId: 1
+      height: 50
+      sliceName: "UC5 \xB7 Understood vs not understood per day"
+      uuid: ef85bf83-98b6-409f-9842-3287cf62be9f
+      width: 4
+    parents:
+    - ROOT_ID
+    - GRID_ID
+    - ROW-9rvwzgBTnGg8HZ5VmojGu
+    type: CHART
+  CHART-explore-10-1:
+    children: []
+    id: CHART-explore-10-1
+    meta:
+      chartId: 10
+      height: 50
+      sliceName: "UC4 \xB7 Scenario share per day"
+      uuid: e31ac92a-cee9-48c6-ba44-758c881a69c6
+      width: 4
+    parents:
+    - ROOT_ID
+    - GRID_ID
+    - ROW-bGq4f1r7PoDK05fVBClFA
+    type: CHART
+  CHART-explore-11-1:
+    children: []
+    id: CHART-explore-11-1
+    meta:
+      chartId: 11
+      height: 50
+      sliceName: "UC6 \xB7 Top intents"
+      uuid: ff4452c3-7581-43c7-9ed3-3f4c58610bb0
+      width: 4
+    parents:
+    - ROOT_ID
+    - GRID_ID
+    - ROW-3-un2Dv_w8JnX5dej4QBF
+    type: CHART
+  CHART-explore-12-1:
+    children: []
+    id: CHART-explore-12-1
+    meta:
+      chartId: 12
+      height: 50
+      sliceName: "KPI \xB7 Predictions"
+      uuid: 8c7a61e2-a939-4275-8bd6-a995bc78bf67
+      width: 4
+    parents:
+    - ROOT_ID
+    - GRID_ID
+    - ROW-3-un2Dv_w8JnX5dej4QBF
+    type: CHART
+  CHART-explore-13-1:
+    children: []
+    id: CHART-explore-13-1
+    meta:
+      chartId: 13
+      height: 50
+      sliceName: Data up to
+      uuid: d6f0ba11-2638-4bd1-ae4d-9e931ca7f730
+      width: 4
+    parents:
+    - ROOT_ID
+    - GRID_ID
+    - ROW-3-un2Dv_w8JnX5dej4QBF
+    type: CHART
+  CHART-explore-14-1:
+    children: []
+    id: CHART-explore-14-1
+    meta:
+      chartId: 14
+      height: 50
+      sliceName: "UC7 \xB7 Change % vs 30 days before"
+      uuid: 821e495a-8d41-4bd9-a8c3-d23dfaa282dd
+      width: 4
+    parents:
+    - ROOT_ID
+    - GRID_ID
+    - ROW-BPBwF0a__luoPjqeFKDTj
+    type: CHART
+  CHART-explore-2-1:
+    children: []
+    id: CHART-explore-2-1
+    meta:
+      chartId: 2
+      height: 50
+      sliceName: "UC5 \xB7 Not-understood rate"
+      uuid: a344cfac-5fde-4d9a-9369-290e9bd49607
+      width: 4
+    parents:
+    - ROOT_ID
+    - GRID_ID
+    - ROW-9rvwzgBTnGg8HZ5VmojGu
+    type: CHART
+  CHART-explore-3-1:
+    children: []
+    id: CHART-explore-3-1
+    meta:
+      chartId: 3
+      height: 50
+      sliceName: "UC7 \xB7 Total users"
+      uuid: 4b1da2c9-5efa-4640-9701-b6805b9b1870
+      width: 4
+    parents:
+    - ROOT_ID
+    - GRID_ID
+    - ROW-BPBwF0a__luoPjqeFKDTj
+    type: CHART
+  CHART-explore-4-1:
+    children: []
+    id: CHART-explore-4-1
+    meta:
+      chartId: 4
+      height: 50
+      sliceName: "UC7 \xB7 Change vs 30 days before"
+      uuid: c6c2bcf5-79d4-4bc1-8e34-ee35c0646e36
+      width: 4
+    parents:
+    - ROOT_ID
+    - GRID_ID
+    - ROW-BPBwF0a__luoPjqeFKDTj
+    type: CHART
+  CHART-explore-5-1:
+    children: []
+    id: CHART-explore-5-1
+    meta:
+      chartId: 5
+      height: 50
+      sliceName: "UC8 \xB7 New and active users per day"
+      uuid: 4a2725bb-e4b8-4d52-9136-f689481c202f
+      width: 4
+    parents:
+    - ROOT_ID
+    - GRID_ID
+    - ROW-VScd9KAqoATgLUtbfrSZa
+    type: CHART
+  CHART-explore-6-1:
+    children: []
+    id: CHART-explore-6-1
+    meta:
+      chartId: 6
+      height: 50
+      sliceName: "UC8 \xB7 Avg new users / day"
+      uuid: 8f2c6dd0-c5e0-4ae6-99eb-c35a54698b5d
+      width: 4
+    parents:
+    - ROOT_ID
+    - GRID_ID
+    - ROW-VScd9KAqoATgLUtbfrSZa
+    type: CHART
+  CHART-explore-7-1:
+    children: []
+    id: CHART-explore-7-1
+    meta:
+      chartId: 7
+      height: 50
+      sliceName: "UC8 \xB7 Avg active users / day"
+      uuid: 95cd0892-d02a-49a8-8176-619cd8075828
+      width: 4
+    parents:
+    - ROOT_ID
+    - GRID_ID
+    - ROW-VScd9KAqoATgLUtbfrSZa
+    type: CHART
+  CHART-explore-8-1:
+    children: []
+    id: CHART-explore-8-1
+    meta:
+      chartId: 8
+      height: 50
+      sliceName: "UC8 \xB7 Distinct active users (period)"
+      uuid: 6002dc44-0630-49f3-8c1b-528ed613e3df
+      width: 4
+    parents:
+    - ROOT_ID
+    - GRID_ID
+    - ROW-bGq4f1r7PoDK05fVBClFA
+    type: CHART
+  CHART-explore-9-1:
+    children: []
+    id: CHART-explore-9-1
+    meta:
+      chartId: 9
+      height: 50
+      sliceName: "UC4 \xB7 Messages by scenario"
+      uuid: 2600f5ef-bdf4-460a-88c9-418121d166d0
+      width: 4
+    parents:
+    - ROOT_ID
+    - GRID_ID
+    - ROW-bGq4f1r7PoDK05fVBClFA
+    type: CHART
+  DASHBOARD_VERSION_KEY: v2
+  GRID_ID:
+    children:
+    - HEADER-iL8bhZQEijL3wxH5GSVHD
+    - ROW-9rvwzgBTnGg8HZ5VmojGu
+    - HEADER-kPg3znlhijTGP_QdbEd0Z
+    - ROW-BPBwF0a__luoPjqeFKDTj
+    - HEADER-njdxyDb222W2AD6yP2I0E
+    - ROW-VScd9KAqoATgLUtbfrSZa
+    - ROW-bGq4f1r7PoDK05fVBClFA
+    - ROW-3-un2Dv_w8JnX5dej4QBF
+    id: GRID_ID
+    parents:
+    - ROOT_ID
+    type: GRID
+  HEADER-iL8bhZQEijL3wxH5GSVHD:
+    children: []
+    id: HEADER-iL8bhZQEijL3wxH5GSVHD
+    meta:
+      background: BACKGROUND_TRANSPARENT
+      headerSize: MEDIUM_HEADER
+      text: "UC5 \xB7 Not-understood rate"
+    parents:
+    - ROOT_ID
+    - GRID_ID
+    type: HEADER
+  HEADER-kPg3znlhijTGP_QdbEd0Z:
+    children: []
+    id: HEADER-kPg3znlhijTGP_QdbEd0Z
+    meta:
+      background: BACKGROUND_TRANSPARENT
+      headerSize: MEDIUM_HEADER
+      text: "UC7 \xB7 Total users"
+    parents:
+    - ROOT_ID
+    - GRID_ID
+    type: HEADER
+  HEADER-njdxyDb222W2AD6yP2I0E:
+    children: []
+    id: HEADER-njdxyDb222W2AD6yP2I0E
+    meta:
+      background: BACKGROUND_TRANSPARENT
+      headerSize: MEDIUM_HEADER
+      text: "UC8 \xB7 Avg active users / day"
+    parents:
+    - ROOT_ID
+    - GRID_ID
+    type: HEADER
+  HEADER_ID:
+    id: HEADER_ID
+    meta:
+      text: "VNPT chatbot \u2013 Gold"
+    type: HEADER
+  ROOT_ID:
+    children:
+    - GRID_ID
+    id: ROOT_ID
+    type: ROOT
+  ROW-3-un2Dv_w8JnX5dej4QBF:
+    children:
+    - CHART-explore-11-1
+    - CHART-explore-12-1
+    - CHART-explore-13-1
+    id: ROW-3-un2Dv_w8JnX5dej4QBF
+    meta:
+      background: BACKGROUND_TRANSPARENT
+    parents:
+    - ROOT_ID
+    - GRID_ID
+    type: ROW
+  ROW-9rvwzgBTnGg8HZ5VmojGu:
+    children:
+    - CHART-explore-1-1
+    - CHART-explore-2-1
+    id: ROW-9rvwzgBTnGg8HZ5VmojGu
+    meta:
+      background: BACKGROUND_TRANSPARENT
+    parents:
+    - ROOT_ID
+    - GRID_ID
+    type: ROW
+  ROW-BPBwF0a__luoPjqeFKDTj:
+    children:
+    - CHART-explore-3-1
+    - CHART-explore-4-1
+    - CHART-explore-14-1
+    id: ROW-BPBwF0a__luoPjqeFKDTj
+    meta:
+      background: BACKGROUND_TRANSPARENT
+    parents:
+    - ROOT_ID
+    - GRID_ID
+    type: ROW
+  ROW-VScd9KAqoATgLUtbfrSZa:
+    children:
+    - CHART-explore-5-1
+    - CHART-explore-6-1
+    - CHART-explore-7-1
+    id: ROW-VScd9KAqoATgLUtbfrSZa
+    meta:
+      background: BACKGROUND_TRANSPARENT
+    parents:
+    - ROOT_ID
+    - GRID_ID
+    type: ROW
+  ROW-bGq4f1r7PoDK05fVBClFA:
+    children:
+    - CHART-explore-8-1
+    - CHART-explore-9-1
+    - CHART-explore-10-1
+    id: ROW-bGq4f1r7PoDK05fVBClFA
+    meta:
+      background: BACKGROUND_TRANSPARENT
+    parents:
+    - ROOT_ID
+    - GRID_ID
+    type: ROW
+metadata:
+  color_scheme_domain: []
+  shared_label_colors:
+  - free text (NLU)
+  map_label_colors:
+    understood: '#1FA8C9'
+    not_understood: '#454E7C'
+    active_users: '#1FA8C9'
+    new_users: '#454E7C'
+    free text (NLU): '#454E7C'
+    fallback: '#454E7C'
+    business: '#1FA8C9'
+    bot_khong_hieu: '#5AC189'
+  label_colors: {}
+  native_filter_configuration:
+  - id: NATIVE_FILTER-dSal-x6cplRn_uVGsBCE8
+    type: NATIVE_FILTER
+    name: Traffic
+    filterType: filter_select
+    description: ''
+    targets:
+    - column:
+        name: traffic_class
+      datasetUuid: e1684352-b4b0-58a7-889f-d19fa64b3e4d
+    scope:
+      excluded:
+      - 13
+      - 14
+      - 3
+      - 4
+      - 5
+      - 6
+      - 7
+      - 8
+      rootPath:
+      - ROOT_ID
+    controlValues:
+      enableEmptyFilter: false
+      defaultToFirstItem: false
+      creatable: true
+      multiSelect: true
+      searchAllOptions: false
+      inverseSelection: false
+    defaultDataMask:
+      extraFormData:
+        filters:
+        - col: traffic_class
+          op: IN
+          val:
+          - real
+      filterState:
+        validateMessage: false
+        validateStatus: false
+        label: real
+        value:
+        - real
+        excludeFilterValues: true
+    cascadeParentIds: []
+    sortMetric: null
+  - id: NATIVE_FILTER--Oxfnz5F0DSuRl1j8UVKY
+    type: NATIVE_FILTER
+    name: Users
+    filterType: filter_select
+    description: ''
+    targets:
+    - column:
+        name: user_class
+      datasetUuid: 73f0cf6f-2a41-5816-8fab-d3e4ec2b2520
+    scope:
+      rootPath:
+      - ROOT_ID
+      excluded:
+      - 1
+      - 10
+      - 11
+      - 12
+      - 13
+      - 2
+      - 9
+    controlValues:
+      enableEmptyFilter: false
+      defaultToFirstItem: false
+      creatable: true
+      multiSelect: true
+      searchAllOptions: false
+      inverseSelection: false
+    defaultDataMask:
+      extraFormData: {}
+      filterState: {}
+      ownState: {}
+    cascadeParentIds: []
+    sortMetric: null
+  chart_configuration:
+    '1':
+      id: 1
+      crossFilters:
+        scope: global
+        chartsInScope:
+        - 2
+        - 3
+        - 4
+        - 5
+        - 6
+        - 7
+        - 8
+        - 9
+        - 10
+        - 11
+        - 12
+        - 13
+        - 14
+    '5':
+      id: 5
+      crossFilters:
+        scope: global
+        chartsInScope:
+        - 1
+        - 2
+        - 3
+        - 4
+        - 6
+        - 7
+        - 8
+        - 9
+        - 10
+        - 11
+        - 12
+        - 13
+        - 14
+    '9':
+      id: 9
+      crossFilters:
+        scope: global
+        chartsInScope:
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+        - 6
+        - 7
+        - 8
+        - 10
+        - 11
+        - 12
+        - 13
+        - 14
+    '10':
+      id: 10
+      crossFilters:
+        scope: global
+        chartsInScope:
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+        - 6
+        - 7
+        - 8
+        - 9
+        - 11
+        - 12
+        - 13
+        - 14
+    '11':
+      id: 11
+      crossFilters:
+        scope: global
+        chartsInScope:
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+        - 6
+        - 7
+        - 8
+        - 9
+        - 10
+        - 12
+        - 13
+        - 14
+    '13':
+      id: 13
+      crossFilters:
+        scope: global
+        chartsInScope:
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+        - 6
+        - 7
+        - 8
+        - 9
+        - 10
+        - 11
+        - 12
+        - 14
+  global_chart_configuration:
+    scope:
+      rootPath:
+      - ROOT_ID
+      excluded: []
+    chartsInScope:
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    - 6
+    - 7
+    - 8
+    - 9
+    - 10
+    - 11
+    - 12
+    - 13
+    - 14
+  chart_customization_config: []
+  color_scheme: ''
+  refresh_frequency: 0
+  expanded_slices: {}
+  timed_refresh_immune_slices: []
+  cross_filters_enabled: true
+  default_filters: '{}'
+theme_uuid: null
+version: 1.0.0

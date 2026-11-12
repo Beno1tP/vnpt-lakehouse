@@ -36,10 +36,12 @@ def fake_export(tmp_path, uri="starrocks://bi_ro:XXXXXXXXXX@fe:9030/default_cata
 
 def test_unpack_strips_top_folder_and_checks_pass(tmp_path):
     dest = tmp_path / "assets"
-    (dest / "old").mkdir(parents=True)
-    (dest / "old/stale.yaml").write_text("x: 1")
+    (dest / "charts").mkdir(parents=True)
+    (dest / "charts/deleted_chart.yaml").write_text("slice_name: gone")
+    (dest / "README.md").write_text("keep me")
     files = sa.unpack(fake_export(tmp_path), dest)
-    assert "metadata.yaml" in files and not (dest / "old").exists()  # replaced, not merged
+    assert "metadata.yaml" in files and not (dest / "charts/deleted_chart.yaml").exists()  # replaced, not merged
+    assert (dest / "README.md").read_text() == "keep me"  # 5.8a: the first export deleted the README
     assert sa.check(dest) == []
 
 

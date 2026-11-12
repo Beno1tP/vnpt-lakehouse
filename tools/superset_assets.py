@@ -7,10 +7,11 @@ infra/k8s/superset/assets/ and check it, so the dashboard lives in Git as review
 (Not a top-level folder named `superset/`: it made ruff treat `superset` as first-party and could shadow the real
 package for scripts run from the repo root: E84.)
 
-unpack: refuses unsafe paths (absolute, ..), strips the export's top folder (dashboard_export_<timestamp>/), replaces
-the destination folder, then runs check. check fails unless: no secret in any file (database URIs masked or without a
-password, no password/secret keys with values); every dataset UUID = the fixed uuid5 of its table (superset_datasets);
-the chart names = the charts in dashboard_checks.yaml; exactly one dashboard and one database.
+unpack: refuses unsafe paths (absolute, ..), strips the export's top folder (dashboard_export_<timestamp>/),
+replaces metadata.yaml + databases/ datasets/ charts/ dashboards/ (README.md and other files stay), then runs check.
+check fails unless: no secret in any file (database URIs masked or without a password, no password/secret keys with
+values); every dataset UUID = the fixed uuid5 of its table (superset_datasets); the chart names = the charts in
+dashboard_checks.yaml; exactly one dashboard and one database.
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ _spec = importlib.util.spec_from_file_location("superset_datasets", SUPERSET / "
 sd = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(sd)
 
+EXPORT_PARTS = ("metadata.yaml", "databases", "datasets", "charts", "dashboards")
 SECRET_KEYS = re.compile(
     r"^\s*(password|secret|secret_key|encrypted_extra|server_cert|access_token)\s*:\s*(.+)$", re.I | re.M
 )
@@ -45,8 +47,12 @@ def unpack(zip_path: Path, dest: Path) -> list[str]:
         tops = {n.split("/", 1)[0] for n in names}
         if len(tops) != 1 or not all("/" in n for n in names):
             raise ValueError(f"expected one top folder in the export, got {sorted(tops)}")
-        if dest.exists():
-            shutil.rmtree(dest)
+        for part in EXPORT_PARTS:  # replace only what an export writes (a deleted chart disappears, README stays)
+            old = dest / part
+            if old.is_dir():
+                shutil.rmtree(old)
+            elif old.exists():
+                old.unlink()
         for n in names:
             target = dest / n.split("/", 1)[1]
             target.parent.mkdir(parents=True, exist_ok=True)

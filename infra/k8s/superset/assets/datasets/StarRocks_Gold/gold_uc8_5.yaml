@@ -1,0 +1,126 @@
+table_name: gold_uc8
+main_dttm_col: event_date
+currency_code_column: null
+description: UC8 new and active users per calendar day x user_class (+ BITMAP users
+  for exact distinct counts)
+default_endpoint: null
+offset: 0
+cache_timeout: null
+catalog: default_catalog
+schema: gold
+sql: null
+params: null
+template_params: null
+filter_select_enabled: true
+fetch_values_predicate: null
+extra: null
+normalize_columns: false
+always_filter_main_dttm: false
+folders: null
+uuid: 73f0cf6f-2a41-5816-8fab-d3e4ec2b2520
+metrics:
+- metric_name: avg_active_per_day
+  verbose_name: Avg active users / day
+  metric_type: null
+  expression: SUM(active_users) * 1.0 / COUNT(DISTINCT event_date)
+  description: average of the daily active counts over calendar days (M3)
+  d3format: .2f
+  currency: null
+  extra: null
+  warning_text: null
+- metric_name: active_users
+  verbose_name: Active users (distinct)
+  metric_type: null
+  expression: BITMAP_UNION_COUNT(users)
+  description: exact distinct users over the selected days (bitmap union); per day
+    = that day's active users
+  d3format: ',d'
+  currency: null
+  extra: null
+  warning_text: null
+- metric_name: avg_new_per_day
+  verbose_name: Avg new users / day
+  metric_type: null
+  expression: SUM(new_users) * 1.0 / COUNT(DISTINCT event_date)
+  description: over calendar days incl. days without messages (M3)
+  d3format: .2f
+  currency: null
+  extra: null
+  warning_text: null
+- metric_name: new_users
+  verbose_name: New users
+  metric_type: null
+  expression: SUM(new_users)
+  description: null
+  d3format: ',d'
+  currency: null
+  extra: null
+  warning_text: null
+columns:
+- column_name: user_class
+  verbose_name: null
+  is_dttm: false
+  is_active: true
+  type: VARCHAR(1048576)
+  advanced_data_type: null
+  groupby: true
+  filterable: true
+  expression: ''
+  description: null
+  python_date_format: null
+  datetime_format: null
+  extra: null
+- column_name: active_users
+  verbose_name: null
+  is_dttm: false
+  is_active: true
+  type: BIGINT(20)
+  advanced_data_type: null
+  groupby: true
+  filterable: true
+  expression: ''
+  description: null
+  python_date_format: null
+  datetime_format: null
+  extra: null
+- column_name: new_users
+  verbose_name: null
+  is_dttm: false
+  is_active: true
+  type: BIGINT(20)
+  advanced_data_type: null
+  groupby: true
+  filterable: true
+  expression: ''
+  description: null
+  python_date_format: null
+  datetime_format: null
+  extra: null
+- column_name: users
+  verbose_name: null
+  is_dttm: false
+  is_active: true
+  type: BITMAP
+  advanced_data_type: null
+  groupby: true
+  filterable: true
+  expression: ''
+  description: null
+  python_date_format: null
+  datetime_format: null
+  extra: null
+- column_name: event_date
+  verbose_name: null
+  is_dttm: true
+  is_active: true
+  type: DATETIME
+  advanced_data_type: null
+  groupby: true
+  filterable: true
+  expression: ''
+  description: null
+  python_date_format: null
+  datetime_format: null
+  extra: null
+version: 1.0.0
+database_uuid: bfb9628b-9ac5-49c2-a49e-9a85907ef13d

@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-11-13 — 5.8a: first export reviewed and committed
+Export (Bee, `make superset-export` 18:22 UTC): 22 files, 156 KB, check PASS (1 database, 5 datasets, 14 charts, 1 dashboard). It deleted `assets/README.md` (unpack replaced the whole folder: Claude's slip) → unpack now replaces only metadata.yaml + the 4 export folders (test).
+Review (Claude, read every YAML): database URI masked `XXXXXXXXXX`, read-only flags kept (allow_dml/ctas/cvas/file_upload false, SQL Lab on); no owners, e-mails, user names or hosts other than the in-cluster FE service; dataset uuids = uuid5 (charts reference them); dashboard published, Traffic default `real`, scopes stored as `rootPath ROOT_ID` + `excluded` **chart ids**. Two points for 5.8b: (1) the database uuid is random (`get_or_create_db`): on a fresh Superset the Job would create another uuid and the import would collide on the name → the Job must give the connection a fixed uuid5 and the assets must be re-exported; (2) `excluded` holds chart ids, which differ on a fresh Superset: the import must remap them (Superset's importer is expected to; the 5.8c drill + superset-check scoping prove it).
+
 ### 2026-11-13 — 5.7 done (E83), 5.8a prepared: dashboard export to Git
 5.7 (Bee): PR #125 + UI fixes → `superset-check: PASS` (33 values, Traffic default real + 6 charts, Users no default + 7 charts, Data up to in no scope, 14/14 charts reviewed).
 Prepared (Claude, branch `task5/5.8a-export`): `make superset-export` (`superset export-dashboards` in the web pod as admin → ZIP over `kubectl exec` stdout → `tools/superset_assets.py unpack` into `superset/assets/`, replacing the folder), `check` (no clear-text password / secret keys, dataset uuid = uuid5, chart names = dashboard_checks.yaml, 1 database + 1 dashboard, title), 4 unit tests (fake export, each violation, unsafe zip path) + a test on the committed assets (skipped until the first export). Predicted (my local run): ruff, pytest (62 + 1 skipped), fake-SHELL + `bash -n`.
