@@ -146,3 +146,15 @@ def test_init_job_imports_between_two_connection_runs():  # 5.8b
     assert steps == ["connect", "superset import-dashboards -p /assets/assets.zip -u admin", "connect",
                      "python /init/superset_datasets.py /init/datasets.yaml"]  # fmt: skip
     assert "import ok:" in script
+
+
+def test_run_mode_warning_dropped_other_dialect_warnings_kept(monkeypatch):  # E85
+    load_config(monkeypatch, **ENV)
+    import logging
+
+    log = logging.getLogger("starrocks.dialect")
+    f = log.filters[-1]
+    assert not f.filter(
+        log.makeRecord("starrocks.dialect", logging.WARNING, "x", 1, "Failed to get run_mode: 5203", None, None)
+    )
+    assert f.filter(log.makeRecord("starrocks.dialect", logging.WARNING, "x", 1, "something else", None, None))
