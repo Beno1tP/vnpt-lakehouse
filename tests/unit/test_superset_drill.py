@@ -21,8 +21,8 @@ def test_overlay_patches_every_container_of_the_base():  # a new container in th
         for f in ("superset.yaml", "superset-init-job.yaml")
         for d in yaml.safe_load_all((DIR / f).read_text())
     }
-    kust = yaml.safe_load((DIR / "drill/kustomization.yaml").read_text())
-    assert kust["nameSuffix"] == "-drill" and kust["resources"] == [".."]
+    kust = yaml.safe_load((ROOT / "infra/k8s/superset-drill/kustomization.yaml").read_text())
+    assert kust["nameSuffix"] == "-drill" and kust["resources"] == ["../superset"]  # sibling of the base (E86)
     for p in kust["patches"]:
         patch = yaml.safe_load(p["patch"])
         patched = containers(patch)

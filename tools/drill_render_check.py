@@ -1,4 +1,4 @@
-"""Task 5 step 5.8c: check the rendered drill overlay (kubectl kustomize infra/k8s/superset/drill) in CI.
+"""Task 5 step 5.8c: check the rendered drill overlay (kubectl kustomize infra/k8s/superset-drill) in CI.
 
 Fails unless every object is named *-drill and labelled app=superset-drill (selectors included), and every container
 of the Deployment and the Job has DB_NAME=superset_drill (so the drill can never write to the real metadata DB).

@@ -273,14 +273,14 @@ superset-drill: ## Task 5 5.8c: reproduce the dashboard from Git on a SCRATCH me
 	$(PG_PSQL) 'DROP DATABASE IF EXISTS superset_drill WITH (FORCE)'
 	$(PG_PSQL) 'CREATE DATABASE superset_drill OWNER superset'
 	@echo "scratch metadata DB: $$($(PG_PSQL) "SELECT datname || ' owner ' || pg_get_userbyid(datdba) FROM pg_database WHERE datname = 'superset_drill'")"
-	kubectl apply -k infra/k8s/superset/drill
+	kubectl apply -k infra/k8s/superset-drill
 	kubectl -n superset rollout status deploy/superset-drill --timeout=900s
 	@for i in $$(seq 1 120); do s=$$(kubectl -n superset get job superset-init-drill -o jsonpath='{.status.succeeded}{.status.failed}'); \
 	  [ -n "$$s" ] && break; sleep 5; done; kubectl -n superset logs job/superset-init-drill | grep -E "metadata db|ok[: ]|PASS|FAIL|datasets:|rror"; \
 	  test "$$(kubectl -n superset get job superset-init-drill -o jsonpath='{.status.succeeded}')" = 1
 	$(MAKE) --no-print-directory superset-check CHECK_POD=superset-check-drill CHECK_URL=http://superset-drill.superset.svc.cluster.local:8088
 superset-drill-clean: ## Task 5 5.8c: delete the drill objects (only *-drill) and the scratch DB superset_drill; then make superset-up brings the real web back
-	-kubectl delete -k infra/k8s/superset/drill --ignore-not-found --wait=true
+	-kubectl delete -k infra/k8s/superset-drill --ignore-not-found --wait=true
 	-kubectl -n superset delete pod superset-check-drill --ignore-not-found
 	$(PG_PSQL) 'DROP DATABASE IF EXISTS superset_drill WITH (FORCE)'
 	@echo "left: $$($(PG_PSQL) "SELECT string_agg(datname, ', ' ORDER BY datname) FROM pg_database WHERE datname LIKE 'superset%'")"
