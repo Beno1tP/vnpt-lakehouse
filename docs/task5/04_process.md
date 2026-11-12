@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-11-12 — 5.1 prepared: Superset image
+Read (Superset 6.1.0 `Dockerfile`): venv `/app/.venv` on PATH, packages via `uv`, final user `superset`, WORKDIR `/app`, the lean stage installs `requirements/base.txt` and no `postgres` extra.
+Prepared (Claude, branch `task5/5.1-image`): `docker/superset/` (FROM the 6.1.0 digest; `uv pip freeze --exclude-editable` of the base → constraints; `uv pip install -r requirements.txt -c constraints`; `uv pip check`; starrocks 1.3.4 + psycopg2-binary 2.9.13); CI job `superset-image` (build, `create_engine('starrocks://…')` resolves the dialect, imports, a diff of base vs our `uv pip freeze` that FAILS if any Superset package changed or was removed, `superset version`); Dockerfile check; images.yml job `superset`; ghcr-prune knows the package. Predicted: lint + tests pass, YAML parses; the build itself runs first in CI.
+
 ### 2026-11-12 — 5.0 plan v2 + disk clean-up
 Did (Bee): version checks (Superset 6.1.0 digest, chart 0.22.8, starrocks 1.3.4, psycopg2-binary 2.9.13); C: 42 GB free → node images not in images.env removed (15, `crictl rmi`, after checking no pod used them) → `minikube stop` → diskpart compaction (first attempt: `detach vidsk` typo left docker_data.vhdx attached read-only to Windows → Docker Desktop "disk not found"; detached, compacted) → C: **52 GB free** (`dir` still shows the logical size of the sparse vhdx) → `minikube start && make k8s-up` (Airflow rev 27; the demo profile was reset: scheduler running again, asset DAGs still paused).
 Decided (Bee): keep GHCR intact until the final presentation (ghcr-prune not run: no laptop disk gain).

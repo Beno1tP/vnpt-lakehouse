@@ -15,7 +15,14 @@ import subprocess
 import urllib.request
 from pathlib import Path
 
-PACKAGES = ["vnpt-lake-spark", "vnpt-lake-hms", "vnpt-lake-spark-job", "vnpt-lake-airflow", "vnpt-lake-dbt"]
+PACKAGES = [
+    "vnpt-lake-spark",
+    "vnpt-lake-hms",
+    "vnpt-lake-spark-job",
+    "vnpt-lake-airflow",
+    "vnpt-lake-dbt",
+    "vnpt-lake-superset",
+]
 ROOT = Path(__file__).resolve().parents[2]
 
 
