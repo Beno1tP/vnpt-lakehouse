@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-11-13 — 5.7 done (E83), 5.8a prepared: dashboard export to Git
+5.7 (Bee): PR #125 + UI fixes → `superset-check: PASS` (33 values, Traffic default real + 6 charts, Users no default + 7 charts, Data up to in no scope, 14/14 charts reviewed).
+Prepared (Claude, branch `task5/5.8a-export`): `make superset-export` (`superset export-dashboards` in the web pod as admin → ZIP over `kubectl exec` stdout → `tools/superset_assets.py unpack` into `superset/assets/`, replacing the folder), `check` (no clear-text password / secret keys, dataset uuid = uuid5, chart names = dashboard_checks.yaml, 1 database + 1 dashboard, title), 4 unit tests (fake export, each violation, unsafe zip path) + a test on the committed assets (skipped until the first export). Predicted (my local run): ruff, pytest (62 + 1 skipped), fake-SHELL + `bash -n`.
+
 ### 2026-11-13 — 5.7 first run: 33/33 values PASS, 9 structure FAILs
 `make superset-check` (Bee): logged in as checker, dashboard found (published, id 1, 14 charts, filters Traffic + Users); **33/33 values PASS** (incl. 3.625 unrounded, change % None, bitmap 89/87/2). FAIL: Traffic default None (read at `defaultDataMask.filterState.value`); `UC7 · Change %` in Traffic's scope (likely real: scope = all minus excluded, a chart added later is in scope automatically); no UC7/UC8 chart in Users' `chartsInScope` although the filter worked on screen (likely the tool's reading).
 Prepared (Claude, branch `task5/5.7-scope-fix`): print each filter's stored scope fields + resolved chart names; fallback scope = rootPath ROOT_ID minus excluded when chartsInScope is absent; readable dates. Bee in the UI: exclude Change % from Traffic, check Traffic's default, look at Users' scoping.
