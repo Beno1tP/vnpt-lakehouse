@@ -1,4 +1,6 @@
 import importlib.util
+import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -11,6 +13,10 @@ DIR = ROOT / "infra/k8s/superset"
 def load_config(monkeypatch, **env):
     for k, v in env.items():
         monkeypatch.setenv(k, v)
+    fake = types.ModuleType("pymysql")  # the real PyMySQL is in the image, not in the dev venv
+    fake.calls = []
+    fake.install_as_MySQLdb = lambda: fake.calls.append("shim")
+    monkeypatch.setitem(sys.modules, "pymysql", fake)
     spec = importlib.util.spec_from_file_location("superset_config", DIR / "superset_config.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -25,6 +31,7 @@ ENV = dict(
 def test_config_reads_env_and_quotes_password(monkeypatch):
     cfg = load_config(monkeypatch, **ENV)
     assert cfg.SECRET_KEY == "k"
+    assert sys.modules["pymysql"].calls == ["shim"]  # E82: MySQLdb shim installed at config load
     assert cfg.SQLALCHEMY_DATABASE_URI == "postgresql+psycopg2://superset:p%40ss%2F%3Ax@h:5432/superset"
 
 
@@ -98,5 +105,6 @@ def test_init_job_registers_read_only_starrocks_connection():  # 5.4
     ][0]
     assert "starrocks://bi_ro:" in script and "default_catalog.gold" in script
     assert "d.allow_dml = d.allow_ctas = d.allow_cvas = d.allow_file_upload" in script
+    assert "StarRocksEngineSpec.get_datatype(253)" in script  # E82: the BI tool's own result path
     assert "assert n == 10613" in script and "denied" in script  # positive and negative check through the connection
     assert 'os.environ["STARROCKS_BI_PASSWORD"]' in script and "STARROCKS_ROOT" not in script
