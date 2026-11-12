@@ -14,6 +14,7 @@ resources:
   - spark-jobs/spark-history.yaml
   - trino-rbac-airflow.yaml
   - gold-jobs/rbac.yaml
+  - lake/superset-db-init-job.yaml
 images:                                # GHCR digests (2.0c); keep equal to infra/k8s/images.env (checked by CI)
   - name: ghcr.io/beno1tp/vnpt-lake-hms
     digest: sha256:9446f7d1e0ab211f1fe32b0f8def318699e6afa40a5e1fcebfa3d07d134b91ff
@@ -65,6 +66,17 @@ secretGenerator:                       # from files rendered by `make k8s-secret
     namespace: spark-jobs
     envs: [secrets/demo-viewer.env]
     options: { disableNameSuffixHash: true }
+  - name: superset-db-credentials       # Task 5 5.2: password of the Postgres role superset (Job superset-db-init)
+    namespace: lake
+    envs: [secrets/superset-db.env]
+  - name: superset-env                  # Task 5: SECRET_KEY + metadata DB (DB_*) for every Superset pod (fixed name)
+    namespace: superset
+    envs: [secrets/superset-env.env]
+    options: { disableNameSuffixHash: true }
+  - name: superset-init-credentials     # Task 5: admin + bi_ro passwords, only for the Job superset-init (D21)
+    namespace: superset
+    envs: [secrets/superset-init.env]
+    options: { disableNameSuffixHash: true }
   - name: minio-service-users           # passwords for the minio-users Job
     namespace: lake
     envs: [secrets/minio-service-users.env]
@@ -83,6 +95,7 @@ secretGenerator:                       # from files rendered by `make k8s-secret
   - { name: ghcr-pull, namespace: spark-jobs, type: kubernetes.io/dockerconfigjson, files: [.dockerconfigjson=secrets/ghcr-dockerconfig.json], options: { disableNameSuffixHash: true } }
   - { name: ghcr-pull, namespace: airflow, type: kubernetes.io/dockerconfigjson, files: [.dockerconfigjson=secrets/ghcr-dockerconfig.json], options: { disableNameSuffixHash: true } }
   - { name: ghcr-pull, namespace: gold-jobs, type: kubernetes.io/dockerconfigjson, files: [.dockerconfigjson=secrets/ghcr-dockerconfig.json], options: { disableNameSuffixHash: true } }
+  - { name: ghcr-pull, namespace: superset, type: kubernetes.io/dockerconfigjson, files: [.dockerconfigjson=secrets/ghcr-dockerconfig.json], options: { disableNameSuffixHash: true } }
   - { name: ghcr-pull, namespace: starrocks, type: kubernetes.io/dockerconfigjson, files: [.dockerconfigjson=secrets/ghcr-dockerconfig.json], options: { disableNameSuffixHash: true } }
 configMapGenerator:
   - name: starrocks-init-sql            # Task 4: statements of the Job starrocks-init (applied by make, fixed name)

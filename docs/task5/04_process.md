@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-11-12 — 5.1 done, 5.2 prepared: metadata DB + Secrets
+5.1 (Bee): PR #115 merged after E79 (3 commits), images run 43170076273 → `vnpt-lake-superset@sha256:a0307416…` (SQLAlchemy 1.4.54 kept, 157 → 162 packages), bump PR #116.
+Prepared (Claude, branch `task5/5.2-metadata-db`): render-secrets generates `SUPERSET_SECRET_KEY` (base64 of 42 random bytes; also encrypts stored connection passwords, never rotate without `superset re-encrypt-secrets`), `SUPERSET_ADMIN_PASSWORD`, `SUPERSET_DB_PASSWORD`; Secrets `superset-db-credentials` (lake), `superset-env` (SECRET_KEY + DB_* for every Superset pod), `superset-init-credentials` (admin + bi_ro, init Job only), `ghcr-pull` in the new namespace `superset`; Job `superset-db-init` in lake (postgres:16 same digest, `\gexec` create-if-missing + `ALTER ROLE … PASSWORD`, login check as `superset` over TCP), waited for and logged by `k8s-up`; pg-backup also dumps `superset`. Predicted (my local run): ruff, pytest (render test extended), YAML parse, `bash -n` of the Job script pass.
+
 ### 2026-11-12 — 5.1 prepared: Superset image
 Read (Superset 6.1.0 `Dockerfile`): venv `/app/.venv` on PATH, packages via `uv`, final user `superset`, WORKDIR `/app`, the lean stage installs `requirements/base.txt` and no `postgres` extra.
 Prepared (Claude, branch `task5/5.1-image`): `docker/superset/` (FROM the 6.1.0 digest; `uv pip freeze --exclude-editable` of the base → constraints; `uv pip install -r requirements.txt -c constraints`; `uv pip check`; starrocks 1.3.4 + psycopg2-binary 2.9.13); CI job `superset-image` (build, `create_engine('starrocks://…')` resolves the dialect, imports, a diff of base vs our `uv pip freeze` that FAILS if any Superset package changed or was removed, `superset version`); Dockerfile check; images.yml job `superset`; ghcr-prune knows the package. Predicted: lint + tests pass, YAML parses; the build itself runs first in CI.

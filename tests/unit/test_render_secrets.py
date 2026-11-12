@@ -62,6 +62,13 @@ def test_generates_keys_once_and_escapes(tmp_path, monkeypatch):
     assert (out / "trino-s3.env").read_text().startswith("TRINO_S3_ACCESS_KEY=trino\nTRINO_S3_SECRET_KEY=")  # Task 3
     assert (out / "trino-access-test.env").read_text().startswith("AWS_ACCESS_KEY_ID=trino\n")
     assert first.count("MINIO_SPARK_JOBS_SECRET=") == 1
+    assert first.count("SUPERSET_SECRET_KEY=") == 1  # Task 5: generated once (it encrypts stored passwords)
+    ss = dict(line.split("=", 1) for line in (out / "superset-env.env").read_text().splitlines())
+    assert ss["DB_USER"] == "superset" and ss["DB_NAME"] == "superset" and len(ss["SUPERSET_SECRET_KEY"]) == 56
+    assert set(ss) == {"SUPERSET_SECRET_KEY", "DB_HOST", "DB_PORT", "DB_USER", "DB_PASS", "DB_NAME"}  # no admin pw
+    init = dict(line.split("=", 1) for line in (out / "superset-init.env").read_text().splitlines())
+    assert set(init) == {"SUPERSET_ADMIN_PASSWORD", "STARROCKS_BI_PASSWORD"}
+    assert (out / "superset-db.env").read_text() == f"SUPERSET_DB_PASSWORD={ss['DB_PASS']}\n"
     conns = dict(line.split("=", 1) for line in (out / "airflow-connections.env").read_text().splitlines())
     minio = json.loads(conns["AIRFLOW_CONN_MINIO_LANDING"])
     assert minio["login"] == "airflow-landing" and minio["extra"]["endpoint_url"].endswith(":9000")
