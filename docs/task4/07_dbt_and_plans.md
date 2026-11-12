@@ -59,3 +59,13 @@ is the pattern that keeps pre-aggregated tables exact at production scale (01_kn
 
 Consequence for the freeze (4.6 stage 3): Gold can be rebuilt FROM a tag by pointing the staging views at
 `FOR VERSION AS OF '<tag>'`; a tag taken before a schema change still answers with today's columns (NULL-filled).
+
+## 5. Rebuild Gold from an Iceberg tag (2026-11-12, E77, E78)
+
+| Run | Result |
+|---|---|
+| views + `--vars '{silver_version: task4_v1}'` (first try) | views `skip`: StarRocks drops `FOR VERSION AS OF` from a view's stored definition → nothing read the tag (E77) |
+| staging `ephemeral` in a tag rebuild: `compile --select fct_prediction` | `FOR VERSION AS OF 'task4_v1'` 2× inside the table's own SQL |
+| `build` from `task4_v1` | PASS=53 ERROR=0 (all reconcile tests) |
+| `build` from `task3_v1` (negative) | gate FAIL 3 (`step` absent) + 1 more error, but 45 nodes passed: the gate did not hold back the marts (E78) → `make dbt-tag-rebuild` runs the gate as a separate first step |
+| `build` (current) | PASS=56; `make gold-check` 22/22 |
