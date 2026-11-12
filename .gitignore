@@ -13,3 +13,5 @@ CLAUDE_CODE_PROMPT.md
 infra/compose/secrets/
 infra/k8s/secrets/
 !infra/k8s/images.env
+# Task 5 5.8b: assets.zip, built by make superset-assets-zip
+infra/k8s/superset/generated/

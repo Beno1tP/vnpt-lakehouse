@@ -30,6 +30,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.10"            # 5.8b: pyyaml for the assets ZIP (system pip is externally managed, PEP 668)
       - name: Render secrets from the example with dummy values, then kustomize
         run: |
           sed 's/change-me-[a-z-]*/ci-dummy-value-1/' infra/k8s/secrets.env.example > "$RUNNER_TEMP/secrets.env"
@@ -40,7 +43,9 @@ jobs:
           # 2.7: every rendered image is pinned by digest (kustomize images: rewrites ours)
           if grep -E '^\s*image:' "$RUNNER_TEMP/rendered.yaml" | grep -v '@sha256:' | grep -v '__IMAGE__'; then
             echo "image without digest"; exit 1; fi
-          # Task 5: Superset web, its own kustomization (applied by make superset-up)
+          # Task 5: Superset web, its own kustomization (applied by make superset-up); 5.8b: the assets ZIP first
+          pip install -q pyyaml==6.0.2
+          python3 -I tools/superset_assets.py zip infra/k8s/superset/assets infra/k8s/superset/generated/assets.zip
           kubectl kustomize infra/k8s/superset > "$RUNNER_TEMP/superset.yaml"
           grep '^kind:' "$RUNNER_TEMP/superset.yaml" | sort | uniq -c
           grep -E '^\s*image:' "$RUNNER_TEMP/superset.yaml"

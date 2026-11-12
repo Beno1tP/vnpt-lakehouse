@@ -17,7 +17,11 @@ def fake_export(tmp_path, uri="starrocks://bi_ro:XXXXXXXXXX@fe:9030/default_cata
     top = "dashboard_export_20261113T000000"
     files = {
         "metadata.yaml": {"version": "1.0.0", "type": "Dashboard"},
-        "databases/StarRocks_Gold.yaml": {"database_name": "StarRocks Gold", "sqlalchemy_uri": uri},
+        "databases/StarRocks_Gold.yaml": {
+            "database_name": "StarRocks Gold",
+            "sqlalchemy_uri": uri,
+            "uuid": str(sa.sd.database_uuid("StarRocks Gold")),
+        },
         "datasets/StarRocks_Gold/gold_uc5.yaml": {
             "table_name": "gold_uc5",
             "uuid": uuid or str(sa.sd.dataset_uuid("gold_uc5")),
@@ -69,3 +73,26 @@ def test_unpack_refuses_unsafe_paths(tmp_path):
 @pytest.mark.skipif(not list(ASSETS.rglob("*.yaml")), reason="no export committed yet (5.8a: make superset-export)")
 def test_committed_assets_pass_the_check():
     assert sa.check(ASSETS) == []
+
+
+def test_check_requires_the_fixed_database_uuid(tmp_path):
+    dest = tmp_path / "a"
+    old_db = {
+        "database_name": "StarRocks Gold",
+        "sqlalchemy_uri": "starrocks://u:XXXXXXXXXX@h/x",
+        "uuid": "bfb9628b-9ac5-49c2-a49e-9a85907ef13d",  # the random uuid of the first export
+    }
+    sa.unpack(fake_export(tmp_path, extra={"databases/StarRocks_Gold.yaml": old_db}), dest)
+    assert any("database StarRocks Gold: uuid" in e for e in sa.check(dest))
+
+
+def test_zip_is_deterministic_and_importable_shape(tmp_path):
+    dest = tmp_path / "a"
+    sa.unpack(fake_export(tmp_path), dest)
+    (dest / "README.md").write_text("not in the bundle")
+    one, two = tmp_path / "1.zip", tmp_path / "2.zip"
+    assert sa.zip_assets(dest, one) == sa.zip_assets(dest, two)
+    assert one.read_bytes() == two.read_bytes()  # same YAML -> same bytes -> same ConfigMap hash
+    names = zipfile.ZipFile(one).namelist()
+    assert "assets/metadata.yaml" in names and all(n.startswith("assets/") for n in names)
+    assert not any(n.endswith("README.md") for n in names)

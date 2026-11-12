@@ -241,14 +241,18 @@ starrocks-ready: ## Task 4: wait for the CURRENT FE/BE revision (rollout status,
 	  for i in $$(seq 1 36); do { sed -n 's/^password=//p' infra/k8s/secrets/starrocks-root.env; echo "SELECT count(*) FROM TABLE(generate_series(1, 10))"; } | $(SR_SQL) >/dev/null 2>&1 && \
 	    { echo "starrocks-ready: FE + BE alive and a BE query runs (E76: past the blacklist window)"; exit 0; }; sleep 5; done; \
 	  echo "starrocks-ready: no query reached the BE after 3 min (make starrocks-sql SQL='SHOW BACKENDS')"; exit 1
+superset-assets-zip: ## Task 5 5.8b: deterministic ZIP of infra/k8s/superset/assets for the Job's import (git-ignored)
+	.venv/bin/python -I tools/superset_assets.py check infra/k8s/superset/assets
+	.venv/bin/python -I tools/superset_assets.py zip infra/k8s/superset/assets infra/k8s/superset/generated/assets.zip
 superset-up:   ## Task 5: Superset web -> 1 (init container migrates), then Job superset-init (admin from the Secret, D21). Needs the scheduler at 0 (D22: make demo-task5)
 	@r=$$(kubectl -n airflow get deploy/airflow-scheduler -o jsonpath='{.spec.replicas}'); test "$$r" = 0 || \
 	  { echo "refusing: Airflow scheduler is running; use make demo-task5 (D22: Superset + scheduler do not fit)"; exit 1; }
+	$(MAKE) --no-print-directory superset-assets-zip
 	kubectl -n superset delete job superset-init --ignore-not-found --wait=true
 	kubectl apply -k infra/k8s/superset
 	kubectl -n superset rollout status deploy/superset --timeout=900s
 	@for i in $$(seq 1 120); do s=$$(kubectl -n superset get job superset-init -o jsonpath='{.status.succeeded}{.status.failed}'); \
-	  [ -n "$$s" ] && break; sleep 5; done; kubectl -n superset logs job/superset-init | grep -E "ok[: ]|PASS|FAIL|datasets:"; \
+	  [ -n "$$s" ] && break; sleep 5; done; kubectl -n superset logs job/superset-init | grep -E "ok[: ]|PASS|FAIL|datasets:|rror"; \
 	  test "$$(kubectl -n superset get job superset-init -o jsonpath='{.status.succeeded}')" = 1
 superset-check: ## Task 5 5.7: every dashboard chart through Superset's API as read-only user checker, filters on/off, vs dashboard_checks.yaml
 	@test -n "$(SUPERSET_IMAGE_REF)" || { echo "SUPERSET_IMAGE_REF missing in infra/k8s/images.env"; exit 1; }

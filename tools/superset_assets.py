@@ -3,6 +3,7 @@ infra/k8s/superset/assets/ and check it, so the dashboard lives in Git as review
 
     python -I tools/superset_assets.py unpack <export.zip> infra/k8s/superset/assets   # make superset-export
     python -I tools/superset_assets.py check infra/k8s/superset/assets                 # + unit test on the commit
+    python -I tools/superset_assets.py zip infra/k8s/superset/assets <out.zip>         # make superset-assets-zip
 
 (Not a top-level folder named `superset/`: it made ruff treat `superset` as first-party and could shadow the real
 package for scripts run from the repo root: E84.)
@@ -60,6 +61,28 @@ def unpack(zip_path: Path, dest: Path) -> list[str]:
     return sorted(n.split("/", 1)[1] for n in names)
 
 
+def zip_assets(src: Path, out: Path) -> int:
+    """5.8b: deterministic ZIP for `superset import-dashboards` (one top folder, metadata.yaml at its root; sorted
+    entries, fixed timestamps, so the same YAML always gives the same bytes and the ConfigMap hash only changes when
+    the dashboard changes). Only the export parts, never README.md. Returns the number of files."""
+    files = sorted(
+        p
+        for part in EXPORT_PARTS
+        for p in ([src / part] if (src / part).is_file() else sorted((src / part).rglob("*.yaml")))
+        if p.is_file()
+    )
+    if not (src / "metadata.yaml").is_file():
+        raise ValueError(f"{src}/metadata.yaml missing: export first (make superset-export)")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+        for p in files:
+            info = zipfile.ZipInfo(f"assets/{p.relative_to(src).as_posix()}", date_time=(1980, 1, 1, 0, 0, 0))
+            info.external_attr = 0o644 << 16
+            info.compress_type = zipfile.ZIP_DEFLATED
+            z.writestr(info, p.read_bytes())
+    return len(files)
+
+
 def check(dest: Path) -> list[str]:
     errors: list[str] = []
     files = sorted(p for p in dest.rglob("*.yaml"))
@@ -75,6 +98,9 @@ def check(dest: Path) -> list[str]:
             if m.group(1) != "XXXXXXXXXX":
                 errors.append(f"{p.relative_to(dest)}: URI with a clear-text password")
     docs = {p.relative_to(dest).as_posix(): yaml.safe_load(p.read_text()) for p in files}
+    for db_doc in [v for f, v in docs.items() if f.startswith("databases/")]:
+        if str(db_doc.get("uuid")) != str(sd.database_uuid(db_doc["database_name"])):
+            errors.append(f"database {db_doc['database_name']}: uuid {db_doc.get('uuid')} != fixed uuid5 (5.8b)")
     kinds = {
         k: [v for f, v in docs.items() if f.startswith(k + "/")]
         for k in ("databases", "datasets", "charts", "dashboards")
@@ -105,6 +131,10 @@ def main(argv: list[str]) -> int:
         dest = Path(argv[2])
     elif len(argv) == 2 and argv[0] == "check":
         dest = Path(argv[1])
+    elif len(argv) == 3 and argv[0] == "zip":
+        n = zip_assets(Path(argv[1]), Path(argv[2]))
+        print(f"zipped {n} files into {argv[2]}")
+        return 0
     else:
         print(__doc__)
         return 2
