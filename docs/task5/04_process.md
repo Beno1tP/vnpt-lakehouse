@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-11-12 — 5.3a rework: own manifests (D27)
+CI on PR #118 (Bee): chart deprecated + worker always rendered + init script with admin defaults (E80). Read: Superset docs (Helm chart deprecated, use the operator), operator releases v0.1.0 (06-13) … v0.3.0 (09-30). Decided (Bee): **own manifests** (D27).
+Prepared (Claude, same branch): `infra/k8s/superset/{superset.yaml, superset_config.py, kustomization.yaml}` (Deployment Recreate, Service :8088, init container wait-for-postgres with our image, non-root 1000, no SA token, probes `/health`, 1 Gi / 1.5 Gi; config: SECRET_KEY + DB URI from env with URL-quoting, small pool, SQL Lab limits, no Redis/Celery); chart values, Make targets and the render checker removed; `tests/unit/test_superset_manifests.py` (5 tests); CI: kustomize render of `infra/k8s/superset` with digest check, config loaded inside the image (`from superset import config`). Predicted (my local run): ruff, pytest, YAML pass; kustomize render and config load run first in CI.
+
 ### 2026-11-12 — 5.2 done, 5.3a prepared: chart render check
 5.2 (Bee, PR merged + `make k8s-up`): secrets generated once, Job `superset-db-init` → `login ok: superset on superset, owner superset`; `\l superset` owner superset, UTF8; Secrets in `superset`: ghcr-pull, superset-env (6 keys), superset-init-credentials (2).
 Read (chart superset 0.22.8, `values.yaml` + `_helpers.tpl`): `database.*` / `cache.*` replace `supersetNode.connections`; `cache.enabled: false` drops Redis, cache and Celery config; the generated `superset_config.py` builds the DB URI from env `DB_USER/DB_PASS/DB_HOST/DB_PORT/DB_NAME` (= our Secret superset-env); `secretEnv.create: false` + `envFromSecret`; defaults to avoid: `init.adminUser` password `admin`, `runAsUser: 0`, init container `apache/superset:dockerize` (moving tag, waits for Redis too). Release asset digest sha256:58075998… (GitHub API, published 2026-09-09).

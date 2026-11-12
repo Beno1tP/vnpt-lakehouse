@@ -1,0 +1,13 @@
+# Task 5: Superset web (namespace superset). Applied by make superset-up, not by make k8s-up (the namespace and the
+# Secrets superset-env / superset-init-credentials / ghcr-pull come from infra/k8s/kustomization.yaml).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - superset.yaml
+images:                                  # keep equal to SUPERSET_IMAGE_REF in infra/k8s/images.env (unit test)
+  - name: ghcr.io/beno1tp/vnpt-lake-superset
+    digest: sha256:a0307416f2641b2394a095901e28e00e5e9659ad222ebf4f07298ef0de04946b
+configMapGenerator:                      # hash suffix: a config change rolls the pod
+  - name: superset-config
+    namespace: superset
+    files: [superset_config.py]

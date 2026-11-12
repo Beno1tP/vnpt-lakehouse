@@ -39,7 +39,7 @@ modes                serving = demo-task4 profile + Superset 1 (≈ 6.1 Gi reque
 | **5.0 Plan + pins** | this plan, `02_config.md`, decision renumbering; versions checked 11-12 (Superset 6.1.0 digest, chart 0.22.8, dialect 1.3.4, psycopg2-binary 2.9.13); C: 52 GB free after the vhdx compaction | plan merged | how a BI tool is pinned like any other service |
 | **5.1 Image** | `docker/superset/{Dockerfile, requirements.txt}`: `FROM apache/superset:6.1.0@sha256:…`, `pip install -c <Superset's own pins> starrocks==1.3.4 psycopg2-binary==2.9.13`; CI: build, `pip check`, `python -c "import starrocks, psycopg2"`, `superset version`; images.yml job | CI green; digest in `images.env` | lean base images, driver/dialect = SQLAlchemy plug-in, dependency conflicts caught at build time |
 | **5.2 Metadata DB + Secrets** | generated `SUPERSET_SECRET_KEY`, `SUPERSET_ADMIN_PASSWORD`, `SUPERSET_DB_PASSWORD`; Job `superset-db-init` in `lake` (role + DB `superset`, `CREATE … IF NOT EXISTS` pattern); namespace `superset` | `\l` shows `superset`; login as `superset` works | why Superset needs its own DB (users, charts, encrypted connection passwords) |
-| **5.3 Install** | `make superset-chart` (download + checksum), `infra/helm/superset/values-local.yaml`: image by digest, subcharts postgresql/redis **off**, Celery/worker/beat off, `configOverrides` (no Redis cache, `SECRET_KEY` from env), chart's own init/admin **off** (E35); `make superset-render` (rendered images pinned, no redis/celery) → `make superset-install` → Job `superset-init` → `make superset-ui` | login as admin; no Redis errors in the log; 0 restarts after 10 min; requests measured | Helm values vs rendered config, why the chart's init is not used |
+| **5.3 Install** | 5.3a: own manifests (D27) `infra/k8s/superset/` (Deployment + Service, `superset_config.py` in a ConfigMap, image by digest via kustomize, non-root, no ServiceAccount token, Secret `superset-env`), unit tests + CI (kustomize render, config loaded inside the image). 5.3b: Job `superset-init` (db upgrade, init, admin from Secret, D21) → `make superset-up` → `make superset-ui` | login as admin; 0 restarts after 10 min; requests measured | what a Helm chart generates and when owning 80 lines is simpler |
 | **5.4 Connect** | the init Job sets the StarRocks connection as `bi_ro`; SQL Lab test | SQL Lab `SELECT count(*) FROM gold.fct_user_message` = 10,613; `CREATE TABLE` → denied | engine specs, connection URI, least privilege seen from the BI side |
 | **5.5 Datasets + metrics** | one dataset per `gold_uc*`; metrics defined on the dataset: `SUM(message_cnt)`, share = ratio of sums, not-understood rate = `SUM(not)/SUM(understood+not)`, users = `BITMAP_UNION_COUNT(users)` (never SUM of daily distincts) | every chart reuses dataset metrics | semantic layer in the BI tool vs in dbt |
 | **5.6 Charts + dashboard** | KPI row, UC4 (scenario share), UC5 (stacked bar + rate line), UC6 (top-N sorted bar, intent_group colour), UC7 (Big Number + change, NULL % shown as "no data"), UC8 (new/active per day + averages); native filters: **Traffic** on `traffic_class` (UC4–6, default `real`) and **Users** on `user_class` (UC7–8, default all); date range on `event_date`; freshness (D25) | every number = `06_validation.md` with the filters on **and** off | dashboard design rules (A3), filter scoping |
@@ -56,13 +56,14 @@ modes                serving = demo-task4 profile + Superset 1 (≈ 6.1 Gi reque
 | D24 (proposed, was D22) | No Redis cache, no Celery | Redis subchart | one pod less; Gold is pre-aggregated; Bitnami chart images moved (`bitnamilegacy`), another pin |
 | D25 (proposed) | Two native filters (Traffic on `traffic_class`, Users on `user_class`), scoped per chart | one filter for all | UC7/UC8 count users (a person is internal or external), UC4–6 count messages: different columns by design (Task 4 M4) |
 | D26 (proposed) | Dialect + driver installed against Superset's own pins (`-c` constraints), `pip check` in CI | plain `pip install starrocks` | `starrocks` 1.3.4 requires `alembic>=1.14`, `sqlalchemy>=1.4`: an unconstrained install can upgrade Superset's own pins |
+| D27 (Bee, 11-12) | **Own kustomize manifests** for Superset web (Deployment, Service, ConfigMap `superset_config.py`), applied by `make superset-up` | (a) chart 0.22.8 with workarounds; (b) Superset Kubernetes Operator v0.3.0 | the chart is deprecated upstream and needed overrides for almost everything; the operator is 0.x (5 months, 4 releases) and adds a controller pod + CRDs on 7 Gi; we keep only what we use, pinned like Postgres/MinIO |
 
 ## E. Risks and first checks
 
 | Symptom | Likely cause | First check |
 |---|---|---|
 | won't start: insecure `SECRET_KEY` | default key | env `SUPERSET_SECRET_KEY` in the pod (`printenv \| cut -d= -f1`) |
-| Redis connection errors in logs | chart default config | rendered `superset_config.py` (`helm template`) |
+| Redis connection errors in logs | a default left in config | `infra/k8s/superset/superset_config.py`, pod log |
 | "Could not load database driver: starrocks" | dialect not in the image's venv | `pip list` with the venv's python in the pod |
 | image build: dependency conflict | `starrocks` pulls a newer alembic/SQLAlchemy | CI `pip check` output (D26) |
 | numbers differ only with a filter on | wrong filter column / scope | dataset columns, filter scoping |
@@ -76,12 +77,11 @@ modes                serving = demo-task4 profile + Superset 1 (≈ 6.1 Gi reque
 
 ```
 docker/superset/{Dockerfile, requirements.txt}         ➕
-infra/helm/superset/values-local.yaml                  ➕
-infra/k8s/superset/ (namespace, init Job template)     ➕   infra/k8s/lake/superset-db-init-job.yaml ➕
+infra/k8s/superset/ (Deployment, Service, superset_config.py, init Job) ➕   infra/k8s/lake/superset-db-init-job.yaml ➕
 superset/assets/                                       ➕ exported YAML (no passwords)
 tools/superset_check.py + tests                        ➕
 .github/workflows: build + check the superset image    ✏️
-Makefile: superset-chart, superset-render, superset-install, superset-init, superset-ui, superset-export,
+Makefile: superset-up, superset-down, superset-init, superset-ui, superset-export,
           superset-check, demo-task5                   ✏️
 docs/task5/01 … 07, README.md, img/                    ➕
 ```
@@ -113,6 +113,7 @@ docs/task5/01 … 07, README.md, img/                    ➕
 | R1 | Filter on two flags `is_home` / `is_internal_sender` | a native filter targets one column | `traffic_class` (Task 4 D20) |
 | R2 | Init creates the admin from a Secret (chart) | E35 | D21 own Job |
 | R3 | "Redis off" only as subchart flag | the chart's default config uses Redis | `configOverrides` + check the rendered config |
+| R18 (11-12) | Helm chart superset 0.22.8 | `deprecated: true`; always renders a Celery worker (replicas field dropped → 1) and an init script with admin defaults (E80) | D27 own manifests |
 | R4 | `superset` DB "created in Postgres (Job)" | initdb scripts never rerun (E27) | explicit idempotent Job |
 | R5 | Strip the DB password from exported YAML | exports omit it; the import needs it again | the init Job sets the connection after import |
 | R6 | Freshness "loaded <date>" text | — | D23 from data |

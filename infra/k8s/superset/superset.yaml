@@ -1,0 +1,80 @@
+# Superset 6.1.0 web node (Task 5 step 5.3, D27: own manifests; the official Helm chart 0.22.8 is deprecated and
+# always rendered a Celery worker + an init script with admin defaults: docs/task5/05 E80). One Deployment +
+# Service, config from ConfigMap superset-config (superset_config.py), secrets from Secret superset-env.
+# Applied only by make superset-up (not by k8s-up): the metadata DB must be migrated by the Job superset-init first.
+apiVersion: v1
+kind: Service
+metadata:
+  name: superset
+  namespace: superset
+spec:
+  selector: { app: superset }
+  ports: [{ name: http, port: 8088, targetPort: http }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: superset
+  namespace: superset
+spec:
+  replicas: 1                            # modes scale it (0 outside demo-task5 / serving)
+  strategy: { type: Recreate }           # never two pods at once on 7 Gi
+  selector:
+    matchLabels: { app: superset }
+  template:
+    metadata:
+      labels: { app: superset }
+    spec:
+      imagePullSecrets: [{ name: ghcr-pull }]
+      automountServiceAccountToken: false   # Superset needs no Kubernetes API access
+      securityContext: { runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000 }   # user superset (CI: id)
+      initContainers:
+        - name: wait-for-postgres          # same image: Python socket check, no extra image
+          image: ghcr.io/beno1tp/vnpt-lake-superset   # digest set in kustomization.yaml (images:)
+          imagePullPolicy: IfNotPresent
+          envFrom: [{ secretRef: { name: superset-env } }]
+          command:
+            - python
+            - -c
+            - |
+              import os, socket, time
+              for i in range(120):
+                  try:
+                      socket.create_connection((os.environ["DB_HOST"], int(os.environ["DB_PORT"])), 3).close()
+                      print("postgres reachable"); break
+                  except OSError:
+                      print(f"waiting for postgres ({i + 1}/120)"); time.sleep(5)
+              else:
+                  raise SystemExit("postgres not reachable after 10 min")
+          resources: { requests: { memory: 64Mi, cpu: 50m }, limits: { memory: 256Mi } }
+      containers:
+        - name: superset
+          image: ghcr.io/beno1tp/vnpt-lake-superset
+          imagePullPolicy: IfNotPresent
+          # image CMD = /usr/bin/run-server.sh (gunicorn on :8088, 1 worker x 20 threads by default)
+          envFrom: [{ secretRef: { name: superset-env } }]
+          env:
+            - { name: SUPERSET_CONFIG_PATH, value: /app/pythonpath/superset_config.py }
+          ports: [{ name: http, containerPort: 8088 }]
+          startupProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 60           # 5 min for the first start
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 15
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 4
+          resources:                       # 02_config.md §2; measured at 5.3b
+            requests: { memory: 1Gi, cpu: 200m }
+            limits: { memory: 1536Mi }
+          volumeMounts:
+            - { name: config, mountPath: /app/pythonpath, readOnly: true }
+      volumes:
+        - name: config
+          configMap: { name: superset-config }

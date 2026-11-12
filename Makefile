@@ -25,9 +25,6 @@ TRINO_CHART_SHA256 = ce3c2f6525d896513c5e20cac19a1260bf108f1d17f65188be45ccea9fb
 # kube-starrocks chart 1.11.8 (operator 1.11.8; image tag default 4.1-latest, overridden): SHA-256 = GitHub asset digest
 STARROCKS_CHART        = $(HOME)/.cache/vnpt-lake/charts/kube-starrocks-1.11.8.tgz
 STARROCKS_CHART_SHA256 = c05804d0dc38719557c68e23713437e38b82be97db73799e59e1d5bc113c2286
-# superset chart 0.22.8 (appVersion 6.1.0, released 2026-09-09): SHA-256 = GitHub asset digest (Task 5 5.3a)
-SUPERSET_CHART        = $(HOME)/.cache/vnpt-lake/charts/superset-0.22.8.tgz
-SUPERSET_CHART_SHA256 = 58075998f62206236a7686e16cd966b190350c16ecf54845034ba2be09e1f886
 SR_SQL = kubectl -n starrocks exec -i starrocks-fe-0 -- sh -c 'read -r p; MYSQL_PWD="$$p" exec mysql -h127.0.0.1 -P9030 -uroot --table'
 SR_SQL_TSV = kubectl -n starrocks exec -i starrocks-fe-0 -- sh -c 'read -r p; MYSQL_PWD="$$p" exec mysql -h127.0.0.1 -P9030 -uroot -B -N'
 SR_PW = sed -n 's/^password=//p' infra/k8s/secrets/starrocks-root.env
@@ -163,13 +160,6 @@ starrocks-render: starrocks-chart ## Task 4: render the chart and fail unless ev
 	  ! echo "$$out" | grep -q '4.1-latest' || { echo "FAIL: 4.1-latest is still rendered"; exit 1; }; \
 	  for c in fe-ubuntu be-ubuntu; do echo "$$out" | grep -q "starrocks/$$c" || { echo "FAIL: starrocks/$$c not rendered"; exit 1; }; done; \
 	  echo "$$out" | grep -o '3.5.21@sha256:[0-9a-f]*' | sort -u; echo "starrocks-render: PASS (no 4.1-latest, FE/BE pinned)"
-superset-chart: ## Task 5: download the Superset chart 0.22.8 once from GitHub Releases and check its SHA-256 (E58 pattern)
-	mkdir -p $(dir $(SUPERSET_CHART))
-	test -f $(SUPERSET_CHART) || curl -fL --retry 3 -o $(SUPERSET_CHART) https://github.com/apache/superset/releases/download/superset-helm-chart-0.22.8/superset-0.22.8.tgz
-	echo "$(SUPERSET_CHART_SHA256)  $(SUPERSET_CHART)" | sha256sum --check
-superset-render: superset-chart ## Task 5: render the chart (nothing installed) and check images, components, Secrets, user, config
-	helm template superset $(SUPERSET_CHART) -n superset -f infra/helm/superset/values-local.yaml \
-	  | .venv/bin/python -I tools/superset_render_check.py $(SUPERSET_IMAGE_REF)
 starrocks-install: starrocks-render deploy-guard ## Task 4: helm upgrade --install StarRocks (operator + FE + BE, namespace starrocks); refuses while a Spark run is active
 	@! kubectl -n spark-jobs get sparkapplications --no-headers -o custom-columns=S:.status.applicationState.state | grep -vE '^(COMPLETED|FAILED)$$' | grep -q . || \
 	  { echo "refusing: a SparkApplication is not finished; wait for it (StarRocks + Spark do not fit, D15)"; exit 1; }
