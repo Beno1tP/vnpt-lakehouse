@@ -47,6 +47,9 @@ jobs:
           pip install -q pyyaml==6.0.2
           python3 -I tools/superset_assets.py zip infra/k8s/superset/assets infra/k8s/superset/generated/assets.zip
           kubectl kustomize infra/k8s/superset > "$RUNNER_TEMP/superset.yaml"
+          # 5.8c: the drill overlay renders, every object is *-drill, and every Superset container points at superset_drill
+          kubectl kustomize infra/k8s/superset-drill > "$RUNNER_TEMP/drill.yaml"
+          python3 -I tools/drill_render_check.py "$RUNNER_TEMP/drill.yaml"
           grep '^kind:' "$RUNNER_TEMP/superset.yaml" | sort | uniq -c
           grep -E '^\s*image:' "$RUNNER_TEMP/superset.yaml"
           if grep -E '^\s*image:' "$RUNNER_TEMP/superset.yaml" | grep -v '@sha256:'; then echo "image without digest"; exit 1; fi

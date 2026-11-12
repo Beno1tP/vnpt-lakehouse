@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-11-13 — E85 done (PR #130), 5.8c prepared: reproduction drill
+E85 (Bee): no run_mode lines; import ok, datasets PASS, superset-check PASS.
+Prepared (Claude, branch `task5/5.8c-drill`): overlay `infra/k8s/superset-drill/` (resources `..` = the real manifests, nameSuffix `-drill`, label/selector `app=superset-drill`, patch `DB_NAME=superset_drill` into every container of the Deployment and the Job, Job `SUPERSET_URL` = the drill Service); Job reads `SUPERSET_URL` (default = real) and prints `metadata db: …`; check pod parameterised (`__NAME__`, `__URL__`); `make superset-drill` (scheduler-0 guard, ZIP, real web → 0, DROP/CREATE scratch DB `superset_drill` owner superset, `apply -k drill`, rollout, Job result, `superset-check` against the drill) and `superset-drill-clean` (delete -k drill, drop the scratch DB, list what is left); CI renders the overlay + `tools/drill_render_check.py` (every object *-drill, selectors app=superset-drill, DB_NAME=superset_drill in every container); tests: the overlay patches every container of the base (a new container would be caught), render check catches a real-DB container / real selector. Predicted (my local run): ruff --no-cache, format, pytest (73), fake-SHELL + `bash -n` of 3 targets, YAML.
+
 ### 2026-11-13 — 5.8b done (PR #129), E85 prepared
 5.8b (Bee): `superset-up` → `zipped 22 files`, ConfigMap `superset-assets-5khbgdtmbt`, connect → **`import ok: dashboard 'VNPT chatbot – Gold' …, 14 charts, published True`** → connect again (password restored: query ok 10613, read-only ok) → 5 × dataset ok, viewer ok, `datasets: PASS`; `superset-check: PASS` (import onto the same Superset is idempotent, scopes intact). Noise: ~20 × `starrocks.dialect: Failed to get run_mode … OPERATE` (E85; logger name taken from the log line).
 Prepared (Claude, branch `task5/e85-run-mode-log`): targeted logging filter in `superset_config.py` + unit test. Predicted (my local run): ruff --no-cache, format, pytest (69).

@@ -1,0 +1,43 @@
+# Task 5 step 5.8c: reproduction drill. The REAL Superset manifests (../superset), renamed *-drill, labelled app=superset-drill
+# (the real Service never selects a drill pod), on the SCRATCH metadata database superset_drill (env DB_NAME overrides
+# the Secret's value in every container). Same image, config, Job, assets ZIP: if the dashboard comes back here from
+# an empty database, it comes back from Git. make superset-drill / superset-drill-clean.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../superset   # a sibling, not a subfolder: kustomize rejects an overlay inside its base (E86)
+nameSuffix: -drill
+labels:
+  - pairs: { app: superset-drill }
+    includeSelectors: true
+    includeTemplates: true
+patches:
+  - target: { kind: Deployment, name: superset }
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata: { name: superset }
+      spec:
+        template:
+          spec:
+            initContainers:
+              - name: wait-for-postgres
+                env: [{ name: DB_NAME, value: superset_drill }]
+              - name: migrate
+                env: [{ name: DB_NAME, value: superset_drill }]
+            containers:
+              - name: superset
+                env: [{ name: DB_NAME, value: superset_drill }]
+  - target: { kind: Job, name: superset-init }
+    patch: |-
+      apiVersion: batch/v1
+      kind: Job
+      metadata: { name: superset-init }
+      spec:
+        template:
+          spec:
+            containers:
+              - name: superset-init
+                env:
+                  - { name: DB_NAME, value: superset_drill }
+                  - { name: SUPERSET_URL, value: "http://superset-drill.superset.svc.cluster.local:8088" }
