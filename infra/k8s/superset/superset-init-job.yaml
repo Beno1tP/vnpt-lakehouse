@@ -1,7 +1,9 @@
 # Task 5 step 5.3b (D21): what needs the admin password, outside the web pod. Waits until the web pod answers /health
 # (its init container has migrated the schema), creates the admin user or resets its password to the Secret's value,
 # then verifies role + password itself. Idempotent; make superset-up deletes and re-applies it (a Job is immutable).
-# 5.4 adds the StarRocks connection (bi_ro) here. Never prints a password (create/reset output is filtered).
+# 5.4: registers the StarRocks connection "StarRocks Gold" as bi_ro (read-only flags) and proves it through the
+# stored connection: count of gold.fct_user_message = 10,613 (Task 4 gold-check) and CREATE TABLE -> Access denied.
+# Never prints a password (create/reset output is filtered; URIs are printed masked).
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -58,6 +60,34 @@ spec:
                   assert "Admin" in [r.name for r in u.roles], f"admin roles {[r.name for r in u.roles]}"
                   assert check_password_hash(u.password, os.environ["SUPERSET_ADMIN_PASSWORD"]), "admin password differs from the Secret"
                   print("admin ok: role Admin, password = Secret superset-init-credentials")
+              PY
+              python - <<'PY'
+              import os
+              from urllib.parse import quote
+              from sqlalchemy import text
+              from superset.app import create_app
+              app = create_app()
+              with app.app_context():
+                  from superset import db
+                  from superset.utils.database import get_or_create_db
+                  pw = quote(os.environ["STARROCKS_BI_PASSWORD"], safe="")
+                  uri = f"starrocks://bi_ro:{pw}@starrocks-fe-service.starrocks.svc.cluster.local:9030/default_catalog.gold"
+                  d = get_or_create_db("StarRocks Gold", uri)   # creates, or updates the URI (password stored encrypted)
+                  d.expose_in_sqllab = True
+                  d.allow_dml = d.allow_ctas = d.allow_cvas = d.allow_file_upload = d.allow_run_async = False
+                  db.session.commit()
+                  print("connection ok:", d.database_name, "->", d.sqlalchemy_uri)   # masked by Superset (XXXXXXXXXX)
+                  with d.get_sqla_engine() as engine, engine.connect() as c:
+                      n = c.execute(text("SELECT count(*) FROM fct_user_message")).scalar()
+                      assert n == 10613, f"fct_user_message = {n}, expected 10613 (make gold-check)"
+                      print("query ok as", c.execute(text("SELECT current_user()")).scalar(), "| fct_user_message =", n)
+                      try:
+                          c.execute(text("CREATE TABLE superset_probe (id INT) DISTRIBUTED BY HASH(id) PROPERTIES ('replication_num' = '1')"))
+                      except Exception as e:  # E71: only an access error counts as the expected denial
+                          assert "denied" in str(e).lower(), f"CREATE failed, but not with Access denied: {str(e)[:200]}"
+                          print("read-only ok: CREATE TABLE -> Access denied")
+                      else:
+                          raise SystemExit("bi_ro could CREATE TABLE in gold: grants too wide")
               PY
           resources: { requests: { memory: 512Mi, cpu: 100m }, limits: { memory: 1Gi } }
           volumeMounts:

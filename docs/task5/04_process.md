@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-11-12 — 5.3b done (E81), 5.4 prepared: StarRocks connection
+5.3b (Bee): PR #120 merged; `make superset-up` → rolled out, `admin ok: role Admin, password = Secret`. Measured: web 192 Mi / 229m right after start, 0 restarts; node requests **6,116 Mi (84 %)** = D22 budget, limits 9,948 Mi (136 %); only warning `flask_limiter … in-memory storage` (expected without Redis, D24; correct with 1 replica).
+Prepared (Claude, branch `task5/5.4-connect`): Job superset-init registers "StarRocks Gold" (`starrocks://bi_ro:…@starrocks-fe-service…:9030/default_catalog.gold`, `get_or_create_db`, SQL Lab on, DML/CTAS/CVAS/upload/async off) and checks through the stored connection: `count(*) fct_user_message` = 10,613, `current_user()`, `CREATE TABLE` → Access denied (E71 rule). Predicted (my local run): ruff, pytest, `bash -n` of the Job script.
+
 ### 2026-11-12 — 5.3a merged (PR #118), 5.3b prepared: superset-up
 CI evidence (Bee): `uid=1000(superset)`, `config loaded, db h:5432/d` (our file applied inside the image), Superset kustomization = 1 ConfigMap + 1 Deployment + 1 Service, image `@sha256:a0307416f264…`.
 Prepared (Claude, branch `task5/5.3b-up`): web init container `migrate` (`superset db upgrade; superset init`; 1 replica + Recreate = no concurrent migrations); Job `superset-init` in the Superset kustomization (waits for web `/health`, `fab create-admin` + `fab reset-password` from Secret superset-init-credentials, then verifies role Admin + `check_password_hash`; output filtered for "password"); Make `superset-up` (refuses unless the scheduler is at 0, D22; delete Job → `apply -k` → rollout → Job result), `superset-down`, `superset-ui`, `demo-task5`; `mode-gold`/`mode-query`/`mode-pipeline` scale Superset to 0. Predicted (my local run): ruff, pytest (42), `bash -n` of the Job script, fake-SHELL expansion of the 6 targets + `bash -n` pass.

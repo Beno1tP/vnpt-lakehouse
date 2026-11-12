@@ -24,6 +24,7 @@
 | demo-task4 (measured 11-12) | lake, Airflow api-server, History, StarRocks; scheduler 0 | **5,092 Mi (70 %)** | ✅ |
 | **serving = demo-task5** (D22) | demo-task4 + Superset | ≈ **6,116 Mi (84 %)** | ✅ (≈ 1.1 Gi left; Jobs run one at a time) |
 | serving + scheduler/dag-processor/triggerer | | ≈ 7,236 Mi | ❌ too tight (real usage above requests, Task 4 §4) |
+| **measured 11-12 (5.3b)** | demo-task5 | **6,116 Mi (84 %)**, limits 9,948 Mi (136 %); Superset web 192 Mi idle | ✅ as planned |
 
 After every `make k8s-up` rerun the profile: `airflow-install` resets the scheduler replicas (seen 11-12).
 

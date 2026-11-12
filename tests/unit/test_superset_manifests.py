@@ -90,3 +90,13 @@ def test_no_service_links_in_superset_pods():  # E81: SUPERSET_PORT=tcp://... br
         assert pod["enableServiceLinks"] is False
     env = {e["name"]: e["value"] for e in web["spec"]["template"]["spec"]["containers"][0]["env"]}
     assert env["SUPERSET_PORT"] == "8088"
+
+
+def test_init_job_registers_read_only_starrocks_connection():  # 5.4
+    script = yaml.safe_load((DIR / "superset-init-job.yaml").read_text())["spec"]["template"]["spec"]["containers"][0][
+        "args"
+    ][0]
+    assert "starrocks://bi_ro:" in script and "default_catalog.gold" in script
+    assert "d.allow_dml = d.allow_ctas = d.allow_cvas = d.allow_file_upload" in script
+    assert "assert n == 10613" in script and "denied" in script  # positive and negative check through the connection
+    assert 'os.environ["STARROCKS_BI_PASSWORD"]' in script and "STARROCKS_ROOT" not in script
