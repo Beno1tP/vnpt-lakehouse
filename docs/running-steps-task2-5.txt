@@ -155,24 +155,17 @@ changed) -> make k8s-up -> run -> verify. New errors from E56.
     docs PR -> git tag task3-v1 && git push origin task3-v1
 
 =====================================================================================================
-D. TASK 4 - StarRocks Gold with dbt (docs/task4/03_plan.md)
+D. TASK 4 - StarRocks Gold with dbt (docs/task4/03_plan.md)     [DONE 2026-11-12, docs/task4/README.md, FREEZE.md]
 =====================================================================================================
-4.0 Metrics + expected Gold                                                     [PLANNED]
-    .venv/bin/python tools/expected_gold.py        -> dbt/seeds/expected_gold_uc*.csv ; docs/metrics.md
-4.1 StarRocks                                                                   [PLANNED]
-    make mode-gold                                 (Airflow/Trino down as needed, StarRocks up)
-    make starrocks-chart && make starrocks-install
-    make starrocks-sql                             (SHOW BACKENDS;)
-4.2 Catalog + users                                                             [PLANNED]
-    make k8s-up                                    (MinIO user starrocks, Job starrocks-init)
-    make starrocks-sql                             (SELECT count(*) FROM lake_iceberg.silver.user_message;)
-4.3-4.4 dbt models + tests                                                      [PLANNED]
-    make dbt-build                                 (one-off pod: dbt build -> models + tests + reconcile_uc*)
-    make dbt-docs                                  (lineage)
-4.5 Orchestrate                                                                 [PLANNED]
-    make mode-pipeline ; make backfill REPROCESS=completed ; make mode-gold     (gold_build runs from the Asset event)
-4.6 Close                                                                       [PLANNED]
-    git tag task4-v1 && git push origin task4-v1 ; make freeze TASK=4 ; make demo-task4 ; make demo-check
+4.0  .venv/bin/python tools/expected_gold.py (seeds) ; 4.0a step in Silver: PR -> images -> bump -> k8s-up -> backfill
+4.1  make starrocks-render ; make starrocks-install ; make starrocks-sql SQL="SHOW FRONTENDS; SHOW BACKENDS" ; modes
+4.2  make k8s-up ; make s3-access-test ; make mode-gold ; make starrocks-init ; make dbt CMD="debug --connection"
+4.3-4.4 make dbt-parse ; PR -> images -> bump ; make dbt CMD="build" (PASS=56) ; make starrocks-init
+4.5  unpause gold_build ; make mode-pipeline ; clear one day (whole day) ; trino_reconcile ; make mode-gold -> gold_build
+4.6  EXPLAIN + bitmap queries ; make dbt-docs ; scratch tag drill (create / maintenance TABLES= / check / drop) ;
+     make freeze TASK=4 ; make evidence TASK=4 ; make evidence-export TASK=4 ; make mode-gold ;
+     make starrocks-tag-check TASK=4 ; make dbt-tag-rebuild TAG=task4_v1 ; make dbt CMD="build" ; make gold-check ;
+     make demo-task4 ; make demo-check DEMO_TASK=4 (ALL PASS) ; git tag task4-v1 && git push origin task4-v1
 
 =====================================================================================================
 E. TASK 5 - Superset dashboard UC4-UC8 (docs/task5/03_plan.md)
