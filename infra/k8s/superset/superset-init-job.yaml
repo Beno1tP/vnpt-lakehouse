@@ -1,0 +1,66 @@
+# Task 5 step 5.3b (D21): what needs the admin password, outside the web pod. Waits until the web pod answers /health
+# (its init container has migrated the schema), creates the admin user or resets its password to the Secret's value,
+# then verifies role + password itself. Idempotent; make superset-up deletes and re-applies it (a Job is immutable).
+# 5.4 adds the StarRocks connection (bi_ro) here. Never prints a password (create/reset output is filtered).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: superset-init
+  namespace: superset
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{ name: ghcr-pull }]
+      automountServiceAccountToken: false
+      securityContext: { runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000 }
+      containers:
+        - name: superset-init
+          image: ghcr.io/beno1tp/vnpt-lake-superset   # digest set in kustomization.yaml (images:)
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef: { name: superset-env }
+            - secretRef: { name: superset-init-credentials }   # SUPERSET_ADMIN_PASSWORD, STARROCKS_BI_PASSWORD
+          env:
+            - { name: SUPERSET_CONFIG_PATH, value: /app/pythonpath/superset_config.py }
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              python - <<'PY'
+              import time, urllib.request
+              for i in range(120):
+                  try:
+                      if urllib.request.urlopen("http://superset.superset.svc.cluster.local:8088/health", timeout=5).status == 200:
+                          print("web /health 200 (schema migrated)"); break
+                  except OSError:
+                      pass
+                  print(f"waiting for the web pod ({i + 1}/120)"); time.sleep(5)
+              else:
+                  raise SystemExit("web pod not healthy after 10 min")
+              PY
+              # create (a no-op with a message if the user exists), then force the password to the Secret's value
+              superset fab create-admin --username admin --firstname Superset --lastname Admin \
+                --email admin@lab.local --password "$SUPERSET_ADMIN_PASSWORD" 2>&1 | grep -vi password || true
+              superset fab reset-password --username admin --password "$SUPERSET_ADMIN_PASSWORD" 2>&1 | grep -vi password || true
+              python - <<'PY'
+              import os
+              from werkzeug.security import check_password_hash
+              from superset.app import create_app
+              app = create_app()
+              with app.app_context():
+                  from superset.extensions import security_manager as sm
+                  u = sm.find_user(username="admin")
+                  assert u is not None, "admin user missing"
+                  assert "Admin" in [r.name for r in u.roles], f"admin roles {[r.name for r in u.roles]}"
+                  assert check_password_hash(u.password, os.environ["SUPERSET_ADMIN_PASSWORD"]), "admin password differs from the Secret"
+                  print("admin ok: role Admin, password = Secret superset-init-credentials")
+              PY
+          resources: { requests: { memory: 512Mi, cpu: 100m }, limits: { memory: 1Gi } }
+          volumeMounts:
+            - { name: config, mountPath: /app/pythonpath, readOnly: true }
+      volumes:
+        - name: config
+          configMap: { name: superset-config }
