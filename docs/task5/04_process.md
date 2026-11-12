@@ -14,6 +14,9 @@ Time spent:
 
 ---
 
+### 2026-11-13 — 5.8a merged (PR #127), 5.8b part 1: fixed connection uuid
+Prepared (Claude, branch `task5/5.8b-db-uuid`): `database_uuid(name)` = uuid5 (same namespace as the datasets) in `superset_datasets.py`; the Job sets it on "StarRocks Gold" (create or update) and prints it: expected `cc56b846-4ea9-5aaf-a62f-3cc1e25f8f98`. Then re-export (part 2 commits it with the import step and a strict database-uuid check). Predicted (my local run): ruff --no-cache, format, pytest (63), Job script bash -n + py_compile.
+
 ### 2026-11-13 — 5.8a: first export reviewed and committed
 Export (Bee, `make superset-export` 18:22 UTC): 22 files, 156 KB, check PASS (1 database, 5 datasets, 14 charts, 1 dashboard). It deleted `assets/README.md` (unpack replaced the whole folder: Claude's slip) → unpack now replaces only metadata.yaml + the 4 export folders (test).
 Review (Claude, read every YAML): database URI masked `XXXXXXXXXX`, read-only flags kept (allow_dml/ctas/cvas/file_upload false, SQL Lab on); no owners, e-mails, user names or hosts other than the in-cluster FE service; dataset uuids = uuid5 (charts reference them); dashboard published, Traffic default `real`, scopes stored as `rootPath ROOT_ID` + `excluded` **chart ids**. Two points for 5.8b: (1) the database uuid is random (`get_or_create_db`): on a fresh Superset the Job would create another uuid and the import would collide on the name → the Job must give the connection a fixed uuid5 and the assets must be re-exported; (2) `excluded` holds chart ids, which differ on a fresh Superset: the import must remap them (Superset's importer is expected to; the 5.8c drill + superset-check scoping prove it).

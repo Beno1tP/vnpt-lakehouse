@@ -27,6 +27,12 @@ def dataset_uuid(table: str) -> uuid.UUID:
     return uuid.uuid5(UUID_NAMESPACE, table)
 
 
+def database_uuid(name: str) -> uuid.UUID:
+    """5.8b: fixed uuid of the connection, so an exported bundle re-imports onto it on a fresh Superset (the importer
+    matches databases by uuid; a random one would collide on the database name)."""
+    return uuid.uuid5(UUID_NAMESPACE, f"database/{name}")
+
+
 def identifiers(expression: str) -> set[str]:
     """Column names used by a SQL expression: words that are not SQL keywords/functions, numbers or string literals."""
     code = re.sub(r"'[^']*'", "", expression)

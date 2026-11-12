@@ -69,6 +69,7 @@ def test_no_sum_of_distinct_or_cumulative_over_days():
 
 def test_uuid_is_stable_and_per_table():
     assert sd.dataset_uuid("gold_uc5") == sd.dataset_uuid("gold_uc5") != sd.dataset_uuid("gold_uc6")
+    assert sd.database_uuid("StarRocks Gold") == sd.database_uuid("StarRocks Gold") != sd.dataset_uuid("StarRocks Gold")
 
 
 def test_matches():
