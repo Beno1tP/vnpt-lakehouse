@@ -50,6 +50,7 @@ GENERATED = {
     "SUPERSET_SECRET_KEY": lambda: base64.b64encode(os.urandom(42)).decode(),
     "SUPERSET_ADMIN_PASSWORD": lambda: secrets.token_urlsafe(18),  # Superset UI user "admin" (init Job, D21)
     "SUPERSET_DB_PASSWORD": lambda: secrets.token_hex(24),  # Postgres role superset (hex: safe in a URI)
+    "SUPERSET_CHECKER_PASSWORD": lambda: secrets.token_urlsafe(18),  # 5.7: read-only UI user checker (Gamma)
 }
 
 
@@ -133,7 +134,13 @@ def main():
     )
     write_private(
         "superset-init.env",
-        f"SUPERSET_ADMIN_PASSWORD={env['SUPERSET_ADMIN_PASSWORD']}\nSTARROCKS_BI_PASSWORD={env['STARROCKS_BI_PASSWORD']}\n",
+        f"SUPERSET_ADMIN_PASSWORD={env['SUPERSET_ADMIN_PASSWORD']}\nSTARROCKS_BI_PASSWORD={env['STARROCKS_BI_PASSWORD']}\n"
+        f"SUPERSET_CHECKER_PASSWORD={env['SUPERSET_CHECKER_PASSWORD']}\n",
+    )
+    # 5.7: the check pod only gets the checker's login (never admin)
+    write_private(
+        "superset-checker.env",
+        f"SUPERSET_CHECKER_USER=checker\nSUPERSET_CHECKER_PASSWORD={env['SUPERSET_CHECKER_PASSWORD']}\n",
     )
     # Airflow (namespace airflow): metadata DB connection + keys, one file per Secret the Helm chart expects
     pw = urllib.parse.quote(env["AIRFLOW_DB_PASSWORD"], safe="")

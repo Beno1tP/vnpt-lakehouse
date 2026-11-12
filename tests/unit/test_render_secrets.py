@@ -67,7 +67,9 @@ def test_generates_keys_once_and_escapes(tmp_path, monkeypatch):
     assert ss["DB_USER"] == "superset" and ss["DB_NAME"] == "superset" and len(ss["SUPERSET_SECRET_KEY"]) == 56
     assert set(ss) == {"SUPERSET_SECRET_KEY", "DB_HOST", "DB_PORT", "DB_USER", "DB_PASS", "DB_NAME"}  # no admin pw
     init = dict(line.split("=", 1) for line in (out / "superset-init.env").read_text().splitlines())
-    assert set(init) == {"SUPERSET_ADMIN_PASSWORD", "STARROCKS_BI_PASSWORD"}
+    assert set(init) == {"SUPERSET_ADMIN_PASSWORD", "STARROCKS_BI_PASSWORD", "SUPERSET_CHECKER_PASSWORD"}
+    chk = dict(line.split("=", 1) for line in (out / "superset-checker.env").read_text().splitlines())
+    assert chk == {"SUPERSET_CHECKER_USER": "checker", "SUPERSET_CHECKER_PASSWORD": init["SUPERSET_CHECKER_PASSWORD"]}
     assert (out / "superset-db.env").read_text() == f"SUPERSET_DB_PASSWORD={ss['DB_PASS']}\n"
     conns = dict(line.split("=", 1) for line in (out / "airflow-connections.env").read_text().splitlines())
     minio = json.loads(conns["AIRFLOW_CONN_MINIO_LANDING"])
