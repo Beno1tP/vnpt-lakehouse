@@ -14,7 +14,10 @@ configMapGenerator:                      # hash suffix: a config change rolls th
     files: [superset_config.py]
   - name: superset-init-files           # Job superset-init: dataset spec + loader (5.5)
     namespace: superset
-    files: [datasets.yaml, superset_datasets.py]
+    files: [datasets.yaml, superset_datasets.py, dashboard_checks.yaml]
+  - name: superset-assets                # 5.8b: dashboard bundle, built by make superset-assets-zip (git-ignored,
+    namespace: superset                  # deterministic bytes: the hash changes only when the dashboard does)
+    files: [generated/assets.zip]
   - name: superset-check-files          # 5.7: pod superset-check (applied by make, outside kustomize: fixed name)
     namespace: superset
     files: [dashboard_checks.yaml, superset_check.py]

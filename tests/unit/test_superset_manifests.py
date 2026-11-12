@@ -114,7 +114,8 @@ def test_init_job_registers_read_only_starrocks_connection():  # 5.4
 def test_init_job_loads_datasets_from_the_configmap():  # 5.5
     kust = yaml.safe_load((DIR / "kustomization.yaml").read_text())
     files = {g["name"]: g["files"] for g in kust["configMapGenerator"]}
-    assert files["superset-init-files"] == ["datasets.yaml", "superset_datasets.py"]
+    assert files["superset-init-files"] == ["datasets.yaml", "superset_datasets.py", "dashboard_checks.yaml"]
+    assert files["superset-assets"] == ["generated/assets.zip"]  # 5.8b
     job = yaml.safe_load((DIR / "superset-init-job.yaml").read_text())
     pod = job["spec"]["template"]["spec"]
     assert {"name": "init-files", "configMap": {"name": "superset-init-files"}} in pod["volumes"]
@@ -131,3 +132,17 @@ def test_check_pod_gets_only_the_checker_login():  # 5.7
     kust = yaml.safe_load((DIR / "kustomization.yaml").read_text())
     gen = {g["name"]: g for g in kust["configMapGenerator"]}
     assert gen["superset-check-files"]["options"]["disableNameSuffixHash"] is True  # referenced from outside kustomize
+
+
+def test_init_job_imports_between_two_connection_runs():  # 5.8b
+    job = yaml.safe_load((DIR / "superset-init-job.yaml").read_text())
+    script = job["spec"]["template"]["spec"]["containers"][0]["args"][0]
+    steps = [
+        ln.strip()
+        for ln in script.splitlines()
+        if ln.strip() in ("connect", "python /init/superset_datasets.py /init/datasets.yaml")
+        or ln.strip().startswith("superset import-dashboards")
+    ]
+    assert steps == ["connect", "superset import-dashboards -p /assets/assets.zip -u admin", "connect",
+                     "python /init/superset_datasets.py /init/datasets.yaml"]  # fmt: skip
+    assert "import ok:" in script

@@ -4,6 +4,7 @@
 # 5.4: registers the StarRocks connection "StarRocks Gold" as bi_ro (read-only flags) and proves it through the
 # stored connection: count of gold.fct_user_message = 10,613 (Task 4 gold-check) and CREATE TABLE -> Access denied.
 # 5.5: then loads the datasets + metrics (datasets.yaml) and checks every metric in StarRocks.
+# 5.8b: imports the dashboard bundle (assets/ zipped, ConfigMap superset-assets) between two connection runs.
 # Never prints a password (create/reset output is filtered; URIs are printed masked).
 apiVersion: batch/v1
 kind: Job
@@ -62,6 +63,7 @@ spec:
                   assert check_password_hash(u.password, os.environ["SUPERSET_ADMIN_PASSWORD"]), "admin password differs from the Secret"
                   print("admin ok: role Admin, password = Secret superset-init-credentials")
               PY
+              connect() {   # connection (fixed uuid, real password, read-only flags) + checks; run before AND after the import
               python - <<'PY'
               import os
               from urllib.parse import quote
@@ -97,14 +99,36 @@ spec:
                       else:
                           raise SystemExit("bi_ro could CREATE TABLE in gold: grants too wide")
               PY
+              }
+              connect
+              # 5.8b: dashboard bundle from Git (ConfigMap superset-assets). The connection exists first with the same
+              # uuid, so the importer updates it instead of asking for its (masked) password; connect then restores it.
+              superset import-dashboards -p /assets/assets.zip -u admin
+              python - <<'PY'
+              import yaml
+              from superset.app import create_app
+              app = create_app()
+              with app.app_context():
+                  from superset import db
+                  from superset.models.dashboard import Dashboard
+                  want = yaml.safe_load(open("/init/dashboard_checks.yaml"))
+                  d = db.session.query(Dashboard).filter_by(dashboard_title=want["dashboard"]).one()
+                  names = sorted(c.slice_name for c in d.slices)
+                  assert names == sorted(want["charts"]), f"imported charts {names}"
+                  print(f"import ok: dashboard {d.dashboard_title!r} uuid {d.uuid}, {len(names)} charts, published {d.published}")
+              PY
+              connect
               # 5.5: datasets + metrics from datasets.yaml, each metric checked in StarRocks against gold-check values
               python /init/superset_datasets.py /init/datasets.yaml
           resources: { requests: { memory: 512Mi, cpu: 100m }, limits: { memory: 1Gi } }
           volumeMounts:
             - { name: config, mountPath: /app/pythonpath, readOnly: true }
             - { name: init-files, mountPath: /init, readOnly: true }
+            - { name: assets, mountPath: /assets, readOnly: true }
       volumes:
         - name: config
           configMap: { name: superset-config }
         - name: init-files
           configMap: { name: superset-init-files }
+        - name: assets
+          configMap: { name: superset-assets }
