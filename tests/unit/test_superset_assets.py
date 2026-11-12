@@ -10,7 +10,7 @@ spec_ = importlib.util.spec_from_file_location("sa", ROOT / "tools/superset_asse
 sa = importlib.util.module_from_spec(spec_)
 spec_.loader.exec_module(sa)
 CHECKS = yaml.safe_load((ROOT / "infra/k8s/superset/dashboard_checks.yaml").read_text())
-ASSETS = ROOT / "superset/assets"
+ASSETS = ROOT / "infra/k8s/superset/assets"
 
 
 def fake_export(tmp_path, uri="starrocks://bi_ro:XXXXXXXXXX@fe:9030/default_catalog.gold", extra=None, uuid=None):

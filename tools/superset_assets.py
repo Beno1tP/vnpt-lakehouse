@@ -1,8 +1,11 @@
-"""Task 5 step 5.8a: unpack a Superset dashboard export (ZIP from `superset export-dashboards`) into superset/assets/
-and check it, so the dashboard lives in Git as reviewable YAML.
+"""Task 5 step 5.8a: unpack a Superset dashboard export (ZIP from `superset export-dashboards`) into
+infra/k8s/superset/assets/ and check it, so the dashboard lives in Git as reviewable YAML.
 
-    python -I tools/superset_assets.py unpack <export.zip> superset/assets   # make superset-export
-    python -I tools/superset_assets.py check superset/assets                 # also a unit test on the committed files
+    python -I tools/superset_assets.py unpack <export.zip> infra/k8s/superset/assets   # make superset-export
+    python -I tools/superset_assets.py check infra/k8s/superset/assets                 # + unit test on the commit
+
+(Not a top-level folder named `superset/`: it made ruff treat `superset` as first-party and could shadow the real
+package for scripts run from the repo root: E84.)
 
 unpack: refuses unsafe paths (absolute, ..), strips the export's top folder (dashboard_export_<timestamp>/), replaces
 the destination folder, then runs check. check fails unless: no secret in any file (database URIs masked or without a

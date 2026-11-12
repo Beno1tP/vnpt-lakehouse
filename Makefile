@@ -257,11 +257,11 @@ superset-check: ## Task 5 5.7: every dashboard chart through Superset's API as r
 	@for i in $$(seq 1 60); do p=$$(kubectl -n superset get pod superset-check -o jsonpath='{.status.phase}'); \
 	  case "$$p" in Succeeded|Failed) break;; esac; sleep 3; done; kubectl -n superset logs superset-check; \
 	  test "$$(kubectl -n superset get pod superset-check -o jsonpath='{.status.phase}')" = Succeeded
-superset-export: ## Task 5 5.8a: export the dashboard (CLI in the web pod, as admin) -> superset/assets/ (YAML, passwords masked), then check it
+superset-export: ## Task 5 5.8a: export the dashboard (CLI in the web pod, as admin) -> infra/k8s/superset/assets/ (YAML, passwords masked), then check it
 	@tmp=$$(mktemp -d); trap 'rm -rf "$$tmp"' EXIT; \
 	kubectl -n superset exec deploy/superset -c superset -- sh -c 'superset export-dashboards -f /tmp/vnpt-export.zip >/tmp/vnpt-export.log 2>&1 || { tail -20 /tmp/vnpt-export.log >&2; exit 1; }; cat /tmp/vnpt-export.zip; rm -f /tmp/vnpt-export.zip /tmp/vnpt-export.log' > "$$tmp/export.zip" && \
-	.venv/bin/python -I tools/superset_assets.py unpack "$$tmp/export.zip" superset/assets && \
-	git status --short superset/assets | head -30
+	.venv/bin/python -I tools/superset_assets.py unpack "$$tmp/export.zip" infra/k8s/superset/assets && \
+	git status --short infra/k8s/superset/assets | head -30
 superset-down: ## Task 5: Superset web -> 0 (metadata stays in Postgres)
 	-kubectl -n superset scale deploy/superset --replicas=0
 superset-ui:   ## Task 5: Superset on http://localhost:8088 (user admin, password = SUPERSET_ADMIN_PASSWORD in secrets.env); Ctrl+C to stop
