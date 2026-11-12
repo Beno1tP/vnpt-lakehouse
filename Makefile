@@ -26,6 +26,8 @@ TRINO_CHART_SHA256 = ce3c2f6525d896513c5e20cac19a1260bf108f1d17f65188be45ccea9fb
 STARROCKS_CHART        = $(HOME)/.cache/vnpt-lake/charts/kube-starrocks-1.11.8.tgz
 STARROCKS_CHART_SHA256 = c05804d0dc38719557c68e23713437e38b82be97db73799e59e1d5bc113c2286
 SR_SQL = kubectl -n starrocks exec -i starrocks-fe-0 -- sh -c 'read -r p; MYSQL_PWD="$$p" exec mysql -h127.0.0.1 -P9030 -uroot --table'
+SR_SQL_TSV = kubectl -n starrocks exec -i starrocks-fe-0 -- sh -c 'read -r p; MYSQL_PWD="$$p" exec mysql -h127.0.0.1 -P9030 -uroot -B -N'
+SR_PW = sed -n 's/^password=//p' infra/k8s/secrets/starrocks-root.env
 SPARK_OPERATOR_CHART_SHA256 = 1c47c850c8d6ecc7eda4ede03e7932aa59f23fa6d186a10da3c8359df3671cf1
 include infra/k8s/images.env
 JOB_SRC              = jobs/ tests/ docker/spark-job/
@@ -48,7 +50,7 @@ SPARK_SUBMIT = $(COMPOSE) exec -T spark /opt/spark/bin/spark-submit --master $(S
 SPARK_SQL    = $(COMPOSE) exec -T spark /opt/spark/bin/spark-sql --master local[1]
 NOISE        = ^Time taken|^:: loading settings
 
-.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks ghcr-prune k8s-up k8s-demo airflow-viewer airflow-viewer-check minio-ui history-ui freeze freeze-check evidence evidence-export spark-operator-chart demo-task2 demo-pipeline demo-check trino-chart trino-install trino-cli trino-ui mode-query mode-pipeline trino-check trino-explore trino-tag-check demo-task3 starrocks-chart starrocks-render starrocks-install starrocks-sql starrocks-up starrocks-down starrocks-ready starrocks-init dbt dbt-parse dbt-docs mode-gold
+.PHONY: help build secrets up down clean ps logs stats sql smoke bronze validate acceptance acceptance-from-zero k8s-secrets landing k8s-job-image s3-access-test sparkapp airflow-chart deploy-guard airflow-install airflow-admin airflow-ui backfill dag-runs dag-report drill-driver drill-executor drill-scheduler backup-now drill-lose-metastore restore-metastore catalog maintenance venv lint fmt test all hooks ghcr-prune k8s-up k8s-demo airflow-viewer airflow-viewer-check minio-ui history-ui freeze freeze-check evidence evidence-export spark-operator-chart demo-task2 demo-pipeline demo-check trino-chart trino-install trino-cli trino-ui mode-query mode-pipeline trino-check trino-explore trino-tag-check demo-task3 starrocks-chart starrocks-render starrocks-install starrocks-sql starrocks-up starrocks-down starrocks-ready starrocks-init dbt dbt-parse dbt-docs mode-gold demo-task4 starrocks-tag-check gold-check
 
 help:          ## list targets and variables
 	@awk -F':.*## ' '/^[a-zA-Z0-9_-]+:.*## /{printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -294,11 +296,13 @@ airflow-ui:    ## Task 2: open the Airflow UI on http://localhost:8080 (Ctrl+C t
 	kubectl -n airflow port-forward svc/airflow-api-server 8080:8080
 DEMO_STOP  = deploy/airflow-scheduler deploy/airflow-dag-processor deploy/airflow-triggerer
 DEMO_TASK ?= 2
+ASSET_DAGS = trino_reconcile gold_build   # asset-triggered: paused in demo profiles (a queued event would start them)
 demo-task2:    ## Demo profile (B3): view-only. Scheduler, dag-processor, triggerer -> 0 (nothing can start a run); api-server + History Server up. Refuses while a run is active
 	@! kubectl -n spark-jobs get sparkapplications --no-headers -o custom-columns=S:.status.applicationState.state | grep -vE '^(COMPLETED|FAILED)$$' | grep -q . || \
 	  { echo "refusing: a SparkApplication is not finished (state other than COMPLETED/FAILED); wait for it"; exit 1; }   # E61: finished apps stay until their TTL
 	@! $(AF) airflow dags list-runs chatbot_bronze -o plain 2>/dev/null | grep -qE " (running|queued) " || { echo "refusing: a chatbot_bronze run is running or queued; wait for it (E64)"; exit 1; }
 	kubectl -n airflow scale $(DEMO_STOP) --replicas=0
+	@for d in $(ASSET_DAGS); do $(AF) airflow dags pause $$d >/dev/null 2>&1 && echo "paused $$d (asset-triggered)"; done
 	kubectl -n spark-jobs scale deploy/spark-history --replicas=1
 	kubectl -n spark-jobs rollout status deploy/spark-history --timeout=600s
 	kubectl -n airflow rollout status deploy/airflow-api-server --timeout=600s
@@ -308,13 +312,19 @@ demo-task3:    ## Demo profile (Task 3): view-only like demo-task2 + Trino up (~
 	kubectl -n trino scale deploy/trino-coordinator --replicas=1
 	kubectl -n trino rollout status deploy/trino-coordinator --timeout=600s
 	@echo "demo-task3: + Trino. UIs: make trino-ui (8081), make trino-cli. Back to building: make mode-pipeline"
-demo-pipeline: ## Demo profile (B3): building mode. Airflow scheduler, dag-processor, triggerer -> 1; History Server -> 0 (frees 512 Mi for Spark)
+demo-task4:    ## Demo profile (Task 4): view-only like demo-task2 (asset DAGs paused) + StarRocks up (~5.1 Gi requests; no Spark can start)
+	-kubectl -n trino scale deploy/trino-coordinator --replicas=0
+	$(MAKE) --no-print-directory demo-task2
+	$(MAKE) --no-print-directory starrocks-up
+	@echo "demo-task4: + StarRocks. SQL: make starrocks-sql SQL=...; lineage: EVIDENCE dbt-docs folder. Back to building: make mode-pipeline"
+demo-pipeline: ## Demo profile (B3): building mode. Airflow scheduler, dag-processor, triggerer -> 1; History Server -> 0 (frees 512 Mi for Spark); asset DAGs unpaused
 	kubectl -n airflow scale $(DEMO_STOP) --replicas=1
+	@for d in $(ASSET_DAGS); do $(AF) airflow dags unpause $$d >/dev/null 2>&1 && echo "unpaused $$d"; done
 	kubectl -n spark-jobs scale deploy/spark-history --replicas=0
 	for d in $(DEMO_STOP); do kubectl -n airflow rollout status $$d --timeout=600s; done
 demo-check:    ## Demo: before presenting. Workloads ready, UIs answer (temporary port-forwards), freeze tag of DEMO_TASK (2: Spark check; 3: + Trino, tag checked by Trino). Fails loudly
 	@set -u; fail=0; \
-	for w in lake:statefulset/postgres lake:statefulset/minio lake:deploy/hive-metastore airflow:deploy/airflow-api-server spark-jobs:deploy/spark-history $(if $(filter 3,$(DEMO_TASK)),trino:deploy/trino-coordinator); do \
+	for w in lake:statefulset/postgres lake:statefulset/minio lake:deploy/hive-metastore airflow:deploy/airflow-api-server spark-jobs:deploy/spark-history $(if $(filter 3,$(DEMO_TASK)),trino:deploy/trino-coordinator) $(if $(filter 4,$(DEMO_TASK)),starrocks:statefulset/starrocks-fe starrocks:statefulset/starrocks-be); do \
 	  ns=$${w%%:*}; obj=$${w#*:}; \
 	  r=$$(kubectl -n $$ns get $$obj -o jsonpath='{.status.readyReplicas}' 2>/dev/null); \
 	  if [ "$${r:-0}" -ge 1 ]; then echo "[demo-check] PASS ready  $$ns/$$obj ($$r ready)"; \
@@ -330,7 +340,12 @@ demo-check:    ## Demo: before presenting. Workloads ready, UIs answer (temporar
 	  if [ "$$code" = 200 ]; then echo "[demo-check] PASS http   $$name ($$code)"; else echo "[demo-check] FAIL http   $$name ($$code)"; fail=1; fi; \
 	done; \
 	kill $$p1 $$p2 $$p3 $$p4 2>/dev/null; trap - EXIT; \
-	if $(MAKE) --no-print-directory $(if $(filter 3,$(DEMO_TASK)),trino-tag-check,freeze-check) TASK=$(DEMO_TASK) | grep -E "^\[catalog\] (PASS|FAIL)"; then :; else fail=1; fi; \
+	if $(MAKE) --no-print-directory $(if $(filter 3,$(DEMO_TASK)),trino-tag-check,$(if $(filter 4,$(DEMO_TASK)),starrocks-tag-check,freeze-check)) TASK=$(DEMO_TASK) | grep -E "^\[catalog\] (PASS|FAIL)"; then :; else fail=1; fi; \
+	$(if $(filter 4,$(DEMO_TASK)),if $(MAKE) --no-print-directory gold-check | grep -E "^\[gold\] (PASS|FAIL)"; then :; else fail=1; fi;) \
+	for d in $(ASSET_DAGS); do p=$$($(AF) airflow dags list -o plain 2>/dev/null | awk -v d=$$d '$$1==d{print $$(NF-1)}'); \
+	  if [ "$$p" = True ]; then echo "[demo-check] PASS paused $$d (asset-triggered: nothing starts during the demo)"; \
+	  else echo "[demo-check] FAIL paused $$d is_paused=$${p:-?} (make demo-task$(DEMO_TASK) pauses it)"; fail=1; fi; \
+	done; \
 	if [ $$fail = 0 ]; then echo "[demo-check] ALL PASS"; else echo "[demo-check] FAILED (see FAIL lines)"; exit 1; fi
 backfill:      ## Task 2: backfill chatbot_bronze: make backfill [FROM=2024-07-02] [TO=2024-07-25] [REPROCESS=none|completed|failed] [DRY=yes]
 	$(AF) airflow backfill create --dag-id chatbot_bronze --from-date $(FROM) --to-date $(TO) \
@@ -386,6 +401,7 @@ catalog:       ## Task 2 2.5b drill 7 + freeze: make catalog CMD=info|forget|reg
 	  kubectl -n spark-jobs logs $$n-driver | grep -E "^\[catalog\]|Error|Exception" || true; test "$$s" = COMPLETED
 FREEZE_TABLES_2 = bronze.chatlog,bronze.bot_predict
 FREEZE_TABLES_3 = $(FREEZE_TABLES_2),silver.chat_message,silver.nlu_prediction,silver.user_message
+FREEZE_TABLES_4 = $(FREEZE_TABLES_3)          # Task 4: the Silver that Gold was built from (Gold itself is rebuilt from it)
 FREEZE_TABLES  ?= $(FREEZE_TABLES_$(TASK))
 freeze:        ## Freeze (B2): Iceberg tag task<TASK>_v1 on FREEZE_TABLES (RETAIN 365 DAYS, kept if it exists) + verify rows = expected: make freeze TASK=2
 	@test -n "$(TASK)" || { echo "set TASK= (e.g. make freeze TASK=2)"; exit 1; }
@@ -396,6 +412,14 @@ trino-tag-check: ## Freeze (Task 3): verify tag task<TASK>_v1 through Trino (no 
 	  printf "SELECT '%s', count(*) FROM lake.%s FOR VERSION AS OF 'task$(TASK)_v1' UNION ALL " $$t $$t; done); \
 	  kubectl -n trino exec deploy/trino-coordinator -- trino --catalog lake --output-format CSV_UNQUOTED \
 	  --execute "$${sql% UNION ALL }" | python3 -I tools/trino_tag_check.py task$(TASK)_v1
+starrocks-tag-check: ## Freeze (Task 4): verify tag task<TASK>_v1 through StarRocks' catalog (no Spark, no Trino: fits in demo-task4): make starrocks-tag-check TASK=4
+	@test -n "$(TASK)" || { echo "set TASK= (e.g. make starrocks-tag-check TASK=4)"; exit 1; }
+	@sql=$$(for t in $$(echo $(FREEZE_TABLES) | tr , ' '); do \
+	  printf "SELECT '%s', count(*) FROM lake_iceberg.%s FOR VERSION AS OF 'task$(TASK)_v1' UNION ALL " $$t $$t; done); \
+	  { $(SR_PW); echo "$${sql% UNION ALL }"; } | $(SR_SQL_TSV) | tr '\t' ',' | python3 -I tools/trino_tag_check.py task$(TASK)_v1 StarRocks
+gold-check:    ## Task 4: row counts AND measure sums of every Gold table vs the expected values (sql/starrocks/gold_check.sql); exit 1 on a mismatch
+	@{ $(SR_PW); grep -v '^--' sql/starrocks/gold_check.sql; } | $(SR_SQL_TSV) | \
+	  awk -F'\t' '{ok=($$3==$$4); f+=!ok; printf "[gold] %s %-18s %-32s expected=%s actual=%s\n", (ok?"PASS":"FAIL"), $$1, $$2, $$3, $$4} END {exit f>0}'
 freeze-check:  ## Freeze (B2): verify the tag still reads the frozen rows (run after maintenance): make freeze-check TASK=2
 	@test -n "$(TASK)" || { echo "set TASK= (e.g. make freeze-check TASK=2)"; exit 1; }
 	$(MAKE) --no-print-directory catalog CMD=verify-tag TABLE=$(FREEZE_TABLES) TAG=task$(TASK)_v1
@@ -410,6 +434,10 @@ evidence:      ## Freeze (B2): save run states OUTSIDE Git to EVIDENCE_DIR (coun
 	helm history airflow -n airflow > $(EVIDENCE_DIR)/helm-airflow.txt
 	helm history spark-operator -n spark-operator > $(EVIDENCE_DIR)/helm-spark-operator.txt
 	kubectl -n lake get jobs,cronjobs > $(EVIDENCE_DIR)/lake-jobs.txt
+	$(if $(filter 3 4,$(TASK)),$(AF) airflow dags list-runs trino_reconcile -o plain > $(EVIDENCE_DIR)/dag-runs-trino_reconcile.txt)
+	$(if $(filter 4,$(TASK)),$(AF) airflow dags list-runs gold_build -o plain > $(EVIDENCE_DIR)/dag-runs-gold_build.txt)
+	$(if $(filter 4,$(TASK)),$(MAKE) --no-print-directory gold-check > $(EVIDENCE_DIR)/gold-check.txt)
+	$(if $(filter 4,$(TASK)),helm history starrocks -n starrocks > $(EVIDENCE_DIR)/helm-starrocks.txt)
 	@wc -l $(EVIDENCE_DIR)/*.txt
 evidence-export: ## Freeze (B2): copy airflow-logs + backup (MinIO) and Spark event logs (PVC) to EVIDENCE_DIR; checks the file count
 	mkdir -p $(EVIDENCE_DIR)

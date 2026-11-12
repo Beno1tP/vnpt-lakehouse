@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-11-12 — 4.6 stage 3: tag drill done + freeze prepared
+Did (Bee): `minikube start && make k8s-up` (git c13f38e, PR #106) → spark-job bump PR #107 → `k8s-up` (Airflow rev 24) → `mode-pipeline` → scratch drill: create → maintenance `TABLES=scratch.tag_drill SNAP_HOURS=0 RETAIN=1` → check PASS → drop (`06_validation.md` §7).
+Prepared (Claude, branch `task4/4.6-freeze`): `FREEZE_TABLES_4`; dbt macro `silver_version` (staging views read `FOR VERSION AS OF '<tag>'` when `--vars '{silver_version: task4_v1}'`, tag pattern validated); `make starrocks-tag-check TASK=4` (tag rows through StarRocks' catalog, same comparer as Trino's); `make gold-check` (`sql/starrocks/gold_check.sql`: 22 counts + measure sums incl. bitmap union 89, active 112); `make demo-task4`; demo profiles pause the asset DAGs, `demo-pipeline` unpauses them; `demo-check DEMO_TASK=4` adds StarRocks FE/BE ready, the StarRocks tag check, gold-check, and FAILS on an unpaused asset DAG; `evidence TASK=4` adds DAG runs, gold-check, helm history. Checked: lint + tests; every changed recipe expanded by make itself with a fake SHELL that only records lines (nothing runs, no `make -n`, E60) + `bash -n`.
+
 ### 2026-11-11 — 4.5 done (E76 proven) + 4.6 stage 1 (plans, bitmap) + stage 2 prepared (dbt docs)
 Did (Bee): PR #103 → images → bump #104 → `make k8s-up` (Airflow rev 22) → `mode-pipeline` → `mode-gold` (`a BE query runs`) → manual `gold_build`: sensor 108 s waiting → 171 s, dbt_build attempt 1 PASS=56, verdict, lake_gold (03:23:56–03:25:51 UTC = 10:23–10:25 ICT); EXPLAIN Gold vs catalog; bitmap query.
 Observed: `gold_uc5` partitions 1/1, tablets 1/1, expected 9 rows; Iceberg scan expected 7,153 (no stats); bitmap 87 / 2 exact vs 106 / 6 summed (23 double counts) → `07_dbt_and_plans.md` §2–3.
