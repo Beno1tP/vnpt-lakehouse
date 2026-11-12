@@ -124,3 +124,22 @@ jobs:
           comm -13 base.txt ours.txt
           if comm -23 base.txt ours.txt | grep .; then echo "FAIL: a Superset package was changed or removed (above)"; exit 1; fi
           docker run --rm -e SUPERSET_SECRET_KEY=ci-dummy-key-not-used-anywhere vnpt-lake-superset:ci superset version
+          docker run --rm vnpt-lake-superset:ci id   # = runAsUser in infra/helm/superset/values-local.yaml (5.3a)
+
+  superset-render:
+    name: superset-render (chart 0.22.8 + values-local, checked; nothing installed)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.10"
+      - name: Download the chart (SHA-256 = Makefile), render with values-local, run the render check
+        run: |
+          pip install -q pyyaml==6.0.2
+          sha=$(sed -n 's/^SUPERSET_CHART_SHA256 *= *//p' Makefile); ref=$(sed -n 's/^SUPERSET_IMAGE_REF=//p' infra/k8s/images.env)
+          curl -fsSL --retry 3 -o chart.tgz https://github.com/apache/superset/releases/download/superset-helm-chart-0.22.8/superset-0.22.8.tgz
+          echo "$sha  chart.tgz" | sha256sum --check
+          helm version --short
+          helm template superset chart.tgz -n superset -f infra/helm/superset/values-local.yaml > rendered.yaml
+          python3 -I tools/superset_render_check.py "$ref" < rendered.yaml
