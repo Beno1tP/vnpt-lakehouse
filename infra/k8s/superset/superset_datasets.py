@@ -11,6 +11,7 @@ The pure functions (spec validation, identifiers, uuid, comparison) are unit-tes
 
 from __future__ import annotations
 
+import os
 import re
 import sys
 import uuid
@@ -119,8 +120,45 @@ def main(path: str) -> int:  # pragma: no cover - needs Superset + StarRocks (ru
                     ok = matches(value, c["expect"])
                     fails += not ok
                     print(f"  {'PASS' if ok else 'FAIL'} {c['metric']}{where}: {value} (expected {c['expect']})")
+        fails += setup_viewer(spec)
         print(f"datasets: {'PASS' if not fails else f'FAIL ({fails})'}")
         return 1 if fails else 0
+
+
+VIEWER_ROLE, CHECKER = "gold_viewer", "checker"
+
+
+def setup_viewer(spec: dict) -> int:  # pragma: no cover - runs in the Job (app context)
+    """5.7: role gold_viewer = datasource_access on the spec's datasets only; user checker = Gamma + gold_viewer with
+    the password from SUPERSET_CHECKER_PASSWORD (created or reset, then verified). Returns the number of failures."""
+    from superset import db
+    from superset.connectors.sqla.models import SqlaTable
+    from superset.extensions import security_manager as sm
+    from werkzeug.security import check_password_hash
+
+    role = sm.find_role(VIEWER_ROLE) or sm.add_role(VIEWER_ROLE)
+    names = [d["table"] for d in spec["datasets"]]
+    tables = db.session.query(SqlaTable).filter(SqlaTable.table_name.in_(names), SqlaTable.schema == spec["schema"])
+    perms = [sm.add_permission_view_menu("datasource_access", t.perm) for t in tables]
+    role.permissions = perms  # exactly these: re-running removes anything added by hand
+    pw = os.environ["SUPERSET_CHECKER_PASSWORD"]
+    roles = [sm.find_role("Gamma"), role]
+    user = sm.find_user(username=CHECKER)
+    if user is None:
+        user = sm.add_user(CHECKER, "Dashboard", "Checker", "checker@lab.local", roles, password=pw)
+    else:
+        user.roles = roles
+        sm.reset_password(user.id, pw)
+    db.session.commit()
+    user = sm.find_user(username=CHECKER)
+    ok = (
+        user is not None
+        and check_password_hash(user.password, pw)
+        and sorted(r.name for r in user.roles) == ["Gamma", VIEWER_ROLE]
+        and len(perms) == len(names)
+    )
+    print(f"viewer {'ok' if ok else 'FAIL'}: user {CHECKER}, roles Gamma + {VIEWER_ROLE} ({len(perms)} datasets)")
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":  # pragma: no cover

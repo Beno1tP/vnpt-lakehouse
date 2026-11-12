@@ -1,0 +1,71 @@
+# Task 5 step 5.7: expected values of every chart on the dashboard, per filter value, read through Superset's
+# chart-data API as the read-only user checker (tools: superset_check.py, make superset-check). Values = Task 4
+# gold-check / docs/metrics.md, confirmed on screen 11-12/13 (PDFs in evidence/task5). Unrounded (E: 87/24 = 3.625
+# shows as 3.63). `filter` = the native filter that must scope the chart (null = in no filter's scope); keys of
+# `expect` = that filter's value ("" = cleared). Pickers on the raw query rows (post-processing removed):
+#   value: <metric>              single row                    last: <metric>   value on the latest event_date
+#   sum: <metric>                sum over rows (additive only) max: <metric>    largest row value
+#   by: {column: c, metric: m}   sum per value of c (dict)   sums: [m1, m2]   sum of each metric (dict)
+dashboard: "VNPT chatbot – Gold"
+filters:
+  Traffic: { column: traffic_class, default: [real] }
+  Users: { column: user_class, default: null }
+charts:
+  "KPI · Predictions":
+    filter: Traffic
+    pick: { value: predictions }
+    expect: { "": 10729, real: 219 }
+  "UC5 · Understood vs not understood per day":
+    filter: Traffic
+    pick: { sums: [understood, not_understood] }
+    expect: { "": { understood: 10588, not_understood: 141 }, real: { understood: 92, not_understood: 127 } }
+  "UC5 · Not-understood rate":
+    filter: Traffic
+    pick: { value: not_understood_rate }
+    expect: { "": 0.013142, real: 0.579909 }
+  "UC4 · Messages by scenario":
+    filter: Traffic
+    pick: { by: { column: scenario, metric: messages } }
+    expect: { "": { "start (/home)": 10494, "free text (NLU)": 235 }, real: { "free text (NLU)": 219 } }
+  "UC4 · Scenario share per day":
+    filter: Traffic
+    pick: { by: { column: scenario, metric: messages } }
+    expect: { "": { "start (/home)": 10494, "free text (NLU)": 235 }, real: { "free text (NLU)": 219 } }
+  "UC6 · Top intents":
+    filter: Traffic
+    pick: { by: { column: final_intent, metric: messages } }
+    expect:
+      "": { xin_chao: 10588, fallback: 107, bot_khong_hieu: 34 }
+      real: { fallback: 97, xin_chao: 92, bot_khong_hieu: 30 }
+  "Data up to":
+    filter: null
+    pick: { value: "MAX(event_date)" }
+    expect: { "": "2024-07-25" }
+  "UC7 · Total users":
+    filter: Users
+    pick: { last: total_users }
+    expect: { "": 89, external: 87, internal: 2 }
+  "UC7 · Change vs 30 days before":
+    filter: Users
+    pick: { last: change_abs }
+    expect: { "": 89, external: 87, internal: 2 }
+  "UC7 · Change % vs 30 days before":
+    filter: Users
+    pick: { last: change_pct }
+    expect: { "": null, external: null, internal: null }
+  "UC8 · New and active users per day":
+    filter: Users
+    pick: { sum: new_users }
+    expect: { "": 89, external: 87, internal: 2 }
+  "UC8 · Avg new users / day":
+    filter: Users
+    pick: { value: avg_new_per_day }
+    expect: { "": 3.708333, external: 3.625, internal: 0.083333 }
+  "UC8 · Avg active users / day":
+    filter: Users
+    pick: { value: avg_active_per_day }
+    expect: { "": 4.666667, external: 4.416667, internal: 0.25 }
+  "UC8 · Distinct active users (period)":
+    filter: Users
+    pick: { value: active_users }
+    expect: { "": 89, external: 87, internal: 2 }

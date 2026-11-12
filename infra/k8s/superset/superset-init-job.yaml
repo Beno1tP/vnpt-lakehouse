@@ -26,7 +26,7 @@ spec:
           imagePullPolicy: IfNotPresent
           envFrom:
             - secretRef: { name: superset-env }
-            - secretRef: { name: superset-init-credentials }   # SUPERSET_ADMIN_PASSWORD, STARROCKS_BI_PASSWORD
+            - secretRef: { name: superset-init-credentials }   # admin, bi_ro, checker (5.7) passwords
           env:
             - { name: SUPERSET_CONFIG_PATH, value: /app/pythonpath/superset_config.py }
           command: ["bash", "-c"]

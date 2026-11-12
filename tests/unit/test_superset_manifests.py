@@ -118,3 +118,15 @@ def test_init_job_loads_datasets_from_the_configmap():  # 5.5
     pod = job["spec"]["template"]["spec"]
     assert {"name": "init-files", "configMap": {"name": "superset-init-files"}} in pod["volumes"]
     assert "python /init/superset_datasets.py /init/datasets.yaml" in pod["containers"][0]["args"][0]
+
+
+def test_check_pod_gets_only_the_checker_login():  # 5.7
+    pod = yaml.safe_load((DIR / "superset-check-pod.yaml").read_text())
+    spec = pod["spec"]
+    c = spec["containers"][0]
+    assert c["envFrom"] == [{"secretRef": {"name": "superset-checker-credentials"}}]
+    assert spec["automountServiceAccountToken"] is False and spec["enableServiceLinks"] is False
+    assert c["image"] == "__IMAGE__" and "limits" in c["resources"]
+    kust = yaml.safe_load((DIR / "kustomization.yaml").read_text())
+    gen = {g["name"]: g for g in kust["configMapGenerator"]}
+    assert gen["superset-check-files"]["options"]["disableNameSuffixHash"] is True  # referenced from outside kustomize

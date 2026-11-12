@@ -73,6 +73,10 @@ secretGenerator:                       # from files rendered by `make k8s-secret
     namespace: superset
     envs: [secrets/superset-env.env]
     options: { disableNameSuffixHash: true }
+  - name: superset-checker-credentials  # Task 5 5.7: read-only user checker, only for the pod superset-check
+    namespace: superset
+    envs: [secrets/superset-checker.env]
+    options: { disableNameSuffixHash: true }
   - name: superset-init-credentials     # Task 5: admin + bi_ro passwords, only for the Job superset-init (D21)
     namespace: superset
     envs: [secrets/superset-init.env]

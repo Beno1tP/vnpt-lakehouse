@@ -1,0 +1,27 @@
+# Task 5 step 5.7: one-off pod for make superset-check (not in the kustomization: a pod is created per run).
+# Logs in to Superset as the read-only user checker (Secret superset-checker-credentials only: no admin, no bi_ro,
+# no metadata-DB password) and checks every chart of the dashboard (superset_check.py, dashboard_checks.yaml).
+# __IMAGE__ = SUPERSET_IMAGE_REF from infra/k8s/images.env (sed in the Makefile).
+apiVersion: v1
+kind: Pod
+metadata:
+  name: superset-check
+  namespace: superset
+  labels: { app: superset-check }
+spec:
+  restartPolicy: Never
+  imagePullSecrets: [{ name: ghcr-pull }]
+  automountServiceAccountToken: false
+  enableServiceLinks: false               # E81
+  securityContext: { runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000 }
+  containers:
+    - name: check
+      image: __IMAGE__
+      imagePullPolicy: IfNotPresent
+      command: ["python", "/check/superset_check.py", "/check/dashboard_checks.yaml"]
+      envFrom: [{ secretRef: { name: superset-checker-credentials } }]
+      resources: { requests: { memory: 128Mi, cpu: 50m }, limits: { memory: 256Mi } }
+      volumeMounts: [{ name: check, mountPath: /check, readOnly: true }]
+  volumes:
+    - name: check
+      configMap: { name: superset-check-files }

@@ -248,8 +248,15 @@ superset-up:   ## Task 5: Superset web -> 1 (init container migrates), then Job 
 	kubectl apply -k infra/k8s/superset
 	kubectl -n superset rollout status deploy/superset --timeout=900s
 	@for i in $$(seq 1 120); do s=$$(kubectl -n superset get job superset-init -o jsonpath='{.status.succeeded}{.status.failed}'); \
-	  [ -n "$$s" ] && break; sleep 5; done; kubectl -n superset logs job/superset-init | tail -4; \
+	  [ -n "$$s" ] && break; sleep 5; done; kubectl -n superset logs job/superset-init | grep -E "ok[: ]|PASS|FAIL|datasets:"; \
 	  test "$$(kubectl -n superset get job superset-init -o jsonpath='{.status.succeeded}')" = 1
+superset-check: ## Task 5 5.7: every dashboard chart through Superset's API as read-only user checker, filters on/off, vs dashboard_checks.yaml
+	@test -n "$(SUPERSET_IMAGE_REF)" || { echo "SUPERSET_IMAGE_REF missing in infra/k8s/images.env"; exit 1; }
+	kubectl -n superset delete pod superset-check --ignore-not-found --wait=true
+	sed 's|__IMAGE__|$(SUPERSET_IMAGE_REF)|' infra/k8s/superset/superset-check-pod.yaml | kubectl apply -f -
+	@for i in $$(seq 1 60); do p=$$(kubectl -n superset get pod superset-check -o jsonpath='{.status.phase}'); \
+	  case "$$p" in Succeeded|Failed) break;; esac; sleep 3; done; kubectl -n superset logs superset-check; \
+	  test "$$(kubectl -n superset get pod superset-check -o jsonpath='{.status.phase}')" = Succeeded
 superset-down: ## Task 5: Superset web -> 0 (metadata stays in Postgres)
 	-kubectl -n superset scale deploy/superset --replicas=0
 superset-ui:   ## Task 5: Superset on http://localhost:8088 (user admin, password = SUPERSET_ADMIN_PASSWORD in secrets.env); Ctrl+C to stop
