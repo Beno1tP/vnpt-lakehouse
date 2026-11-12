@@ -40,6 +40,11 @@ jobs:
           # 2.7: every rendered image is pinned by digest (kustomize images: rewrites ours)
           if grep -E '^\s*image:' "$RUNNER_TEMP/rendered.yaml" | grep -v '@sha256:' | grep -v '__IMAGE__'; then
             echo "image without digest"; exit 1; fi
+          # Task 5: Superset web, its own kustomization (applied by make superset-up)
+          kubectl kustomize infra/k8s/superset > "$RUNNER_TEMP/superset.yaml"
+          grep '^kind:' "$RUNNER_TEMP/superset.yaml" | sort | uniq -c
+          grep -E '^\s*image:' "$RUNNER_TEMP/superset.yaml"
+          if grep -E '^\s*image:' "$RUNNER_TEMP/superset.yaml" | grep -v '@sha256:'; then echo "image without digest"; exit 1; fi
 
   dags:
     name: DAG integrity (inside the Airflow image)
@@ -124,3 +129,8 @@ jobs:
           comm -13 base.txt ours.txt
           if comm -23 base.txt ours.txt | grep .; then echo "FAIL: a Superset package was changed or removed (above)"; exit 1; fi
           docker run --rm -e SUPERSET_SECRET_KEY=ci-dummy-key-not-used-anywhere vnpt-lake-superset:ci superset version
+          docker run --rm vnpt-lake-superset:ci id   # = runAsUser in infra/k8s/superset/superset.yaml (5.3a)
+          # our superset_config.py loads inside Superset (dummy env, no connection): the override is really applied
+          docker run --rm -v "$PWD/infra/k8s/superset:/app/pythonpath:ro" -e SUPERSET_CONFIG_PATH=/app/pythonpath/superset_config.py \
+            -e SUPERSET_SECRET_KEY=ci-dummy -e DB_USER=u -e DB_PASS=p -e DB_HOST=h -e DB_PORT=5432 -e DB_NAME=d vnpt-lake-superset:ci \
+            python -c "from superset import config as c; assert c.SQL_MAX_ROW == 10000 and c.SECRET_KEY == 'ci-dummy', 'override not applied'; print('config loaded, db', c.SQLALCHEMY_DATABASE_URI.split('@')[1])"
