@@ -7,9 +7,12 @@ USER root
 COPY requirements.txt /tmp/vnpt-requirements.txt
 # D26: every package Superset already has is a constraint (its exact installed version), so adding the dialect can
 # never upgrade or downgrade Superset's own dependencies; uv pip check fails the build on any broken requirement.
-RUN . /app/.venv/bin/activate \
+# E79: UV_NO_CACHE, otherwise uv (running as root) creates a root-owned cache in $HOME = /app/superset_home, which
+# user superset can then neither use nor clean (seen in CI: "Permission denied" on /app/superset_home/.cache/uv).
+RUN export UV_NO_CACHE=1 \
+ && . /app/.venv/bin/activate \
  && uv pip freeze --exclude-editable > /tmp/superset-constraints.txt \
- && uv pip install --no-cache -r /tmp/vnpt-requirements.txt -c /tmp/superset-constraints.txt \
+ && uv pip install -r /tmp/vnpt-requirements.txt -c /tmp/superset-constraints.txt \
  && uv pip check \
  && rm /tmp/vnpt-requirements.txt /tmp/superset-constraints.txt
 USER superset
