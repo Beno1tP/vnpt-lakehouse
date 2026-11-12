@@ -108,3 +108,13 @@ def test_init_job_registers_read_only_starrocks_connection():  # 5.4
     assert "StarRocksEngineSpec.get_datatype(253)" in script  # E82: the BI tool's own result path
     assert "assert n == 10613" in script and "denied" in script  # positive and negative check through the connection
     assert 'os.environ["STARROCKS_BI_PASSWORD"]' in script and "STARROCKS_ROOT" not in script
+
+
+def test_init_job_loads_datasets_from_the_configmap():  # 5.5
+    kust = yaml.safe_load((DIR / "kustomization.yaml").read_text())
+    files = {g["name"]: g["files"] for g in kust["configMapGenerator"]}
+    assert files["superset-init-files"] == ["datasets.yaml", "superset_datasets.py"]
+    job = yaml.safe_load((DIR / "superset-init-job.yaml").read_text())
+    pod = job["spec"]["template"]["spec"]
+    assert {"name": "init-files", "configMap": {"name": "superset-init-files"}} in pod["volumes"]
+    assert "python /init/superset_datasets.py /init/datasets.yaml" in pod["containers"][0]["args"][0]
