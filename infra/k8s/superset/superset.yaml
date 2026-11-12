@@ -19,6 +19,7 @@ metadata:
   namespace: superset
 spec:
   replicas: 1                            # modes scale it (0 outside demo-task5 / serving)
+  progressDeadlineSeconds: 900           # first pull (~2 min) + migrate + startup probe (up to 5 min); = rollout timeout
   strategy: { type: Recreate }           # never two pods at once on 7 Gi
   selector:
     matchLabels: { app: superset }
@@ -28,6 +29,7 @@ spec:
     spec:
       imagePullSecrets: [{ name: ghcr-pull }]
       automountServiceAccountToken: false   # Superset needs no Kubernetes API access
+      enableServiceLinks: false            # E81: Service "superset" injects SUPERSET_PORT=tcp://…, read by run-server.sh
       securityContext: { runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000 }   # user superset (CI: id)
       initContainers:
         - name: wait-for-postgres          # same image: Python socket check, no extra image
@@ -66,6 +68,7 @@ spec:
           envFrom: [{ secretRef: { name: superset-env } }]
           env:
             - { name: SUPERSET_CONFIG_PATH, value: /app/pythonpath/superset_config.py }
+            - { name: SUPERSET_PORT, value: "8088" }   # gunicorn bind port in run-server.sh (E81: never a service link)
           ports: [{ name: http, containerPort: 8088 }]
           startupProbe:
             httpGet: { path: /health, port: http }

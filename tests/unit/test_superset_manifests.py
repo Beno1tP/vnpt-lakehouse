@@ -81,3 +81,12 @@ def test_init_job_only_place_with_admin_password():
     assert "check_password_hash" in script and "reset-password" in script  # verifies, and enforces the Secret
     assert "grep -vi password" in script
     assert job["spec"]["ttlSecondsAfterFinished"] > 0 and job["spec"]["backoffLimit"] <= 1
+
+
+def test_no_service_links_in_superset_pods():  # E81: SUPERSET_PORT=tcp://... broke gunicorn's bind
+    web = [d for d in yaml.safe_load_all((DIR / "superset.yaml").read_text()) if d["kind"] == "Deployment"][0]
+    job = yaml.safe_load((DIR / "superset-init-job.yaml").read_text())
+    for pod in (web["spec"]["template"]["spec"], job["spec"]["template"]["spec"]):
+        assert pod["enableServiceLinks"] is False
+    env = {e["name"]: e["value"] for e in web["spec"]["template"]["spec"]["containers"][0]["env"]}
+    assert env["SUPERSET_PORT"] == "8088"

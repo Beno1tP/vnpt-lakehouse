@@ -15,6 +15,7 @@ spec:
       restartPolicy: Never
       imagePullSecrets: [{ name: ghcr-pull }]
       automountServiceAccountToken: false
+      enableServiceLinks: false            # E81: no SUPERSET_* service-link variables in Superset's environment
       securityContext: { runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000 }
       containers:
         - name: superset-init
