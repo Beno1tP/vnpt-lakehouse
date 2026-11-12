@@ -78,3 +78,10 @@ def test_structure_ok_and_each_problem_found():
     assert "'new' is on the dashboard but not in" in text  # unreviewed chart
     probs = sc.structure_problems(CHECKS, sc.native_filters(meta(t + [charts["Data up to"]], u)), charts)
     assert any("'Data up to': in scope of Traffic" in p for p in probs)  # freshness must not be filtered
+
+
+def test_scope_without_charts_in_scope_uses_root_minus_excluded():
+    m = {"native_filter_configuration": [{"name": "Users", "targets": [{"column": {"name": "user_class"}}],
+         "scope": {"rootPath": ["ROOT_ID"], "excluded": [2]}}]}  # fmt: skip
+    f = sc.native_filters(m, {1, 2, 3})["Users"]
+    assert f["charts"] == {1, 3} and f["raw"]["chartsInScope"] is None and f["default"] is None

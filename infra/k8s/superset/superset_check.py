@@ -81,18 +81,34 @@ def pick(rows, spec):
     raise ValueError(f"unknown picker {spec}")
 
 
-def native_filters(json_metadata: dict) -> dict:
-    """name -> {column, default, charts} from the dashboard's native_filter_configuration."""
+def native_filters(json_metadata: dict, all_charts: set[int] | None = None) -> dict:
+    """name -> {column, default, charts, raw} from the dashboard's native_filter_configuration. Scope: chartsInScope
+    when Superset stored it; otherwise scope.rootPath ROOT_ID (whole dashboard) minus scope.excluded. The stored
+    fields are printed by main(), so the first run shows which case applies (11-13: Users matched no chart)."""
     out = {}
     for f in json_metadata.get("native_filter_configuration", []):
         if f.get("type") == "DIVIDER":
             continue
         targets = f.get("targets") or [{}]
         default = ((f.get("defaultDataMask") or {}).get("filterState") or {}).get("value")
+        scope = f.get("scope") or {}
+        if f.get("chartsInScope") is not None:
+            charts = set(f["chartsInScope"])
+        elif scope.get("rootPath") == ["ROOT_ID"] and all_charts is not None:
+            charts = set(all_charts) - set(scope.get("excluded") or [])
+        else:
+            charts = set()
+        raw = {
+            "chartsInScope": f.get("chartsInScope"),
+            "rootPath": scope.get("rootPath"),
+            "excluded": scope.get("excluded"),
+            "default": default,
+        }
         out[f["name"]] = {
             "column": ((targets[0].get("column") or {}).get("name")),
             "default": default,
-            "charts": set(f.get("chartsInScope") or []),
+            "charts": charts,
+            "raw": raw,
         }
     return out
 
@@ -163,11 +179,13 @@ def main(path: str) -> int:  # pragma: no cover - needs a running Superset
         print(f"FAIL: dashboard '{spec['dashboard']}' visible to checker: {len(match)} (published? dataset access?)")
         return 1
     dash = s.get(f"{BASE}/api/v1/dashboard/{match[0]['id']}", timeout=30).json()["result"]
-    filters = native_filters(json.loads(dash.get("json_metadata") or "{}"))
-    charts = {
-        c["slice_name"]: c["id"]
-        for c in s.get(f"{BASE}/api/v1/dashboard/{dash['id']}/charts", timeout=30).json()["result"]
-    }
+    listed = s.get(f"{BASE}/api/v1/dashboard/{dash['id']}/charts", timeout=30).json()["result"]
+    charts = {c["slice_name"]: c["id"] for c in listed}
+    filters = native_filters(json.loads(dash.get("json_metadata") or "{}"), set(charts.values()))
+    names = {v: k for k, v in charts.items()}
+    for fname, fl in filters.items():  # configuration only (no data): what Superset stored, for debugging scope
+        print(f"filter {fname}: column {fl['column']} | stored {fl['raw']}")
+        print(f"  -> in scope: {sorted(names.get(i, str(i)) for i in fl['charts'])}")
     fails = 0
     for p in structure_problems(spec, filters, charts):
         print("FAIL:", p)
@@ -198,7 +216,8 @@ def main(path: str) -> int:  # pragma: no cover - needs a running Superset
                 continue
             ok = same(got, expect)
             fails += not ok
-            print(f"{'PASS' if ok else 'FAIL'} {label}: {got} (expected {expect})")
+            shown = {k: norm(v) for k, v in got.items()} if isinstance(got, dict) else norm(got)
+            print(f"{'PASS' if ok else 'FAIL'} {label}: {shown} (expected {expect})")
     print(f"superset-check: {'PASS' if not fails else f'FAIL ({fails})'}")
     return 1 if fails else 0
 
