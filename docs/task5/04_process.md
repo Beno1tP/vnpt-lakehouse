@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-11-13 — 5.7 first run: 33/33 values PASS, 9 structure FAILs
+`make superset-check` (Bee): logged in as checker, dashboard found (published, id 1, 14 charts, filters Traffic + Users); **33/33 values PASS** (incl. 3.625 unrounded, change % None, bitmap 89/87/2). FAIL: Traffic default None (read at `defaultDataMask.filterState.value`); `UC7 · Change %` in Traffic's scope (likely real: scope = all minus excluded, a chart added later is in scope automatically); no UC7/UC8 chart in Users' `chartsInScope` although the filter worked on screen (likely the tool's reading).
+Prepared (Claude, branch `task5/5.7-scope-fix`): print each filter's stored scope fields + resolved chart names; fallback scope = rootPath ROOT_ID minus excluded when chartsInScope is absent; readable dates. Bee in the UI: exclude Change % from Traffic, check Traffic's default, look at Users' scoping.
+
 ### 2026-11-12/13 — 5.5 done, 5.6 built in the UI (Bee), 5.7 prepared
 5.5 (Bee): Job → 5 × `dataset ok` (5/4/5/6/5 columns, uuid5), 20/20 PASS, `datasets: PASS`.
 5.6 (Bee, UI): dashboard `VNPT chatbot – Gold` built slice by slice; native filters Traffic (`traffic_class`, default `real`) and Users (`user_class`, no default), scoped UC4–6 + KPI / UC7–8. Verified from PDF exports (evidence/task5, 11-12 16:41 → 17:40 UTC): Traffic real 58.0 % / cleared 1.3 %; UC4 real = 100 % free text; UC6 real fallback 97 > xin_chao 92 > bot_khong_hieu 30; KPI Predictions 219; Data up to 2024-07-25; Users cleared 89 / +89 / 3.71 / 4.67 / 89, external 87 / +87 / 3.63 (87/24 = 3.625: Claude's expected "3.62" was a Python rounding slip) / 4.42 / 87, internal 2 / +2 / 0.08 / 0.25 / 2; UC7 Change % = "No data … NULL for the latest time record" (M2, kept with a description). Native filters are configured in the dashboard's filter bar (view mode), not in Edit dashboard.
