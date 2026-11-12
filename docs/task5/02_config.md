@@ -1,27 +1,30 @@
 # Task 5 — Config: versions, RAM, disk
 
-## 1. Versions (re-check before installing)
+## 1. Versions (checked 2026-11-12, Bee)
 
-| Component | Pin | Check command (Bee) |
+| Component | Pin | Evidence |
 |---|---|---|
-| Superset | input plan: **6.1.0** = latest stable, 7.0 only RC — **not verified here** | GitHub releases of `apache/superset`; `docker buildx imagetools inspect apache/superset:6.1.0` |
-| Superset Helm chart | `https://apache.github.io/superset`, exact version + checksum; set `image.tag` explicitly (chart `appVersion` may lag) | `helm repo add superset https://apache.github.io/superset && helm search repo superset/superset --versions \| head` |
-| `starrocks` SQLAlchemy dialect (+ MySQL driver) | pinned in `docker/superset/requirements.txt` | `pip index versions starrocks` |
+| Superset | **6.1.0**, `apache/superset:6.1.0@sha256:16b50bbef6648912a79e3293d418fefa743ce555d36c5af6b85d859119ed7f88` | `docker buildx imagetools inspect` |
+| Superset Helm chart | **0.22.8** (appVersion 6.1.0; 0.22.7 / 0.22.4 also 6.1.0); download + checksum at 5.3 (as the other charts), `image.tag` + digest set explicitly | `helm search repo superset/superset --versions` |
+| `starrocks` SQLAlchemy dialect | **1.3.4** (2026-08-01, Python ≥ 3.10): requires `sqlalchemy>=1.4`, `pymysql>=1.1.0`, `alembic>=1.14.0`, `lark>=1.3.1`, `asyncmy2>=0.2.20` | PyPI `requires_dist` |
+| `psycopg2-binary` | **2.9.13** (metadata DB in our Postgres) | `pip index versions` |
+| Install rule (D26) | the two packages are installed with Superset's own installed versions as constraints; CI `pip check` + import test; a conflict fails the build | — |
 
-## 2. RAM budget (Allocatable 7,268 Mi)
+## 2. RAM budget (Allocatable 7,268 Mi, measured values)
 
 | Pod | Request | Limit | Note |
 |---|---|---|---|
-| Superset web | 1 Gi | 1.5 Gi | Gunicorn 2 workers; Redis, Celery, Postgres subchart **off** |
-| Superset init / import Jobs | 512 Mi | 1 Gi | run, then exit |
-| StarRocks FE + BE | 2.5 Gi | 3.5 Gi | Task 4 D13 |
+| Superset web | 1 Gi | 1.5 Gi | Gunicorn 2 workers; Redis, Celery, Postgres subcharts **off** (D24); measure at 5.3 |
+| Superset init / db-init Jobs | 256–512 Mi | 1 Gi | run, then exit |
+| StarRocks FE + BE + operator | 2,176 Mi | 3,840 Mi | Task 4 D15, measured |
 
 | Mode | Running | Requests | Fits? |
 |---|---|---|---|
-| **serving** (demo) | lake, StarRocks, Superset; Airflow 0, Trino 0, no Spark | 4,036 − 2,048 (Airflow) + 2,688 + 1,024 ≈ **5,700** | ✅ |
-| serving + Airflow | | ≈ 7,750 | ❌ |
+| demo-task4 (measured 11-12) | lake, Airflow api-server, History, StarRocks; scheduler 0 | **5,092 Mi (70 %)** | ✅ |
+| **serving = demo-task5** (D22) | demo-task4 + Superset | ≈ **6,116 Mi (84 %)** | ✅ (≈ 1.1 Gi left; Jobs run one at a time) |
+| serving + scheduler/dag-processor/triggerer | | ≈ 7,236 Mi | ❌ too tight (real usage above requests, Task 4 §4) |
 
-So `make mode-serving` scales the Airflow deployments (api-server, scheduler, dag-processor, triggerer) to 0, Trino to 0, StarRocks + Superset to 1. `make mode-pipeline` does the reverse. Airflow scaled to 0 loses nothing (state in Postgres, logs in MinIO); scheduled runs missed while down are caught up per the DAG's `catchup` setting, so pause DAGs before a long demo if that is not wanted.
+After every `make k8s-up` rerun the profile: `airflow-install` resets the scheduler replicas (seen 11-12).
 
 ## 3. Disk budget
 

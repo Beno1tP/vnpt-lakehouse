@@ -10,7 +10,7 @@ Plan: `03_plan.md` (review of the input plan in §R). Versions/RAM/disk: `02_con
 |---|---|
 | Web app (Flask + React, Gunicorn) | UI, REST API, SQL Lab, chart rendering; stateless, scale by replicas |
 | **Metadata DB** | Postgres: users, roles, database connections, datasets, charts, dashboards (our `lake/postgres`, DB `superset`) |
-| Database connection | A **SQLAlchemy URI** + a Python driver. StarRocks: `starrocks://superset_ro:<pwd>@<fe-service>.starrocks.svc.cluster.local:9030/default_catalog.gold` (package `starrocks`, which uses a MySQL driver underneath) |
+| Database connection | A **SQLAlchemy URI** + a Python driver. StarRocks: `starrocks://bi_ro:<pwd>@<fe-service>.starrocks.svc.cluster.local:9030/default_catalog.gold` (package `starrocks`, which uses a MySQL driver underneath) |
 | Engine spec | Superset's per-database adapter (time grains, quoting); StarRocks has its own spec, so `event_date` time grains work |
 | Dataset | A physical table or a SQL query (virtual dataset) + **metrics** (`COUNT(*)`, `BITMAP_UNION_COUNT(users)`) and column settings |
 | Chart → Dashboard | Chart = dataset + visualization; dashboard = charts + **native filters** + layout |
@@ -44,7 +44,7 @@ The official image is "lean" (few drivers). Thin image built **in CI → GHCR** 
 | UC7 | users in the window vs the previous window | `gold_uc7` (bitmap) | Big Number with comparison | previous window empty → NULL |
 | UC8 | distinct users (confirm breakdown) | `gold_uc8` (bitmap) | bar/line of `BITMAP_UNION_COUNT` | never SUM daily distinct counts |
 
-**The filter:** one dashboard native filter on `traffic_class` (Task 4 D18: `real` / `home` / `internal`), default = `real`. It works only because every `gold_uc*` table carries `traffic_class`. Show both states in the demo: the ~97.8 % `/home` share of client messages is the key data finding.
+**The filter:** one dashboard native filter on `traffic_class` (Task 4 D20: `real` / `home` / `internal` / `unmatched`; UC7–8 use `user_class`, D25), default = `real`. It works only because every `gold_uc*` table carries `traffic_class`. Show both states in the demo: the ~97.8 % `/home` share of client messages is the key data finding.
 
 Bitmap metrics through a filter: the dataset metric `BITMAP_UNION_COUNT(users)` re-merges the bitmaps of the selected rows, so distinct users stay exact for any date range and filter value.
 
