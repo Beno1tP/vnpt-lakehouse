@@ -4,6 +4,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - superset.yaml
+  - superset-init-job.yaml
 images:                                  # keep equal to SUPERSET_IMAGE_REF in infra/k8s/images.env (unit test)
   - name: ghcr.io/beno1tp/vnpt-lake-superset
     digest: sha256:a0307416f2641b2394a095901e28e00e5e9659ad222ebf4f07298ef0de04946b

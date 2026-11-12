@@ -241,12 +241,30 @@ starrocks-ready: ## Task 4: wait for the CURRENT FE/BE revision (rollout status,
 	  for i in $$(seq 1 36); do { sed -n 's/^password=//p' infra/k8s/secrets/starrocks-root.env; echo "SELECT count(*) FROM TABLE(generate_series(1, 10))"; } | $(SR_SQL) >/dev/null 2>&1 && \
 	    { echo "starrocks-ready: FE + BE alive and a BE query runs (E76: past the blacklist window)"; exit 0; }; sleep 5; done; \
 	  echo "starrocks-ready: no query reached the BE after 3 min (make starrocks-sql SQL='SHOW BACKENDS')"; exit 1
+superset-up:   ## Task 5: Superset web -> 1 (init container migrates), then Job superset-init (admin from the Secret, D21). Needs the scheduler at 0 (D22: make demo-task5)
+	@r=$$(kubectl -n airflow get deploy/airflow-scheduler -o jsonpath='{.spec.replicas}'); test "$$r" = 0 || \
+	  { echo "refusing: Airflow scheduler is running; use make demo-task5 (D22: Superset + scheduler do not fit)"; exit 1; }
+	kubectl -n superset delete job superset-init --ignore-not-found --wait=true
+	kubectl apply -k infra/k8s/superset
+	kubectl -n superset rollout status deploy/superset --timeout=900s
+	@for i in $$(seq 1 120); do s=$$(kubectl -n superset get job superset-init -o jsonpath='{.status.succeeded}{.status.failed}'); \
+	  [ -n "$$s" ] && break; sleep 5; done; kubectl -n superset logs job/superset-init | tail -4; \
+	  test "$$(kubectl -n superset get job superset-init -o jsonpath='{.status.succeeded}')" = 1
+superset-down: ## Task 5: Superset web -> 0 (metadata stays in Postgres)
+	-kubectl -n superset scale deploy/superset --replicas=0
+superset-ui:   ## Task 5: Superset on http://localhost:8088 (user admin, password = SUPERSET_ADMIN_PASSWORD in secrets.env); Ctrl+C to stop
+	kubectl -n superset port-forward svc/superset 8088:8088
+demo-task5:    ## Demo profile (Task 5, D22): demo-task4 (view-only Airflow, StarRocks up) + Superset up (~6.1 Gi requests)
+	$(MAKE) --no-print-directory demo-task4
+	$(MAKE) --no-print-directory superset-up
+	@echo "demo-task5: + Superset. UI: make superset-ui. Back to building: make mode-pipeline"
 mode-gold:     ## Task 4 (D15): gold mode. Refuses while a run is active; Trino + History Server -> 0; StarRocks -> 1 (Airflow stays up; Spark cannot start)
 	@! kubectl -n spark-jobs get sparkapplications --no-headers -o custom-columns=S:.status.applicationState.state | grep -vE '^(COMPLETED|FAILED)$$' | grep -q . || \
 	  { echo "refusing: a SparkApplication is not finished; wait for it"; exit 1; }
 	@! $(AF) airflow dags list-runs chatbot_bronze -o plain 2>/dev/null | grep -qE " (running|queued) " || { echo "refusing: a chatbot_bronze run is running or queued; wait for it (E64)"; exit 1; }
 	-kubectl -n trino scale deploy/trino-coordinator --replicas=0
 	kubectl -n spark-jobs scale deploy/spark-history --replicas=0
+	$(MAKE) --no-print-directory superset-down
 	$(MAKE) --no-print-directory starrocks-up
 mode-query:    ## Task 3 (D12): query mode. Refuses while a run is active; Airflow scheduler/dag-processor/triggerer + History Server -> 0; Trino -> 1
 	@! kubectl -n spark-jobs get sparkapplications --no-headers -o custom-columns=S:.status.applicationState.state | grep -vE '^(COMPLETED|FAILED)$$' | grep -q . || \
@@ -254,12 +272,14 @@ mode-query:    ## Task 3 (D12): query mode. Refuses while a run is active; Airfl
 	@! $(AF) airflow dags list-runs chatbot_bronze -o plain 2>/dev/null | grep -qE " (running|queued) " || { echo "refusing: a chatbot_bronze run is running or queued; wait for it (E64)"; exit 1; }
 	kubectl -n airflow scale $(DEMO_STOP) --replicas=0
 	kubectl -n spark-jobs scale deploy/spark-history --replicas=0
+	$(MAKE) --no-print-directory superset-down
 	$(MAKE) --no-print-directory starrocks-down
 	@if kubectl -n trino get deploy/trino-coordinator >/dev/null 2>&1; then \
 	  kubectl -n trino scale deploy/trino-coordinator --replicas=1 && kubectl -n trino rollout status deploy/trino-coordinator --timeout=600s; \
 	else echo "Trino not installed yet: make trino-install"; fi
 mode-pipeline: ## Task 3 (D12): pipeline mode. Trino + StarRocks -> 0, then Airflow scheduler/dag-processor/triggerer -> 1 (Spark can run)
 	-kubectl -n trino scale deploy/trino-coordinator --replicas=0
+	$(MAKE) --no-print-directory superset-down
 	$(MAKE) --no-print-directory starrocks-down
 	$(MAKE) --no-print-directory demo-pipeline
 airflow-install: airflow-chart deploy-guard ## Task 2: helm upgrade --install Airflow 3.3.2 (chart 1.22.0); image = AIRFLOW_IMAGE_REF in images.env

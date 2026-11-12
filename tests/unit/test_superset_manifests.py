@@ -60,8 +60,24 @@ def test_web_pod_rules():
     assert pod["securityContext"]["runAsNonRoot"] is True and pod["securityContext"]["runAsUser"] != 0
     assert pod["automountServiceAccountToken"] is False
     assert pod["imagePullSecrets"] == [{"name": "ghcr-pull"}]
+    assert [c["name"] for c in pod["initContainers"]] == ["wait-for-postgres", "migrate"]
+    assert deps[0]["spec"]["strategy"]["type"] == "Recreate"  # never two migrations at once
     for c in pod["initContainers"] + pod["containers"]:
         assert c["image"] == "ghcr.io/beno1tp/vnpt-lake-superset"  # digest only via kustomize images:
         assert {"secretRef": {"name": "superset-env"}} in c["envFrom"]  # never the init credentials
         assert "limits" in c["resources"] and "memory" in c["resources"]["limits"]
     assert "superset-init-credentials" not in (DIR / "superset.yaml").read_text()
+
+
+def test_init_job_only_place_with_admin_password():
+    job = yaml.safe_load((DIR / "superset-init-job.yaml").read_text())
+    kust = yaml.safe_load((DIR / "kustomization.yaml").read_text())
+    assert "superset-init-job.yaml" in kust["resources"]
+    pod = job["spec"]["template"]["spec"]
+    c = pod["containers"][0]
+    assert {"secretRef": {"name": "superset-init-credentials"}} in c["envFrom"]
+    assert pod["automountServiceAccountToken"] is False and pod["securityContext"]["runAsNonRoot"] is True
+    script = c["args"][0]
+    assert "check_password_hash" in script and "reset-password" in script  # verifies, and enforces the Secret
+    assert "grep -vi password" in script
+    assert job["spec"]["ttlSecondsAfterFinished"] > 0 and job["spec"]["backoffLimit"] <= 1

@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-11-12 — 5.3a merged (PR #118), 5.3b prepared: superset-up
+CI evidence (Bee): `uid=1000(superset)`, `config loaded, db h:5432/d` (our file applied inside the image), Superset kustomization = 1 ConfigMap + 1 Deployment + 1 Service, image `@sha256:a0307416f264…`.
+Prepared (Claude, branch `task5/5.3b-up`): web init container `migrate` (`superset db upgrade; superset init`; 1 replica + Recreate = no concurrent migrations); Job `superset-init` in the Superset kustomization (waits for web `/health`, `fab create-admin` + `fab reset-password` from Secret superset-init-credentials, then verifies role Admin + `check_password_hash`; output filtered for "password"); Make `superset-up` (refuses unless the scheduler is at 0, D22; delete Job → `apply -k` → rollout → Job result), `superset-down`, `superset-ui`, `demo-task5`; `mode-gold`/`mode-query`/`mode-pipeline` scale Superset to 0. Predicted (my local run): ruff, pytest (42), `bash -n` of the Job script, fake-SHELL expansion of the 6 targets + `bash -n` pass.
+
 ### 2026-11-12 — 5.3a rework: own manifests (D27)
 CI on PR #118 (Bee): chart deprecated + worker always rendered + init script with admin defaults (E80). Read: Superset docs (Helm chart deprecated, use the operator), operator releases v0.1.0 (06-13) … v0.3.0 (09-30). Decided (Bee): **own manifests** (D27).
 Prepared (Claude, same branch): `infra/k8s/superset/{superset.yaml, superset_config.py, kustomization.yaml}` (Deployment Recreate, Service :8088, init container wait-for-postgres with our image, non-root 1000, no SA token, probes `/health`, 1 Gi / 1.5 Gi; config: SECRET_KEY + DB URI from env with URL-quoting, small pool, SQL Lab limits, no Redis/Celery); chart values, Make targets and the render checker removed; `tests/unit/test_superset_manifests.py` (5 tests); CI: kustomize render of `infra/k8s/superset` with digest check, config loaded inside the image (`from superset import config`). Predicted (my local run): ruff, pytest, YAML pass; kustomize render and config load run first in CI.
