@@ -44,3 +44,22 @@ Source of truth: `dbt/seeds/expected_gold_uc*.csv` from `tools/expected_gold.py`
 ## 6. Grants survive rebuilds (4.5 design check, 2026-11-11)
 
 `make dbt CMD="run --select gold_uc5"` (drop + recreate), then `SHOW GRANTS FOR 'bi_ro'@'%'` → `GRANT SELECT ON ALL TABLES IN DATABASE gold` (stored as a wildcard) and `EXECUTE AS 'bi_ro'@'%'` → `SELECT count(*) FROM gold.gold_uc5` = 36: no grant step after dbt runs. dbt-starrocks 1.12.2 has no grant macros (repository tree read 11-11), so dbt's `grants:` config would not apply anyway.
+
+## 7. Tag survives maintenance: drill on a scratch table (option C, 2026-11-12, pipeline mode)
+
+Real tables untouched (Task 1 docs time-travel to untagged Bronze snapshots). `lake.scratch.tag_drill`: 3 inserts =
+snapshots `4173304594530501193` (1 row), **`941002814889062600`** (2 rows, tag `drill_v1`, RETAIN 1 DAYS),
+`5626552706193522083` (3 rows, main). `make maintenance TABLES=scratch.tag_drill SNAP_HOURS=0 RETAIN=1` (only that table
+in the rendered arguments):
+
+| Step | Result |
+|---|---|
+| expire_snapshots | `deleted_manifest_lists_count 1` (snapshot 1), `deleted_data_files_count 0` (its file is still referenced) |
+| rewrite_data_files / rewrite_manifests | 3 files → 1, manifests 4 → 1: two new snapshots (`7189416442594192027`, `7658167447880813539` = main) |
+| after | snapshots 4 = {tagged 9410…2600, 5626…2083, 7189…2027, 7658…3539}; rows 3 = before; oldest snapshot time travel: `gone (IllegalArgumentException)` |
+| `scratch-check` | `drill_v1` → still `941002814889062600`, rows at tag 2, now 3: **PASS** |
+| `scratch-drop` | table dropped with PURGE, namespace removed |
+
+Theory: expire_snapshots removes by age and `retain_last` but never a snapshot a ref (tag/branch) points to while the
+ref's retention lasts (365 d on the real `task*_v1` tags): the weekly `lake_maintenance` keeps every freeze tag.
+Claude's prediction of 3 snapshots after was wrong (rewrite_manifests commits a snapshot too).

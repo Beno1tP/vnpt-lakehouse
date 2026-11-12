@@ -11,4 +11,4 @@ select
     final_intent,
     step,
     has_prediction
-from {{ source('silver', 'user_message') }}
+from {{ source('silver', 'user_message') }}{{ silver_version() }}

@@ -9,4 +9,4 @@ select
     input_channel,
     event_ts,
     event_date
-from {{ source('silver', 'chat_message') }}
+from {{ source('silver', 'chat_message') }}{{ silver_version() }}

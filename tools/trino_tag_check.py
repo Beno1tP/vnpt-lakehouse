@@ -21,16 +21,17 @@ EXPECTED_KEY = {  # keep equal to jobs/catalog_tool.py (unit-tested)
 
 def main() -> None:
     tag = sys.argv[1]
+    engine = sys.argv[2] if len(sys.argv) > 2 else "Trino"  # Task 4: the same check through StarRocks
     rows = {r[0].strip(): int(r[1]) for r in csv.reader(sys.stdin) if len(r) == 2}
     if not rows:
-        sys.exit("[tag-check] no rows from Trino (is the tag missing? query mode?)")
+        sys.exit(f"[tag-check] no rows from {engine} (is the tag missing? right mode?)")
     failed = 0
     for table, got in sorted(rows.items()):
         file, key = EXPECTED_KEY[table]
         want = json.loads((EXPECTED_DIR / file).read_text())["totals"][key]
         ok = got == want
         failed += not ok
-        print(f"[catalog] {'PASS' if ok else 'FAIL'} {table}: tag {tag} rows {got} (expected {want}, read by Trino)")
+        print(f"[catalog] {'PASS' if ok else 'FAIL'} {table}: tag {tag} rows {got} (expected {want}, read by {engine})")
     sys.exit(1 if failed else 0)
 
 

@@ -11,4 +11,4 @@ select
     has_chat_row,
     event_ts,
     event_date
-from {{ source('silver', 'nlu_prediction') }}
+from {{ source('silver', 'nlu_prediction') }}{{ silver_version() }}
