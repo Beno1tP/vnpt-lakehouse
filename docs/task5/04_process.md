@@ -14,6 +14,10 @@ Time spent:
 
 ---
 
+### 2026-11-12 — E82 + 5.4 done, 5.5 prepared: datasets + metrics as code
+E82 (Bee): PR #122 merged; Job → `result typing ok: get_datatype(253) = VAR_STRING`, connection/query/read-only ok. SQL Lab `gold_uc5` by traffic_class: home 10,378/0, internal 2/14, real 92/127, unmatched 116/0 → 10,588 + 141 = 10,729 ✅; `CREATE TABLE x` → Superset "does not allow for DDL/DML" (allow_dml off, the barrier before StarRocks' Access denied). Insight: not-understood rate 1.3 % overall vs **58 % on `real`** traffic (why D25 filters default to real).
+Prepared (Claude, branch `task5/5.5-datasets`): `infra/k8s/superset/datasets.yaml` (5 datasets, 14 metrics, 20 checks = Task 4 gold-check / metrics.md values), loader `superset_datasets.py` (fixed uuid5 per dataset for re-import, columns synced and compared with the spec, `event_date` time column, metrics replaced by the spec, every check run in StarRocks), ConfigMap `superset-init-files`, Job step; tests: spec valid, **spec columns = dbt model output columns** (the `message_cnt` guess fails here), unknown-column detection, identifier parsing, no SUM of distincts, stable uuid, exact counts. Predicted (my local run): ruff, pytest (52), YAML, `bash -n`, py_compile.
+
 ### 2026-11-12 — 5.4 done, E82 (MySQLdb) prepared
 5.4 (Bee): PR #121 merged; `superset-up` → `connection ok: StarRocks Gold -> starrocks://bi_ro:XXXXXXXXXX@…`, `query ok as 'bi_ro'@'%' | fct_user_message = 10613`, `read-only ok: CREATE TABLE -> Access denied`. SQL Lab: a query on a wrong column (`message_cnt`: Claude's guess, the real columns are `understood_cnt` / `not_understood_cnt`) returned StarRocks' analysis error; the corrected query → `No module named 'MySQLdb'` (E82). Lesson for 5.5: dataset metrics generated from / tested against the dbt model columns.
 Prepared (Claude, branch `task5/e82-mysqldb-shim`): MySQLdb shim in `superset_config.py`, unit test, CI check of `get_datatype` inside the image.

@@ -119,7 +119,7 @@ jobs:
           tags: vnpt-lake-superset:ci
       - name: Dialect registered, drivers import, Superset's own pins unchanged, CLI runs
         run: |
-          docker run --rm vnpt-lake-superset:ci python -c "import sqlalchemy as sa, starrocks, psycopg2; e = sa.create_engine('starrocks://u:p@h:9030/default_catalog.gold'); print('dialect', e.dialect.name, '| sqlalchemy', sa.__version__, '| psycopg2', psycopg2.__version__)"
+          docker run --rm vnpt-lake-superset:ci python -c "import sqlalchemy as sa, starrocks, psycopg2, yaml; e = sa.create_engine('starrocks://u:p@h:9030/default_catalog.gold'); print('dialect', e.dialect.name, '| sqlalchemy', sa.__version__, '| psycopg2', psycopg2.__version__)"
           docker run --rm -e UV_NO_CACHE=1 apache/superset:6.1.0@sha256:16b50bbef6648912a79e3293d418fefa743ce555d36c5af6b85d859119ed7f88 sh -c ". /app/.venv/bin/activate && uv pip freeze --exclude-editable" | sort > base.txt
           docker run --rm -e UV_NO_CACHE=1 vnpt-lake-superset:ci sh -c ". /app/.venv/bin/activate && uv pip freeze --exclude-editable" | sort > ours.txt
           for f in base.txt ours.txt; do n=$(wc -l < $f); echo "$f: $n packages"; [ "$n" -gt 50 ] || { echo "FAIL: the freeze for $f returned too few packages (E79: check the command, not a package change)"; exit 1; }; done

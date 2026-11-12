@@ -12,3 +12,6 @@ configMapGenerator:                      # hash suffix: a config change rolls th
   - name: superset-config
     namespace: superset
     files: [superset_config.py]
+  - name: superset-init-files           # Job superset-init: dataset spec + loader (5.5)
+    namespace: superset
+    files: [datasets.yaml, superset_datasets.py]

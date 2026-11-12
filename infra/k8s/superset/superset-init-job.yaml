@@ -3,6 +3,7 @@
 # then verifies role + password itself. Idempotent; make superset-up deletes and re-applies it (a Job is immutable).
 # 5.4: registers the StarRocks connection "StarRocks Gold" as bi_ro (read-only flags) and proves it through the
 # stored connection: count of gold.fct_user_message = 10,613 (Task 4 gold-check) and CREATE TABLE -> Access denied.
+# 5.5: then loads the datasets + metrics (datasets.yaml) and checks every metric in StarRocks.
 # Never prints a password (create/reset output is filtered; URIs are printed masked).
 apiVersion: batch/v1
 kind: Job
@@ -93,9 +94,14 @@ spec:
                       else:
                           raise SystemExit("bi_ro could CREATE TABLE in gold: grants too wide")
               PY
+              # 5.5: datasets + metrics from datasets.yaml, each metric checked in StarRocks against gold-check values
+              python /init/superset_datasets.py /init/datasets.yaml
           resources: { requests: { memory: 512Mi, cpu: 100m }, limits: { memory: 1Gi } }
           volumeMounts:
             - { name: config, mountPath: /app/pythonpath, readOnly: true }
+            - { name: init-files, mountPath: /init, readOnly: true }
       volumes:
         - name: config
           configMap: { name: superset-config }
+        - name: init-files
+          configMap: { name: superset-init-files }

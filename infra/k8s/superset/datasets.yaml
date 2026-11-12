@@ -1,0 +1,94 @@
+# Task 5 step 5.5: Superset datasets (one per Gold mart) and their metrics, as code. Loaded by the Job superset-init
+# (superset_datasets.py; both files reach the Job through ConfigMap superset-init-files: kustomize only reads files
+# under its own directory). Columns = the dbt model's output columns (docs/metrics.md, dbt/models/gold):
+# CI fails if a metric uses a column that is not listed or a listed column is not in the model's SQL; the Job fails
+# if StarRocks reports other columns, or if a check below differs from the Task 4 gold-check value.
+# Rules (01_knowledge.md A2, D25): shares and rates are ratios of sums; distinct users over a range = bitmap union,
+# never a SUM of daily distinct counts; UC7 values are cumulative per day: use them per day, never summed over days.
+database: StarRocks Gold
+schema: gold
+catalog: default_catalog
+datasets:
+  - table: gold_uc4
+    description: "UC4 scenarios: predicted messages per day x scenario (step) x traffic_class"
+    columns: [event_date, step, scenario, traffic_class, message_cnt]
+    metrics:
+      - { name: messages, label: Messages, expression: "SUM(message_cnt)", format: ",d" }
+    checks:
+      - { metric: messages, expect: 10729 }
+      - { metric: messages, where: "step = 406665", expect: 10494 }
+      - { metric: messages, where: "step = 406666", expect: 235 }
+  - table: gold_uc5
+    description: "UC5 understood / not understood predictions per day x traffic_class"
+    columns: [event_date, traffic_class, understood_cnt, not_understood_cnt]
+    metrics:
+      - { name: understood, label: Understood, expression: "SUM(understood_cnt)", format: ",d" }
+      - { name: not_understood, label: Not understood, expression: "SUM(not_understood_cnt)", format: ",d" }
+      - { name: predictions, label: Predictions, expression: "SUM(understood_cnt + not_understood_cnt)", format: ",d" }
+      - name: not_understood_rate
+        label: Not-understood rate
+        expression: "SUM(not_understood_cnt) * 1.0 / NULLIF(SUM(understood_cnt + not_understood_cnt), 0)"
+        format: ".1%"
+        description: "ratio of sums over the selected rows (never an average of daily rates)"
+    checks:
+      - { metric: understood, expect: 10588 }
+      - { metric: not_understood, expect: 141 }
+      - { metric: predictions, expect: 10729 }
+      - { metric: not_understood_rate, expect: 0.013142 }
+      - { metric: not_understood_rate, where: "traffic_class = 'real'", expect: 0.579909 }
+  - table: gold_uc6
+    description: "UC6 intents: predicted messages per day x final_intent x intent_group x traffic_class"
+    columns: [event_date, final_intent, intent_group, traffic_class, message_cnt]
+    metrics:
+      - { name: messages, label: Messages, expression: "SUM(message_cnt)", format: ",d" }
+    checks:
+      - { metric: messages, expect: 10729 }
+      - { metric: messages, where: "final_intent = 'xin_chao'", expect: 10588 }
+      - { metric: messages, where: "final_intent = 'fallback'", expect: 107 }
+      - { metric: messages, where: "final_intent = 'bot_khong_hieu'", expect: 34 }
+  - table: gold_uc7
+    description: "UC7 total users up to each day x user_class (cumulative: read per day, never sum over days)"
+    columns: [event_date, user_class, cumulative_users, users_30d_before, change_abs, change_pct]
+    metrics:
+      - name: total_users
+        label: Total users
+        expression: "SUM(cumulative_users)"
+        format: ",d"
+        description: "per day only (time grain = day, or one day selected); sums the user_class values of that day"
+      - { name: users_30d_before, label: Users 30 days before, expression: "SUM(users_30d_before)", format: ",d" }
+      - { name: change_abs, label: Change vs 30 days before, expression: "SUM(change_abs)", format: "+,d" }
+      - name: change_pct
+        label: Change % vs 30 days before
+        expression: "100.0 * (SUM(cumulative_users) - SUM(users_30d_before)) / NULLIF(SUM(users_30d_before), 0)"
+        format: ".1f"
+        description: "NULL while there are no users 30 days earlier (M2: the lake starts 2024-07-02)"
+    checks:
+      - { metric: total_users, where: "event_date = '2024-07-25'", expect: 89 }
+      - { metric: total_users, where: "event_date = '2024-07-25' AND user_class = 'internal'", expect: 2 }
+      - { metric: change_abs, where: "event_date = '2024-07-25'", expect: 89 }
+      - { metric: change_pct, where: "event_date = '2024-07-25'", expect: null }
+  - table: gold_uc8
+    description: "UC8 new and active users per calendar day x user_class (+ BITMAP users for exact distinct counts)"
+    columns: [event_date, user_class, new_users, active_users, users]
+    metrics:
+      - { name: new_users, label: New users, expression: "SUM(new_users)", format: ",d" }
+      - name: active_users
+        label: Active users (distinct)
+        expression: "BITMAP_UNION_COUNT(users)"
+        format: ",d"
+        description: "exact distinct users over the selected days (bitmap union); per day = that day's active users"
+      - name: avg_new_per_day
+        label: Avg new users / day
+        expression: "SUM(new_users) * 1.0 / COUNT(DISTINCT event_date)"
+        format: ".2f"
+        description: "over calendar days incl. days without messages (M3)"
+      - name: avg_active_per_day
+        label: Avg active users / day
+        expression: "SUM(active_users) * 1.0 / COUNT(DISTINCT event_date)"
+        format: ".2f"
+        description: "average of the daily active counts over calendar days (M3)"
+    checks:
+      - { metric: new_users, expect: 89 }
+      - { metric: active_users, expect: 89 }
+      - { metric: avg_new_per_day, expect: 3.708333 }
+      - { metric: avg_active_per_day, expect: 4.666667 }
