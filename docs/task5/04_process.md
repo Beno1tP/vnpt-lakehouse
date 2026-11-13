@@ -14,6 +14,9 @@ Time spent:
 
 ---
 
+### 2026-11-13 09:45 ICT (02:45 UTC) — restart after the freeze
+Bee: `minikube start` → `make k8s-up` (Airflow rev 29) → `make demo-task5` → `demo-check DEMO_TASK=5` **ALL PASS**. Seen: `airflow-run-airflow-migrations` Pending ~70 s, then Complete (k8s-up brings the scheduler back while StarRocks + Superset are up: ≈ 7.2 Gi of 7,268 Mi). Not an error (it waited, nothing failed); runbook order changed to `mode-pipeline` before `k8s-up` (07_demo.md, README).
+
 ### 2026-11-13 — freeze: demo-check ALL PASS, docs, E87
 Bee (PR #132): `demo-task5` → `demo-check DEMO_TASK=5` **ALL PASS** (8 ready incl. superset, 4 × http 200 incl. superset /health, 5 × task4_v1 via StarRocks, 22 × gold, superset-check PASS with the real scopes, 2 × paused); requests 6,116 Mi (84 %), limits 9,948 Mi (136 %); `evidence TASK=5` → `task5-20261112/` (80 KB; Superset 212 Mi; assets check PASS; git `7efc186`). `superset-objects.txt` missing (E87).
 Prepared (Claude, branch `task5/5.8e-freeze-docs`): E87 fix; `README.md`, `FREEZE.md`, `06_validation.md`, `07_demo.md`; decisions D21–D26 marked done; `progress.md` §8d; CLAUDE.md Task 5 section. Then the git tag `task5-v1` on the merge commit.

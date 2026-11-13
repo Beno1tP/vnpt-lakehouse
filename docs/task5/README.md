@@ -32,6 +32,7 @@ Modes                demo-task5 = demo-task4 (scheduler 0, asset DAGs paused, St
 ## Run it
 
 ```bash
+make mode-pipeline               # after a restart: engines to 0 first, so k8s-up (scheduler back to 1) fits in RAM
 make k8s-up                      # namespace, Secrets, metadata DB (Job superset-db-init) — then re-run the profile:
 make demo-task5                  # demo-task4 + superset-up (migrate, Job: admin, import, connection, datasets, checks)
 make superset-ui                 # http://localhost:8088 (admin / SUPERSET_ADMIN_PASSWORD in secrets.env)
