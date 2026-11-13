@@ -9,8 +9,9 @@ Pending ~70 s for memory. Scale the engines down first:
 
 ```bash
 minikube start && make mode-pipeline && make k8s-up && make demo-task5 && make demo-check DEMO_TASK=5
-``` Fallback: the PDFs in
-`~/data/vnpt-lab/evidence/task5/`.
+```
+
+Fallback: the PDFs in `~/data/vnpt-lab/evidence/task5/`.
 
 | # | Minutes | Show | Say |
 |---|---|---|---|
