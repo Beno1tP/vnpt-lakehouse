@@ -14,6 +14,9 @@ Time spent:
 
 ---
 
+### 2026-11-13 — disk check and compaction (E88, E89)
+Measured (Bee): C: 38 → 37 GB free; Ubuntu 11 GB used; Docker images 7.6 GB (1.7 GB "reclaimable" = Task 1 Compose images: kept), volumes 16.5 GB, build cache 0.9 GB; node /var 25 GB; docker_data.vhdx 33.37 GB, ext4.vhdx 13.03 GB; %TEMP% 3.25 GB. Freed: pip cache (535 MB); node images kubernetesui/dashboard, metrics-scraper, kindnetd v20250512 (E88 on the way: kube-apiserver image deleted by a bad pipe, restored and verified). Windows Storage → temporary files; `fstrim`, `minikube stop`, Docker Desktop quit, `wsl --shutdown`, diskpart compact of both vhdx (all "successfully") → **C: 55 GB free (89 %)**. Restart: `mode-pipeline` failed silently in the unpause loop (E89); continue with `k8s-up` → `demo-task5` → `demo-check`.
+
 ### 2026-11-13 09:45 ICT (02:45 UTC) — restart after the freeze
 Bee: `minikube start` → `make k8s-up` (Airflow rev 29) → `make demo-task5` → `demo-check DEMO_TASK=5` **ALL PASS**. Seen: `airflow-run-airflow-migrations` Pending ~70 s, then Complete (k8s-up brings the scheduler back while StarRocks + Superset are up: ≈ 7.2 Gi of 7,268 Mi). Not an error (it waited, nothing failed); runbook order changed to `mode-pipeline` before `k8s-up` (07_demo.md, README).
 

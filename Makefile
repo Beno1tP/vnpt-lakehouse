@@ -366,7 +366,9 @@ demo-task2:    ## Demo profile (B3): view-only. Scheduler, dag-processor, trigge
 	  { echo "refusing: a SparkApplication is not finished (state other than COMPLETED/FAILED); wait for it"; exit 1; }   # E61: finished apps stay until their TTL
 	@! $(AF) airflow dags list-runs chatbot_bronze -o plain 2>/dev/null | grep -qE " (running|queued) " || { echo "refusing: a chatbot_bronze run is running or queued; wait for it (E64)"; exit 1; }
 	kubectl -n airflow scale $(DEMO_STOP) --replicas=0
-	@for d in $(ASSET_DAGS); do $(AF) airflow dags pause $$d >/dev/null 2>&1 && echo "paused $$d (asset-triggered)"; done
+	kubectl -n airflow rollout status deploy/airflow-api-server --timeout=600s   # E89: $(AF) execs into it
+	@for d in $(ASSET_DAGS); do if out=$$($(AF) airflow dags pause $$d 2>&1); then echo "paused $$d (asset-triggered)"; \
+	  else echo "FAIL pause $$d: $$(echo "$$out" | tail -1)"; exit 1; fi; done
 	kubectl -n spark-jobs scale deploy/spark-history --replicas=1
 	kubectl -n spark-jobs rollout status deploy/spark-history --timeout=600s
 	kubectl -n airflow rollout status deploy/airflow-api-server --timeout=600s
@@ -383,7 +385,9 @@ demo-task4:    ## Demo profile (Task 4): view-only like demo-task2 (asset DAGs p
 	@echo "demo-task4: + StarRocks. SQL: make starrocks-sql SQL=...; lineage: EVIDENCE dbt-docs folder. Back to building: make mode-pipeline"
 demo-pipeline: ## Demo profile (B3): building mode. Airflow scheduler, dag-processor, triggerer -> 1; History Server -> 0 (frees 512 Mi for Spark); asset DAGs unpaused
 	kubectl -n airflow scale $(DEMO_STOP) --replicas=1
-	@for d in $(ASSET_DAGS); do $(AF) airflow dags unpause $$d >/dev/null 2>&1 && echo "unpaused $$d"; done
+	kubectl -n airflow rollout status deploy/airflow-api-server --timeout=600s   # E89: $(AF) execs into it
+	@for d in $(ASSET_DAGS); do if out=$$($(AF) airflow dags unpause $$d 2>&1); then echo "unpaused $$d"; \
+	  else echo "FAIL unpause $$d: $$(echo "$$out" | tail -1)"; exit 1; fi; done
 	kubectl -n spark-jobs scale deploy/spark-history --replicas=0
 	for d in $(DEMO_STOP); do kubectl -n airflow rollout status $$d --timeout=600s; done
 demo-check:    ## Demo: before presenting. Workloads ready, UIs answer (temporary port-forwards), freeze tag of DEMO_TASK (2: Spark check; 3: + Trino; 4: StarRocks + gold-check; 5: + Superset + superset-check). Fails loudly
