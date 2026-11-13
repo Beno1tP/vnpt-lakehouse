@@ -15,3 +15,8 @@ infra/k8s/secrets/
 !infra/k8s/images.env
 # Task 5 5.8b: assets.zip, built by make superset-assets-zip
 infra/k8s/superset/generated/
+
+# Windows download markers copied into WSL (Zone.Identifier alternate data streams)
+*:Zone.Identifier
+# Learning packs (PDF exports, Fundamentals > the large-file hook limit): kept locally next to the slides, not in Git
+docs/task*/*.pdf

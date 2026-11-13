@@ -43,6 +43,62 @@ Visual: left a Bronze row of strings ("02-JUL-24 03.40.09.895455000 PM", "0.93",
 Speaker notes: Each requirement maps to one mechanism in this deck: type rules, overwrite by day, flags, Trino's catalog, assets, and modes for the RAM limit.
 
 ---
+# Part 0 — Global view (from the Task 3 learning pack, docs/task3/Fundamentals.pdf)
+
+---
+# Slide G1 — Three maps for Task 3
+- **Data flow:** Bronze (chatlog, bot_predict, partition _ingest_date = event day) → silver_transform checks both tables carry the same _batch_id, types and flags the rows, dedups by ID, computes final_intent → three Silver tables partitioned by event_date, overwritePartitions() → validate_silver (28 checks). Trino reads the same Iceberg files: no copy
+- **Orchestration:** daily DAG check_landing → bronze → validate → silver → validate_silver → notify; asset-scheduled trino_reconcile on LAKE_SILVER (since E67: waits for an idle pipeline, verdict decides the run state)
+- **Outside Airflow:** CronJob pg-backup at 06:30 UTC, nudged by make k8s-up (E66)
+- **Modes:** mode-query = scheduler, dag-processor, triggerer and History → 0, Trino → 1 (api-server stays: UI and CLI work); mode-pipeline reverses it; from Task 4.5 trino_reconcile skips itself in gold mode
+
+Visual: three columns: Airflow (chatbot_bronze → asset → trino_reconcile) · Spark apps → HMS → MinIO Iceberg tables · Trino coordinator (single node, 0 ↔ 1, catalog lake read_only, MinIO user trino) with arrows "Thrift 9083", "S3 read 9000", "K8s API + Trino REST 8080".
+
+Speaker notes: Three maps answer three questions: where the data goes, who starts what, and what runs outside Airflow. The highlighted new piece is Trino, as a read-only second engine.
+
+---
+# Slide G2 — Durable state: what Task 3 added
+
+| State | Where | Survives |
+|---|---|---|
+| Silver tables (3) | MinIO lakehouse + HMS pointer | pod restarts; not minikube delete |
+| Iceberg tags task3_v1 (5 tables, 365 days) | inside each table's metadata | snapshot expiry: a tagged snapshot is never expired |
+| Expected numbers (silver_daily.json, silver.json) | baked into the Airflow and spark-job images | rebuilt from the git tag |
+| Spark event logs (195 files) | PVC spark-events (namespace spark-jobs), not MinIO | same failure domain as the lake; evidence copies them out with kubectl cp |
+| Postgres dumps (pg-backup) | MinIO bucket backup | inside Minikube like the lake; the evidence copy takes them out |
+| Evidence copy (120 MB) | ~/data/vnpt-lab/evidence/task3-20261110/ | outside Minikube: survives minikube delete (not the loss of the laptop disk) |
+| Trino | stateless | nothing to back up; only config + Secret |
+
+Speaker notes: For every piece of state, say where it lives and what kills it. The only copy outside the cluster is the evidence folder; everything else shares the laptop disk.
+
+---
+# Slide G3 — Is the Task 3 pipeline standard? Hop by hop (1/2)
+- **The core is standard:** Spark writes Iceberg, Trino reads the same tables through a shared HMS (one copy, two engines); asset-triggered DAGs are the Airflow 3 way to start work when data changes
+- **Lab-specific, and defensible:** (1) scaling Trino 0 ↔ 1 per check: in production Trino runs continuously; here Trino (2 Gi) and a Spark run don't fit together (D12). (2) a hand-written Trino REST client in plugins/lake_reconcile.py instead of the Trino Airflow provider: smaller image, unit-tested
+
+| # | Hop | Connection | Failure handling |
+|---|---|---|---|
+| 1 | silver reads Bronze | Spark → HMS (Thrift 9083) → files from MinIO (9000) | refuses unless both tables carry the same _batch_id (no cross-table transaction) |
+| 2 | silver writes 3 tables | executors write Parquet; driver commits through HMS | three separate commits; overwritePartitions() replaces only event_date = D; refuses rows with another date |
+| 3 | validate_silver → asset event | task success records the event (Task Execution API) | failed or skipped task records nothing → no reconcile run |
+| 4 | asset event → trino_reconcile run | scheduler creates the run from queued events | several updates can share one run; in the 11-10 backfill each day got its own (18 runs, ~2 min apart) |
+| 5 | wait_pipeline_idle (E67) | sensor (reschedule) checks the K8s API for unfinished SparkApplications and the metadata DB for running or queued chatbot_bronze runs | keeps Trino and Spark from sharing RAM, and reconcile off half-updated Silver |
+
+---
+# Slide G4 — Is the Task 3 pipeline standard? Hop by hop (2/2)
+
+| # | Hop | Connection | Failure handling |
+|---|---|---|---|
+| 6 | trino_up / trino_down | task → K8s API (443): scale the trino-coordinator | Role airflow-trino-scaler, only that Deployment; trino_down all_done; since E67 a verdict leaf fails the run, and CI refuses DAGs whose only leaves are all_done |
+| 7 | reconcile → Trino | HTTP to the coordinator REST API (8080) | any mismatch or SQL error fails the task (retries 0) |
+| 8 | Trino → HMS | Trino's own Thrift client (9083); HMS has no authentication | iceberg.security=read_only refuses writes inside Trino, before HMS is touched |
+| 9 | Trino → MinIO | native S3 client (9000), user trino | read-only policy on lakehouse/: second layer |
+| 10 | result vs expected | 191/191 at the freeze, 210/210 after step | three independent computations must agree: pandas, Spark validator, Trino SQL |
+| — | pg-backup (outside Airflow) | CronJob controller | E66: missed slots after sleep; k8s-up nudges it |
+
+Speaker notes: Public builds of the same core exist (Spark + Trino + Iceberg sharing one HMS); the two lab-specific parts are honest consequences of one laptop.
+
+---
 # Part 1 — Knowledge
 
 ---
@@ -118,7 +174,7 @@ Speaker notes: Choosing the write strategy is choosing which failure you accept.
 - Catalog: one properties file per source; names are catalog.schema.table (ours: lake.silver.user_message)
 - Single node (ours): the coordinator also schedules work on itself, 0 workers
 - Failure model: a worker failure fails the query and the client reruns; fault-tolerant execution (retry-policy=TASK + an exchange on S3) is for long ETL, not needed here
-- Memory: query.max-memory-per-node + heap headroom (30 %) must fit inside -Xmx; heap ≈ 70–75 % of the pod limit
+- Memory: query.max-memory-per-node + memory.heap-headroom-per-node (both default 30 % of the heap) must fit inside -Xmx; ours: 600 MB query memory in a 1,536 MB heap inside a 2 Gi pod (heap 75 % of the limit)
 
 | | Trino | Spark |
 |---|---|---|
@@ -163,13 +219,44 @@ Speaker notes: Least privilege is proven by what is denied, not by what works. T
 # Slide 11 — Airflow assets: linking DAGs by data
 - Asset = a named piece of data (ours: lake_silver); a task declares outlets=[asset]; a DAG can be scheduled on assets instead of a clock
 - validate_silver succeeds → an asset event → trino_reconcile is queued, no polling, no cross-DAG sensor
-- trino_reconcile: wait_no_spark (sensor, mode reschedule: holds no worker slot while waiting) → trino_up (scale 0→1) → reconcile (REST API, 191 values) → trino_down (always → 0)
+- trino_reconcile today (dags/trino_reconcile.py): not_gold_mode (short-circuit, added in Task 4) → wait_pipeline_idle (sensor, reschedule mode: no worker slot held; waits until no SparkApplication is unfinished **and** chatbot_bronze has no running or queued run) → trino_up (0→1) → reconcile (REST API; 191 values at the freeze, 210 after Task 4 added step) → trino_down (trigger rule all_done: always back to 0) → **verdict** (leaf: fails the run if reconcile or trino_down failed)
+- At the freeze the sensor was wait_no_spark and trino_down was the only leaf; E67 (found during Task 4's backfill) changed both: see slide 21b
 - RBAC: Airflow's ServiceAccount may scale only the trino-coordinator Deployment, nothing else in that namespace
 - Pattern: one DAG per layer, linked by data events; the same pattern links Gold in Task 4
 
-Visual: chatbot_bronze (… → validate_silver ● outlet) → "asset lake_silver" (a dataset icon) → trino_reconcile (4 task boxes, trino_down marked "trigger rule: all_done").
+Visual: chatbot_bronze (… → validate_silver ● outlet) → "asset lake_silver" (a dataset icon) → trino_reconcile (6 task boxes; trino_down marked "all_done"; verdict drawn as the leaf).
 
-Speaker notes: An asset is a contract: "Silver changed". The consumer does not need to know which DAG produced it or when. trino_down always runs, so a failed check never leaves Trino holding 2 GiB.
+Speaker notes: An asset is a contract: "Silver changed". The consumer does not need to know which DAG produced it or when. trino_down always runs, so a failed check never leaves Trino holding 2 GiB; verdict is what makes a failed check a failed run. A failed or skipped producer task records no event, so no reconcile run starts: silent by design.
+
+---
+# Slide C1 — The stack compared by criteria: identity and mechanism
+
+| Tech | Kind | Basic unit | Core mechanism | Function here |
+|---|---|---|---|---|
+| Silver layer | a design contract, not a tool | one table per entity, one row per business key | type, flag, dedup, join; quality gates at the boundary | 3 tables from 2 Bronze tables, per event_date |
+| Spark SQL window | part of Spark | window = partition + order | row_number() over (partition by ID order by _ingested_at desc) = 1 | dedup before writing |
+| Iceberg (Task 3 features) | table format | snapshot, tag, partition; timestamp vs timestamptz | named refs to snapshots; zone-free vs UTC-instant time types | event_ts NTZ, tags task3_v1 |
+| Trino | distributed SQL engine, stores nothing | query → stage → task → split | coordinator plans; workers stream pages in memory | read-only checks and exploration |
+| Trino Iceberg connector | plugin | catalog lake → schema → table | asks HMS for metadata_location, prunes with manifest stats | same files Spark wrote |
+| Airflow assets | data-aware scheduling | asset (URI) + asset event | producer outlets record events; consumer DAGs get runs | LAKE_SILVER → trino_reconcile |
+| Task Execution API auth | part of Airflow 3 | short-lived JWT per task | supervisor heartbeats; the API returns a refreshed token | broke after laptop sleep (E64) |
+| Kubernetes CronJob | K8s controller | CronJob → Job → Pod | computes the next slot, re-queues itself | pg-backup (E66) |
+
+---
+# Slide C2 — Knowledge levels and state
+
+| Tech | Basic knowledge to own | Advanced (ours → production) | Evidence |
+|---|---|---|---|
+| Silver | grain, keys, types, "flag, don't delete" | rules in SQL + validator → SCD history, quarantine tables, CDC with MERGE | D7–D9, 28/28 × 18 days |
+| Window dedup | partition vs order, ties | deterministic tie-break → "latest" defined as a business rule | no duplicate ID across the table |
+| Iceberg | snapshots, time travel, zone semantics | tags with retention → branches, write-audit-publish | 7-hour-shift risk avoided (D8); freeze 11-10 |
+| Trino | coordinator vs worker, connector, catalog | single node, 2 Gi Guaranteed, heap 1,536 MB → workers, fault-tolerant execution, resource groups | steps 3.3–3.5 |
+| Trino security | read-only at two layers | read_only catalog + S3 read user → authentication, file/OPA access control | CREATE TABLE, ANALYZE → Access Denied |
+| Assets | producer outlets, consumer schedule=[asset] | shared asset in plugins/ → conditions (&, \|), watchers, REST-pushed events | run created by the asset, 11-10 03:58 UTC |
+| Task JWT | tokens expire; heartbeats renew them (default lifetime 600 s) | retries for transient failures → longer lifetime or never-sleeping nodes | E64 |
+| CronJob | startingDeadlineSeconds, concurrencyPolicy (>100 missed slots without a deadline stops scheduling) | nudge after wake → production nodes don't sleep; alert on absence | E66 |
+
+Speaker notes: The left column is what I must be able to explain without notes; the middle column is what I would change for production, and why the lab version is acceptable here.
 
 ---
 # Part 2 — The stack of Task 3
@@ -282,7 +369,9 @@ Speaker notes: Reruns add snapshots, never rows: every overwrite is one commit. 
 | silver.chat_message now | 21,224, 18 days | |
 
 - A snapshot keeps the file list of that commit; time travel reads that list
-- expire_snapshots (weekly, 7 days / keep ≥ 5) removes old snapshots, **except those held by a tag**: that is the freeze mechanism (task3_v1)
+- expire_snapshots (weekly, 7 days / keep ≥ 5) removes old snapshots, **except those held by a tag**: that is the freeze mechanism (task3_v1, 365 days)
+- Tags after a schema change: Task 4 added step later; at task3_v1 StarRocks reads 10,729 rows with step NULL (current schema, columns matched by field id). Spark and Trino may use the snapshot's own schema for time travel: check each engine before relying on it
+- make freeze reports "created (or already present: kept where it was)": a rerun never moves a tag
 
 Visual: a timeline of snapshots; a flag "task2_v1" pinned to one, "main" pointer at the end.
 
@@ -310,11 +399,42 @@ Speaker notes: The empty distinct counts are the visible cost of read-only Trino
 - Trino: make trino-check and DAG trino_reconcile recompute 191 values (totals + per day) → 191/191
 - Backfill 07-02 → 07-25 twice: 155 per-day lines identical between passes (idempotency)
 - Freeze task3_v1: rows 21,224 / 10,729 / 21,224 / 10,729 / 10,613 = expected, read by Spark and again by Trino
-- In Airflow: trino_reconcile 191/191 in 26 s, Trino back to 0
+- In Airflow: trino_reconcile 191/191 in 26 s (11-10 03:58 UTC, Trino ready in 15 s), Trino back to 0; after Task 4 added step: 210/210
 
 Visual: three columns pandas · Spark · Trino, each with a tick, joined by "=" signs.
 
 Speaker notes: Three engines that share no code agreeing on 191 numbers is strong evidence. Any one alone could share a bug with its own expected values.
+
+---
+# Slide L1 — Lifecycle: the phases Task 3 added (13–19)
+Phases 1–12 from Task 2 (schedule → driver/executors → commit → validation → maintenance) are unchanged.
+
+| Phase | What happens | Must be true | Typical failure |
+|---|---|---|---|
+| 13 Silver read | silver reads both Bronze tables for day D | same _batch_id in both | mixed batch → fail, rerun Bronze |
+| 14 Silver transform | type, flag, dedup, final_intent with the row's threshold | every row parses; one prediction per chat ID; all rows event_date = D | null event_ts, wrong-date row or duplicate prediction → job refuses |
+| 15 Silver write | three overwritePartitions() commits | each commit succeeds | one table committed, another not (no cross-table transaction) |
+| 16 Silver validation | 28 rules + exact counts vs silver_daily.json | reads the intended snapshot | mismatch → fail, no asset event |
+| 17 Asset event | validate_silver success → LAKE_SILVER | task succeeded | no event → no reconcile run (silent by design) |
+| 18 Reconcile | wait idle → Trino 0→1 → SQL → compare → 1→0 → verdict (26 s, Trino ready in 15 s) | RBAC; Trino ready; HMS + MinIO reachable | mismatch fails reconcile; trino_down still runs; verdict fails the run |
+| 19 Freeze (manual) | tag 5 tables, copy evidence out | tags point to validated snapshots | tag on the wrong state: it happened with the git tag task3-v1 (first on ba7dde4, re-tagged on c3f3fef); an Iceberg tag rerun never moves |
+
+---
+# Slide L2 — What Task 3 tested, and what it didn't
+Tested, with evidence: three computations agree (191/191) · backfill twice = identical data lines (155 = 155) · event_ts is timestamp_ntz in all 3 tables · Trino write and ANALYZE denied, access test 6/6 · Spark and Trino name the same metadata.json · tags read back through Trino · reconcile run created by the asset · E64 and E66 diagnosed and fixed · 417/417 evidence files copied · 18 Silver updates → 18 reconcile runs · E67 hidden failures found and fixed (proven 09:06–09:11 UTC) · tag vs schema change read from StarRocks · TTL after sleep (E68) nudged
+
+| Not tested yet | Why it matters |
+|---|---|
+| mixed _batch_id on the cluster (only unit-tested) | the detection gate has never fired for real |
+| late or corrected row for a past day | overwritePartitions() would replace the day; the refusal path is the only guard |
+| reconcile failing on a wrong expected value | no run has yet failed through verdict |
+| Trino dies mid-reconcile | trino_down with all_done unproven |
+| roll back Silver to a tag | freeze proven, restore not |
+| failed backup pg-backup-29903100 (11-09 01:00 UTC slot) | cause not in the log; no alert seen: a failed backup may be silent |
+
+Five drills worth doing first: (1) wrong expected value → verdict fails, Trino still 0; (2) mixed _batch_id → Silver refuses; (3) corrected export for a past day: rebuild vs MERGE; (4) roll back one Silver table to task3_v1; (5) find why pg-backup-29903100 failed and decide what alerts on a failed backup.
+
+Speaker notes: Listing what I did not test is part of the result: the leader can judge the gaps, and each has a concrete drill.
 
 ---
 # Part 4 — Errors
@@ -330,6 +450,16 @@ Speaker notes: Three engines that share no code agreeing on 191 numbers is stron
 | E66 | pg-backup slot never ran, no events | the CronJob controller waits on a monotonic clock that does not advance during suspend | make k8s-up nudges the CronJob; slot moved to 06:30 UTC (13:30 ICT) |
 
 Speaker notes: Two of the four are about the laptop sleeping. Production servers don't sleep, but the lesson generalises: anything time-based must survive a paused process.
+
+---
+# Slide 21b — Two more Task 3 parts, found during Task 4 (E67, E68)
+
+| Error | What happened | Fix | Lesson |
+|---|---|---|---|
+| E67 | 11-10 08:08–08:43 UTC: a backfill added step to all 24 days; each validate_silver fired the asset; 18 reconcile runs compared half-updated Silver with the new expected files (192/228 equal, rising to 208/212): 17 Telegram ❌ for reconcile, yet airflow dags list-runs showed every run **success**: the only leaf was trino_down with all_done | wait_pipeline_idle also waits for no running or queued chatbot_bronze run; a final verdict task fails the run when reconcile failed (PR #79); proven 09:06–09:11 UTC: the wait saw 1 SparkApplication + 1 queued run, then 0; reconcile 210/210; verdict passed | a DAG run's state comes from its leaf tasks: a cleanup task must never be the only leaf (Airflow's built-in answer: setup/teardown) |
+| E68 | catalog-081805 (timeToLiveSeconds 86400) still present 25 h after it finished | an annotation (update event) made the operator delete it within 20 s; make k8s-up now nudges every finished SparkApplication | same class as E66: controllers re-check after a delay that stalls during laptop sleep (inferred from E66, not from the operator source) |
+
+Speaker notes: E67 is the most important lesson of Task 3: a green run hid 18 failed checks. It was found by reading the log, not by an alert.
 
 ---
 # Slide 22 — Debugging story: E66, the backup that never ran
@@ -373,3 +503,14 @@ Speaker notes: The pattern of Task 3, one engine writes and others read the same
 - Docs: docs/task3/README.md, 01_knowledge.md, 06_validation.md, 07_explain_plans.md, 05_errors_and_fixes.md
 
 Speaker notes: Everything in this deck is reproducible from the repository at tag task3-v1.
+
+---
+# Appendix A3 — Sources (the four Task 3 learning packs, PDFs with links, kept locally in docs/task3/: not in Git)
+- **Official docs:** Trino concepts · resource management properties · table statistics · Iceberg connector iceberg.security values · Hive connector security (metastore auth defaults to NONE) · Iceberg Spark writes (dynamic overwrite vs MERGE) · Iceberg branching and tagging · cross-engine timezone handling (Cloudera) · Airflow asset-aware scheduling (3.3.2) · Task SDK concepts (heartbeats, token renewal) · modules management (sys.path) · Kubernetes CronJob
+- **Papers:** Presto: SQL on Everything (ICDE 2019: connector API, lazy split enumeration, pipelined execution, why a worker failure fails a query) · Spark SQL / Catalyst (SIGMOD 2015) · Lakehouse (CIDR 2021). The Medallion pattern has no founding paper: it comes from vendor practice
+- **Talks:** Trino Community Broadcast 14 (why HMS for Iceberg, ~1:18:39), 38 (with Ryan Blue), 40 (Iceberg connector + DML) · Trino Summit 2022 and 2024 · Iceberg tags and branches (Subsurface 2023)
+- **Problems (58 leads, 13 problems):** timestamps and zones (D8) · overwrite vs MERGE, late data, dedup (D7) · Trino read path, pruning, statistics · Trino security and sizing · reconciliation (E63) · asset orchestration · E64 (Airflow #67939, PR #67944, #64826) · E65 (discussion #61901) · E66 (Kubernetes #45825) · tags and freeze · Spark event logs · E67 (trigger rules, cleanup leaf) · E68 (SparkApplication TTL)
+- **Basics (32 sources), reading order:** Medallion/Silver → Trino → Trino + Iceberg → Airflow assets
+- Reading-list rows were picked from search summaries, not read in full: treat them as leads
+
+Speaker notes: The packs are the bibliography of this deck: every claim here comes from the repo docs or the terminal log, and the packs point to the primary sources behind them.
