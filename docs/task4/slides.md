@@ -44,6 +44,63 @@ Visual: left a dashboard with 10 charts hammering "Silver: 10,729 rows × every 
 Speaker notes: The honest scale note: with 10k rows any engine is instant. The lab builds the pattern that still works with a billion rows: pre-aggregate once, serve many times.
 
 ---
+# Part 0 — Global view (from the Task 4 learning pack, docs/task4/Fundamentals.pdf)
+
+---
+# Slide G1 — Three maps for Task 4
+- **Data flow:** Silver (3 Iceberg tables, now with step) is read by StarRocks through lake_iceberg; dbt builds Gold inside StarRocks in four layers: (1) staging stg_* (views, or inlined CTEs when building from a tag) → (2) dimensions dim_date (24), dim_intent (3), dim_sender (89, stable integer keys) → (3) facts fct_prediction (10,729), fct_user_message (10,613) → (4) marts gold_uc4…uc8 (36 / 36 / 57 / 48 / 48 rows)
+- **Lineage (dbt docs, 11-11):** 3 sources → 13 models → 34 tests, plus 6 seeds (5 expected_gold_uc* + scenario_labels); sources use 3-part names, so the planned raw.* view layer was never needed
+- **Orchestration:** validate_silver emits lake_silver, which starts two DAGs: trino_reconcile (skips in gold mode) and gold_build (sensor up to 30 min → dbt build in a pod in gold-jobs → verdict → lake_gold). Modes are the human step; a DAG never scales the other engine, it waits or skips; demo profiles pause both asset DAGs
+- **RAM:** StarRocks (FE 1 Gi + BE 1 Gi requested) cannot sit next to Spark or Trino on 7,268 Mi: gold mode + dbt pod = 6,212 Mi (85 %); demo-task4 = 5,092 Mi (70 %)
+
+Visual: Airflow column (chatbot_bronze → lake_silver → trino_reconcile / gold_build) · dbt pod in gold-jobs (MySQL 9030 as dbt_rw) · StarRocks box (FE plans, catalog lake_iceberg; BE Gold tables on a PVC) · lake box (MinIO 9000 + HMS 9083); "BE scans Silver as user starrocks (read-only)".
+
+Speaker notes: Only gold_build talks to StarRocks, through a dbt pod; StarRocks reads Silver from the same files Spark wrote.
+
+---
+# Slide G2 — Durable state: what Task 4 added
+
+| State | Where | Survives | Rebuilt from |
+|---|---|---|---|
+| Gold tables (13 models) | StarRocks BE storage on a PVC (5 Gi) | scale to 0 (proven: 7 h at 0, TabletNum 90 after) | the 5 tags + the dbt image digest: make dbt-tag-rebuild TAG=task4_v1, about 10 s |
+| dim_sender keys (1…89) | same Gold table, incremental | same | **not safely rebuildable**: a rebuild from empty assigns keys again; old bitmaps are right only if the order matches |
+| catalog, database gold, users, grants | FE metadata on its PVC | scale to 0 | make starrocks-init (idempotent Job) |
+| Iceberg tags task4_v1 (5 tables, 365 days) | each table's metadata | snapshot expiry (drill 11-12) | — |
+| expected Gold values (5 seeds) | dbt image + Git | image rebuild from the git tag | tools/expected_gold.py |
+| freeze record FREEZE.md | Git | everything but losing the repo | — |
+| evidence (180 MB, 648/648 files, 284 event logs) | ~/data/vnpt-lab/evidence/task4-20261112/ | minikube delete | — |
+| StarRocks secrets | secrets.env → K8s Secrets | laptop disk | make k8s-secrets |
+
+- **Not in any backup:** pg-backup dumps Postgres only. A StarRocks BACKUP SNAPSHOT would need a repository on MinIO (bucket, user, policy) for tables rebuilt in about 10 s, so Gold is frozen as inputs + code, except the dim_sender keys (a tag rebuild reuses the incremental table, so they stay)
+
+Speaker notes: The honest gap is the surrogate keys: everything else in Gold is reproducible, those only as long as the incremental table survives.
+
+---
+# Slide G3 — Is the Task 4 pipeline standard? Hop by hop (1/2)
+- **The core is standard:** StarRocks reading Iceberg through an external catalog while dbt builds marts inside it; one DAG per layer linked by assets; dbt as a pod from Airflow (keeps dbt out of the Airflow image)
+- **Lab-specific, and defensible:** modes switched by hand (in production the engines run on separate nodes); one FE, one BE, replication_num 1 (no failover: a lost BE disk loses Gold until the next dbt build); expected values as seeds (works because the dataset is fixed; live data would use row-count and freshness checks)
+
+| # | Hop | Connection | Failure handling |
+|---|---|---|---|
+| 1 | validate_silver → gold_build run | asset event lake_silver; the scheduler creates the run | no event, no run; events queued while a run waits merge into the next run |
+| 2 | starrocks_ready sensor | K8s API: FE/BE Ready condition + lastTransitionTime | Role airflow-starrocks-reader; reschedule mode; both Ready ≥ 120 s (E76); after 30 min fails with "make mode-gold" |
+| 3 | dbt_build → pod | KubernetesPodOperator in gold-jobs, image {{ var.value.dbt_image }} | Role airflow-gold-runner; SA dbt without a token; 512 Mi request = limit; retries 1, delay 2 min; failed pod kept for its log |
+| 4 | dbt → StarRocks FE | MySQL protocol 9030 as dbt_rw | Secret via env_var(); an error fails the model, downstream skipped |
+| 5 | on-run-start REFRESH | REFRESH EXTERNAL TABLE on 3 Silver tables | its own privilege (E72); without it the FE may answer from cached, older metadata |
+
+---
+# Slide G4 — Is the Task 4 pipeline standard? Hop by hop (2/2)
+
+| # | Hop | Connection | Failure handling |
+|---|---|---|---|
+| 6 | StarRocks → HMS → MinIO | FE asks HMS for metadata_location; BE reads Parquet as user starrocks | read-only MinIO policy (StarRocks can also write Iceberg); no stats: EXPLAIN guessed 7,153 rows, all 10,729 are read; without the policy: denied (E70) |
+| 7 | Gold tables written | CTAS/INSERT into internal tables: PK facts, day partitions, 1 bucket, 1 replica | BE alive **and** not blacklisted: "Backend node not found … inBlacklist: true" right after start (E76); the one retry absorbs it |
+| 8 | dbt tests | generic, reconcile_uc4…uc8 vs seeds, assert_silver_counts, assert_bitmap_users | a failed test skips downstream models, but not through ephemeral parents (E78): the tag rebuild runs the gate as its own step |
+| 9 | verdict → lake_gold | leaf task; its outlet records the event | run fails if dbt failed (the E67 lesson, applied from the start) |
+| 10 | BI reads Gold (Task 5) | 9030 as bi_ro | SELECT on gold; CREATE and INSERT denied (tested by starrocks-init) |
+| — | Gold freeze | make freeze TASK=4 (Iceberg tags) + dbt-tag-rebuild | gate first, build only if it passes (E78) |
+
+---
 # Part 1 — Knowledge
 
 ---
@@ -160,7 +217,8 @@ Speaker notes: dbt adds nothing to SQL's power; it adds engineering: dependencie
 | gold_uc7 | day × user_class | cumulative_users, users_30d_before, change_abs, change_pct | user_class |
 | gold_uc8 | day × user_class | new_users, active_users, users (BITMAP) | user_class |
 
-- traffic_class = internal > unmatched > home > real (D20): one dashboard filter instead of three booleans
+- traffic_class = internal > unmatched > home > real (D20): one dashboard filter instead of three booleans; counts real 219, home 10,378, internal 16, unmatched 116
+- Two facts at two grains: UC4–UC6 count predictions, UC7–UC8 count users; measures: counts additive, confidence not (average), users not (bitmap)
 
 Visual: a star: fct_user_message in the middle, three dimensions around; five small mart boxes to the right.
 
@@ -192,6 +250,36 @@ Speaker notes: Writing the definitions first turned vague wording ("so với 30 
 Visual: chatbot_bronze → (lake_silver) → gold_build → (lake_gold) → "Task 5 dashboard"; a mode switch icon between Spark and StarRocks.
 
 Speaker notes: In production both engines would run all the time and the asset would trigger Gold immediately. The pattern is the same; only the wait differs.
+
+---
+# Slide C1 — The stack compared by criteria: identity and mechanism
+
+| Tech | Kind | Basic unit | Core mechanism | Function here |
+|---|---|---|---|---|
+| StarRocks FE | Java frontend | query plan; catalog metadata | parses SQL, cost-based plan, metadata (BDB-JE), MySQL protocol 9030 | plans dbt's SQL; holds lake_iceberg, gold, users |
+| StarRocks BE | C++ backend | tablet (a bucket of a partition) | columnar storage + vectorized MPP execution | stores Gold; scans Iceberg Parquet from MinIO |
+| Table types | storage model | row by key | Duplicate keeps all; Aggregate merges; Primary Key upserts | facts, dim_sender, gold_uc8 as Primary Key |
+| Bitmap (Roaring) | exact set type | one set of integer IDs | to_bitmap per row, bitmap_union across days, bitmap_union_count | 89 exact vs 112 summed |
+| External catalog | federation | catalog.database.table | reads HMS + Iceberg metadata, caches it, scans files | Silver without copying it |
+| dbt / dbt-starrocks | SQL build tool / adapter | model (one SELECT) / model config | compiles Jinja, orders by ref(), materializes, tests / maps table_type, keys, partition_by to DDL | builds and tests Gold |
+| KubernetesPodOperator | Airflow operator | one pod per task try | creates the pod, streams its log, reads its exit code | dbt build outside the Airflow image |
+| Kimball | design method | grain | process → grain → dimensions → facts | 2 facts, 3 dims, 5 marts |
+| StarRocks operator | K8s operator | StarRocksCluster CR | renders FE/BE StatefulSets; updates only when the spec hash changes (E69) | installs and owns FE/BE |
+
+---
+# Slide C2 — Knowledge levels and state
+
+| Tech | Basic knowledge to own | Advanced (ours → production) | Evidence |
+|---|---|---|---|
+| StarRocks | FE vs BE, 9030, table types, partition + bucket | 1 FE + 1 BE, 1 replica → 3 FE (leader + followers), ≥ 3 BE, 3 replicas; or shared-data with CN on S3 | gold-check 22/22; EXPLAIN 1/1 partition |
+| Bitmap | why distinct is non-additive; integer keys | stable sender_key → global dictionary, or HLL when ~1–2 % error is fine | 87 + 2 exact vs 106 + 6 summed |
+| External catalog | metadata cache, REFRESH, 3-part names | fixed or event-driven refresh; per-catalog resource limits | 10,613 rows read as dbt_rw |
+| dbt | ref/source, materializations, tests, seeds, build | Slim CI (state:modified+), artifacts upload, docs site, contracts | PASS=56; PASS=53 from the tag |
+| KPO | pod lifecycle, RBAC, image by digest | Cosmos (one Airflow task per dbt model), quotas per namespace | dbt_build attempt 2 success after E76 |
+| Kimball | grain first; additive vs non-additive | conformed dimensions, SCD type 2 for senders | 2 facts at different grains |
+| Operator | CR vs StatefulSet, who reconciles what | GitOps on the CR only; no out-of-band scaling | E69 round trip proven |
+
+Speaker notes: dbt's target/ artifacts are lost with the pod today; uploading them (Slim CI, docs site) is the first production step.
 
 ---
 # Part 2 — The stack of Task 4
@@ -241,6 +329,37 @@ Speaker notes: Three StarRocks users, one per role: root to set up, dbt_rw to bu
 - Honest view: 10k rows need none of this for speed; the lab builds the serving pattern
 
 Speaker notes: StarRocks async materialized views could replace the dbt marts and even rewrite queries automatically. dbt wins here for testing and documentation, and it is the tool the lab names.
+
+---
+# Slide 15b — Where each layer lives (Gold is not in MinIO)
+
+| Layer | Physically | Format | Written by |
+|---|---|---|---|
+| Bronze | MinIO lakehouse/ bucket | Iceberg (Parquet + metadata), pointer in HMS | Spark |
+| Silver | MinIO lakehouse/ bucket | Iceberg | Spark |
+| **Gold** | StarRocks BE PersistentVolume (starrocks-be-0, 5 Gi) | StarRocks internal tables (columnar tablets), database gold | dbt inside StarRocks |
+
+- Trade-off: only StarRocks can read Gold (not Trino or Spark); no Iceberg time travel on Gold (rebuild from a Silver tag instead); not in the MinIO evidence or pg-backup (covered by the rebuild procedure)
+
+Speaker notes: Gold is derived and rebuildable; the source of truth stays in Iceberg.
+
+---
+# Slide 15c — The lab doc says two things about Gold: which did we follow?
+
+| Where in the lab doc | What it says |
+|---|---|
+| Architecture diagram | "dbt Gold (analytics)" **inside** the box "ICEBERG (MinIO S3)", then a dashed arrow to StarRocks → Trino |
+| "Kiến trúc tổng thể" text | "dbt tạo lớp Gold phục vụ StarRocks, Trino và Superset": Trino can only read Gold if it is Iceberg |
+| Tech stack table | StarRocks: "OLAP · Gold layer, bitmap aggregation"; dbt: "Quản lý Gold layer" |
+| Bước 4 (the task) | "Ghi kết quả vào table dạng gold **trên StarRocks**" |
+
+- We followed Bước 4 + the tech-stack row: Gold as StarRocks internal tables. That is also the only place the BITMAP exact-users column can live: **Iceberg has no BITMAP type**
+- The diagram's reading (Gold in Iceberg on MinIO) is possible: dbt writes Gold into the Iceberg catalog (through StarRocks, or dbt on Trino/Spark), StarRocks keeps a materialized view for the bitmap metric; it needs write access for that writer and new checks/freeze steps. Not verified yet: whether dbt-starrocks 1.12 materializes into an external catalog
+- **Question for the leader:** which reading is intended?
+
+Visual: the lab doc's diagram on the left (Gold circled inside the Iceberg box), our layout on the right (Gold inside StarRocks).
+
+Speaker notes: I show the conflict instead of hiding it: the build follows the concrete task text, and the alternative is costed.
 
 ---
 # Slide 16 — Modes and memory (D15)
@@ -297,6 +416,7 @@ Speaker notes: This is the slide to remember: a wrong distinct count looks plaus
 - make gold-check: 22 counts and measure sums (e.g. UC5 10,588 understood / 141 not; UC8 89 new, 112 active, bitmap 89) → 22/22
 - StarRocks reads Silver: 10,613 = Trino = Spark = pandas
 - Least privilege: MinIO user starrocks 6/6 read-only; bi_ro CREATE / INSERT → privilege error; grants survive rebuilds (wildcards)
+- The lab's recommended checks, run 11-13 07:41 UTC (14:41 ICT) on the frozen Gold: make all (lint + unit tests) 142 passed · dbt test PASS=37 · dbt test --select staging PASS=4 · --select gold PASS=9 · the intent tests (no test is named test_valid_intent; the same idea = accepted_values + relationships to dim_intent) PASS=15 · 0 failures, 0 errors. pytest tests/ in the lab = make test (tests/unit) + the CI job "DAG integrity" for tests/dags (needs Airflow)
 
 Visual: four logos (pandas, Spark, Trino, StarRocks) pointing at "10,613".
 
@@ -306,7 +426,8 @@ Speaker notes: Reconciliation is a dbt test like any other, so a wrong Gold numb
 # Slide 20 — Time travel by tag, and rebuilding Gold from a tag
 - StarRocks resolves an Iceberg tag: SELECT count(*) FROM lake_iceberg.silver.nlu_prediction FOR VERSION AS OF 'task3_v1' → 10,729
 - Schema evolution: step (added in 4.0a) reads as NULL for old snapshots: columns are matched by field id
-- Freeze = Silver tag task4_v1 + the dbt image digest: Gold is reproducible, not snapshotted
+- Freeze = Silver tag task4_v1 + the dbt image digest: Gold is reproducible, not snapshotted. make freeze TASK=4 at 02:28:03 UTC 11-12 (job catalog-022803), checked through Spark and StarRocks (5 × PASS): bronze.chatlog 4851909217252046539 (21,224) · bronze.bot_predict 7994949553350528317 (10,729) · silver.chat_message 4324401880006836136 (21,224) · silver.nlu_prediction 6940182659003592517 (10,729, step filled) · silver.user_message 9106066062539116072 (10,613)
+- Rebuild procedure (FREEZE.md §5): git checkout task4-v1 → make k8s-up → make mode-gold → make starrocks-tag-check TASK=4 → make dbt-tag-rebuild TAG=task4_v1 → make gold-check 22/22 → make dbt CMD="build" to return
 - make dbt-tag-rebuild TAG=task4_v1: Silver gate on the tag first, then build from it → PASS=53
 - Negative run on task3_v1: the gate fails (step missing) → the rebuild stops
 - Tag vs maintenance: on a scratch table, expire_snapshots(retain_last = 1) removed the untagged snapshot and kept the tagged one
@@ -314,6 +435,39 @@ Speaker notes: Reconciliation is a dbt test like any other, so a wrong Gold numb
 Visual: Silver snapshots on a timeline with tags task3_v1 and task4_v1; an arrow from task4_v1 into "dbt build (ephemeral staging)" → Gold.
 
 Speaker notes: Freezing a derived layer means freezing its input and its code. The scratch-table drill proved tags survive cleanup without risking the real tables' history.
+
+---
+# Slide L1 — Lifecycle: the phases Task 4 added (20–27)
+Phases 1–19 from Tasks 2–3 are unchanged.
+
+| Phase | What happens | Must be true | Typical failure |
+|---|---|---|---|
+| 20 Gold mode (manual) | mode-gold: Trino + History → 0; starrocks-up; starrocks-ready waits for the revision and a BE query | no Spark app; RAM for FE + BE | operator never scales back (E69); BE blacklisted (E76) |
+| 21 Gold run starts | lake_silver → gold_build; sensor wants FE + BE Ready ≥ 120 s | DAG unpaused; gold mode within 30 min | sensor timeout "make mode-gold" |
+| 22 dbt pod | KPO in gold-jobs | image pull (ghcr-pull), RBAC, 512 Mi free | pull or scheduling failure; node at 85 % with the pod |
+| 23 Refresh + Silver gate | REFRESH × 3; assert_silver_counts (14 numbers) | REFRESH privilege; Silver as expected | missing grant (E72); stale cache; wrong Silver → Gold skipped |
+| 24 Models | staging → dims → facts → marts | valid DDL per table type; BE accepts queries | E73, E75, E76 |
+| 25 Tests | reconcile vs seeds, bitmap check, generic | seeds loaded | mismatch → downstream skipped, except through ephemeral parents (E78) |
+| 26 Verdict | verdict → lake_gold | dbt_build succeeded | no event: Task 5 consumers don't run |
+| 27 Freeze + rebuild (manual) | freeze; rebuild = checkout → mode-gold → tag-check → dbt-tag-rebuild → gold-check → normal build | tags on validated snapshots; staging ephemeral | views skip and read current Silver (E77); gate bypassed (E78) |
+
+---
+# Slide L2 — What Task 4 tested, and what it didn't
+Tested, with evidence: four engines, one number (10,613) · gold-check 22/22 + reconcile vs seeds · asset chain without a manual trigger (success 11-11 03:01:59 UTC) · infrastructure retry (attempt 1 hit the blacklisted BE, attempt 2 PASS=56; after the fix the sensor waited 108 s → 171 s and attempt 1 passed) · mode round trip (7 h at 0, 90 tablets after) · least privilege (bi_ro denied, s3-access-test 5 × 6/6, dbt_rw REFRESH but no more) · rebuild from the tag (PASS=53) and negative run on task3_v1 (gate fails; exposed E78) · tag vs snapshot expiry (scratch drill) · stable keys (second run added 0, kept every key) · demo-check DEMO_TASK=4 ALL PASS · 648/648 evidence files
+
+| Not tested yet | Why it matters |
+|---|---|
+| dim_sender rebuilt from empty; a new sender arriving | bitmaps are right only if keys stay; key 90 is unproven |
+| loss of the BE PVC or FE metadata | rebuild into an empty StarRocks unmeasured; would reassign keys |
+| sensor timeout (not in gold mode) | the failure message path is in no log |
+| Silver changes while in gold mode | trino_reconcile skips; what stops a daily Spark run next to StarRocks? |
+| stale catalog cache without REFRESH | the reason for REFRESH was never shown |
+| Silver updated during a gold_build run | which snapshot does Gold reflect? |
+| airflow tasks clear -t "^silver$\|^validate_silver$" matched nothing | open since 11-11 |
+
+Five drills worth doing first: (1) rebuild dim_sender from empty in a scratch database and compare keys + bitmap counts; (2) one fake sender in a scratch copy of Silver: key 90, UC8 counts 90; (3) write Silver, query without and with REFRESH; (4) trigger gold_build in pipeline mode and read the timeout message; (5) delete the BE pod during dbt_build: retry, same 22 values.
+
+Speaker notes: The surrogate-key gap is the one I would close first, because it is the only part of Gold that the rebuild procedure does not fully cover.
 
 ---
 # Part 4 — Errors
@@ -377,3 +531,14 @@ Speaker notes: Task 5 only reads; everything it shows was defined, built and rec
 - Docs: docs/task4/README.md, FREEZE.md, 01_knowledge.md, 06_validation.md, 07_dbt_and_plans.md, docs/metrics.md
 
 Speaker notes: Everything here is reproducible from the repository at tag task4-v1.
+
+---
+# Appendix A3 — Sources (the four Task 4 learning packs, PDFs with links, kept locally in docs/task4/: not in Git)
+- **Official docs:** StarRocks architecture · table types and their capabilities (E75) · Primary Key table · Iceberg catalog (metadata cache, time travel) · REFRESH EXTERNAL TABLE (E72) · bitmap for exact count distinct · BE blacklist (E76) · StarRocks Kubernetes Operator (E69) · dbt with StarRocks (E73) · dbt-starrocks on GitHub (E77) · dbt build (E78) · managing surrogate keys (dbt blog) · Cosmos Kubernetes execution mode · Kimball dimensional modeling techniques · Kubernetes projected volumes (E70)
+- **Papers:** Better bitmap performance with Roaring bitmaps (Chambi, Lemire et al.) · MonetDB/X100: Hyper-Pipelining Query Execution (CIDR 2005), the origin of vectorized execution
+- **Talks and courses:** StarRocks Query Optimizer (CMU Database Group seminar) · StarRocks on the Data Engineering Podcast ep. 463 · Zero to dbt (Coalesce) · dbt Learn
+- **Problems (40 leads, 9 problems):** serving Gold over Iceberg (catalog, cache) · table design (E75) · exact distinct users · stable surrogate keys · dbt gates that really block (E74, E77, E78) · dbt from Airflow on Kubernetes · operators ignoring out-of-band changes (E69) · alive is not ready (E76) · E70, E73
+- **Basics:** StarRocks → dbt → dimensional modeling (Kimball) → Airflow + dbt
+- Reading-list rows were picked from search summaries, not read in full: treat them as leads
+
+Speaker notes: As in Task 3, the packs are this deck's bibliography; the numbers come from the repo docs and the terminal logs.

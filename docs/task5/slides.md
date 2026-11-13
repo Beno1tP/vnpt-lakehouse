@@ -42,6 +42,59 @@ Visual: a dashboard with three red question marks: "is this right?", "does the f
 Speaker notes: A dashboard is usually tested by someone looking at it. Here it is tested by a command, and the looking (PDF exports) is the second, independent check.
 
 ---
+# Part 0 — Global view (from the Task 5 learning pack, docs/task5/Fundamentals.pdf)
+
+---
+# Slide G1 — Three maps for Task 5
+- **Data flow:** no new data. Gold is Task 4's, rebuilt from task4_v1; Superset reads gold_uc4…uc8 through 5 datasets with 14 metrics and stores only definitions: every chart view becomes SQL against StarRocks. No Redis, so no result cache: fine, Gold is pre-aggregated
+- **Request flow (one chart):** (1) browser → web pod (make superset-ui, port-forward 8088) → (2) web reads chart, dataset, metrics, filter state from Postgres (database superset) → (3) builds SQL: table + metric expression (e.g. BITMAP_UNION_COUNT(users)) + the filter's WHERE traffic_class = 'real' → (4) the starrocks dialect (PyMySQL underneath) sends it to the FE on 9030 as bi_ro; the BE scans the mart (usually 1 partition, 1 tablet) → (5) the engine spec types the result columns (where E82 broke), pandas post-processing shapes it
+- **Deploy flow (make superset-up):** assets zipped (22 files) into a ConfigMap → manifests applied → init container migrates the metadata DB → web starts → Job superset-init: admin → connection with a fixed uuid5 → import-dashboards → connect again (real password over the masked import) → datasets + 20 checks → read-only user checker
+- Scheduler at 0 and asset DAGs paused: nothing changes Gold while the dashboard is shown
+
+Visual: namespace superset (web 8088 stateless + init container; init Job; check pod via REST API) → StarRocks FE 9030 as bi_ro → BE Gold marts; Git assets → init Job; namespace lake: Postgres DB superset → MinIO backup/ (daily superset.dump 06:30 UTC).
+
+Speaker notes: The web pod keeps nothing: definitions live in Postgres, numbers come from StarRocks on every view. Git rebuilds the definitions; pg-backup keeps a copy of them.
+
+---
+# Slide G2 — Durable state: what Task 5 added
+
+| State | Where | Survives | Rebuilt from |
+|---|---|---|---|
+| dashboard, charts, datasets, connection, filters | Postgres DB superset (lake) | pod restarts; daily pg-backup (superset.dump) | Git assets + the Job: proven on an empty DB (drill 11-13) |
+| native filter scopes | the dashboard JSON: rootPath + excluded **chart ids** | same | the importer remaps the ids (drill: [1, 8, …] vs real [13, 14, …]) |
+| connection password (bi_ro) | encrypted in the metadata DB with SECRET_KEY | same | Secret → the Job's connect step |
+| SUPERSET_SECRET_KEY | secrets.env → Secret superset-env | laptop disk | **not regenerable** without superset re-encrypt-secrets: a new key cannot read stored passwords |
+| assets as code (22 files) | infra/k8s/superset/assets/ in Git | everything but losing the repo | make superset-export |
+| expected values (33 chart values + defaults/scopes; 20 dataset checks) | dashboard_checks.yaml, datasets.yaml | same | Task 4 gold-check / metrics.md |
+| users admin, checker; role gold_viewer | metadata DB; passwords in secrets.env | same as the DB | the Job |
+| evidence (80 KB) + 5 PDFs (516 KB) | ~/data/vnpt-lab/evidence/task5-20261112/, …/task5/ | minikube delete | — |
+| Superset web pod | stateless (1 replica, Recreate) | — | the image by digest |
+
+---
+# Slide G3 — Is the Task 5 setup standard? Hop by hop (1/2)
+- **The core is standard:** BI on an OLAP database, a read-only BI user, Postgres as metadata DB, dashboards exported as YAML into Git. Less common, and worth showing: superset-check reads every chart through Superset's own API as a non-admin, so it tests what a viewer sees
+- **Lab-specific, and defensible:** own manifests instead of the deprecated chart (E80; Superset's docs point to the Superset Kubernetes Operator, v0.3.0 when checked) · no Redis, no Celery, 1 replica (production: Redis for cache and the rate limiter, Celery for reports and async SQL Lab; the in-memory limiter is only right with 1 replica) · port-forward, no Ingress, TLS or SSO · one Postgres for Airflow, HMS and Superset (cheaper, one failure domain)
+
+| # | Hop | Connection | Failure handling |
+|---|---|---|---|
+| 1 | browser → web | port-forward → Service 8088 → gunicorn | pod Ready (/health); no Ingress: the laptop is the only client |
+| 2 | init container → Postgres | superset db upgrade + superset init on 5432 | 1 replica + Recreate: two pods never migrate at once |
+| 3 | web → metadata DB | SQLAlchemy URI from env DB_*, URL-quoted | Secret superset-env; small pool; web crashes if the DB is unreachable at start |
+| 4 | web → StarRocks | starrocks://bi_ro@…:9030/default_catalog.gold, PyMySQL | StarRocks down → the chart shows a query error, not 0 (expected; the drill wasn't run) |
+| 5 | result typing | engine spec get_datatype imports MySQLdb | pymysql.install_as_MySQLdb() in superset_config.py; without it valid queries fail (E82) |
+
+---
+# Slide G4 — Is the Task 5 setup standard? Hop by hop (2/2)
+
+| # | Hop | Connection | Failure handling |
+|---|---|---|---|
+| 6 | Job superset-init → web | waits for /health, then Superset CLI in the app context | every step prints ok/PASS/FAIL; a FAIL fails the Job and superset-up |
+| 7 | import from Git | superset import-dashboards -p /assets/assets.zip | the connection with the fixed uuid5 is created first (a random uuid would collide on the name); scopes remapped to new chart ids |
+| 8 | check pod → web API | /api/v1/security/login + /api/v1/chart/data as checker | any value, default or scope mismatch fails the check |
+| 9 | backup | pg-backup dumps superset daily at 06:30 UTC to MinIO backup/ | not needed to rebuild (drill), but holds UI-only changes since the last export |
+| 10 | logs | the dialect warns "Failed to get run_mode … OPERATE" on every connection | bi_ro lacks OPERATE by design; a narrow logging filter drops only that line (E85) |
+
+---
 # Part 1 — Knowledge
 
 ---
@@ -103,11 +156,13 @@ Speaker notes: The default matters as much as the filter. With all traffic the n
 
 | Rule | Applied |
 |---|---|
-| Most important first | KPI row: Predictions, Not-understood rate, Total users, Avg active / day, Data up to |
+| Most important first | planned: KPI row on top (Predictions, Not-understood rate, Total users, Avg active / day, Data up to); **as built, the sections stay in build order with the KPIs at the end** (Bee's layout choice, 11-13) |
 | Right chart for the question | trend → bars per day; ranking → sorted horizontal bars (UC6); share per day → 100 % stacked bars; one number → Big Number |
 | Colour only for meaning | understood vs not; intent group (business / fallback / bot_khong_hieu) |
 | Context on every number | filter state visible; freshness from data (MAX(event_date) = 2024-07-25, D23), not typed text |
 | Honest values | NULL comparison shown as "No data" with an explanation, not 0 % or 100 % |
+| Defaults that tell the truth | Traffic defaults to real: the 58 % problem shows first; clearing the filter shows how /home hides it |
+| One exception kept | a pie chart for UC4 (kept as built, 11-13): Few argues against pies for comparing parts; on real traffic it is one full slice, cleared it shows 97.8 % / 2.2 % |
 
 Visual: a wireframe of the dashboard: KPI row on top, then UC5, UC4, UC6, UC7, UC8 sections.
 
@@ -122,11 +177,41 @@ Speaker notes: The UC7 change % is the honest-value rule in practice: with 24 da
   - The export lives in Git (infra/k8s/superset/assets/), reviewed in a PR like code; a check rejects secrets, wrong UUIDs, unreviewed charts
   - The init Job imports it on every start; then it re-sets the connection password (the export only has the mask)
   - Proof: import into an empty metadata database → same dashboard (the drill)
+- A deterministic ZIP (sorted entries, fixed timestamps) gives the same ConfigMap hash for the same assets: re-applying changes nothing
 - Workflow for a change: build in the UI → add to dashboard_checks.yaml → make superset-export → PR → CI checks the export
 
 Visual: UI → export (YAML) → Git PR → CI check → ZIP ConfigMap → init Job import → Superset; a loop arrow.
 
 Speaker notes: Building charts in the UI and keeping the result in Git is the pragmatic middle way: hand-writing chart JSON is fragile, clicking without export is not reproducible.
+
+---
+# Slide C1 — The stack compared by criteria: identity and mechanism
+
+| Tech | Kind | Basic unit | Core mechanism | Function here |
+|---|---|---|---|---|
+| Superset web | Flask + React under gunicorn | request (chart data, page) | reads definitions, generates SQL, pandas post-processing | the dashboard and SQL Lab |
+| Metadata DB | Postgres database superset | row per object | Alembic migrations (db upgrade), then superset init for roles | holds everything built in the UI |
+| Connection | SQLAlchemy URI + driver | one database entry | dialect starrocks over PyMySQL; password encrypted with SECRET_KEY | "StarRocks Gold" as bi_ro, DML/CTAS/upload off |
+| Engine spec | per-database adapter | time grains, quoting, result typing | StarRocksEngineSpec inherits MySQL's | hid the MySQLdb import (E82) |
+| Dataset | semantic layer | table + metrics + columns | metrics are SQL re-aggregated per query | 5 datasets, 14 metrics, uuid5 each |
+| Native filter | dashboard filter | column + default + scope | scope = rootPath minus excluded chart ids | Traffic (real, 6 charts), Users (7) |
+| Roles | Flask-AppBuilder RBAC | permission on a view or datasource | Admin / Alpha / Gamma + custom roles | checker = Gamma + gold_viewer |
+| Assets as code | export/import bundle | ZIP of YAML | export → Git → import, matched by uuid | rebuild on an empty DB |
+| superset-check | our own test | chart value with a filter state | saved query_context + filter → /api/v1/chart/data → compare | 33 values + defaults + scopes |
+| Kustomize overlay | config variant | patch on a base | nameSuffix, label and env patches | the drill on superset_drill (E86) |
+
+---
+# Slide C2 — Knowledge levels and state
+
+| Tech | Basic knowledge to own | Advanced (ours → production) | Evidence |
+|---|---|---|---|
+| Superset web | request path, superset_config.py, /health | replicas behind an Ingress, Redis cache + rate limiter, Celery for reports, SSO | 1 replica, 192 Mi at start, 0 restarts |
+| Metadata DB | what lives there; migrations | its own HA Postgres, PITR backups | rebuilt from Git on an empty DB |
+| SECRET_KEY | signs sessions **and** encrypts stored passwords | secret manager; rotation with re-encrypt-secrets | generated once, never rotated |
+| Datasets and metrics | physical vs virtual dataset; metric = SQL expression | semantic layer shared across tools; certified datasets | 20/20 checks in StarRocks |
+| Native filters | default, scope, cross-filtering | filter dependencies; RLS for per-user rows | scopes 6 / 7 checked after every change |
+| Security | roles, datasource access, read-only DB user | row-level security; SSO groups mapped to roles | checker sees only 5 datasets; CREATE TABLE blocked twice |
+| Dashboards as code | export, uuid matching, password masking | CI deploys to staging/prod; superset-cli sync | drill PASS, same dashboard uuid |
 
 ---
 # Part 2 — The stack of Task 5
@@ -248,6 +333,38 @@ Speaker notes: This is the proof that the dashboard is code, not a database row:
 Speaker notes: All five tasks are frozen with tags and can be shown from the same cluster, switching profiles between parts.
 
 ---
+# Slide L1 — Lifecycle: the phases Task 5 added (28–34)
+Phases 1–27 from Tasks 2–4 are unchanged.
+
+| Phase | What happens | Must be true | Typical failure |
+|---|---|---|---|
+| 28 Serving mode (manual) | make demo-task5: scheduler 0, asset DAGs paused, StarRocks up, Superset up | 6,116 of 7,268 Mi (84 %) | after a restart k8s-up brings the scheduler back next to StarRocks + Superset (~7.2 Gi): the migration Job waited ~70 s → run mode-pipeline first |
+| 29 Web start | init container migrates, then gunicorn | Postgres up; port 8088 | SUPERSET_PORT=tcp://… from a service link (E81) |
+| 30 Init Job | admin → connect → import → connect → datasets → checker | fixed connection uuid; Secrets present | result typing (E82); name collision with a random uuid |
+| 31 A chart is viewed | SQL to StarRocks as bi_ro, typed, post-processed | FE + BE up; password decryptable | StarRocks down → query error on the chart |
+| 32 Check | make superset-check as checker | dashboard published; scopes as in the spec | a chart added later joins every filter (E83) |
+| 33 Export to Git (after any UI change) | make superset-export → review → PR | the export check passes (no secrets, uuid5, chart names) | a change not exported lives only in Postgres |
+| 34 Rebuild drill | make superset-drill on superset_drill, then -clean | real web at 0 during the drill | overlay inside its base (E86) |
+
+---
+# Slide L2 — What Task 5 tested, and what it didn't
+Tested, with evidence: every number on screen (33/33 via /api/v1/chart/data as checker, filters on and off, plus defaults and scopes) · datasets 20/20 in StarRocks · read-only at both layers · rebuild from Git on an empty DB (same dashboard uuid, 14 charts, scopes remapped, superset-check PASS) · idempotent import onto the real DB · image integrity (no Superset package changed, dialect resolves, get_datatype(253) = VAR_STRING) · demo-check DEMO_TASK=5 ALL PASS at the freeze and again after the 11-13 restarts (twice)
+
+| Not tested yet | Why it matters |
+|---|---|
+| Gold unavailable (delete the BE pod during the demo) | written in 07_demo.md but not run: "error, not stale or zero numbers" is unproven |
+| restore from superset.dump | the backup exists; restoring it was never tried |
+| SECRET_KEY rotation | one wrong step makes every stored password unreadable |
+| Git vs DB drift | nothing compares the live dashboard with Git; a UI edit without an export is invisible |
+| two web replicas | in-memory rate limiter and sessions are only right with one |
+| many viewers, no cache | each view is a StarRocks query; never measured |
+| from-zero full-stack run (Tasks 2–5) | deferred in Task 3 to "after Task 5": now due |
+
+Five drills worth doing first: (1) delete starrocks-be-0, refresh, then starrocks-ready + superset-check; (2) change one chart title, export, the diff shows only that chart; (3) restore superset.dump into a scratch DB and run the drill's check; (4) rotate SECRET_KEY in the drill with re-encrypt-secrets; (5) the from-zero run, timing each stage.
+
+Speaker notes: The Gold-unavailable drill is a claim in my demo script that I have not proven yet; I say so instead of presenting it as fact.
+
+---
 # Part 4 — Errors
 
 ---
@@ -306,3 +423,14 @@ Speaker notes: The lab ends with a full chain: Excel → Bronze → Silver → G
 - Docs: docs/task5/README.md, FREEZE.md, 01_knowledge.md, 06_validation.md, 07_demo.md, 05_errors_and_fixes.md
 
 Speaker notes: Everything here is reproducible from the repository at tag task5-v1.
+
+---
+# Appendix A3 — Sources (the four Task 5 learning packs, PDFs with links, kept locally in docs/task5/: not in Git)
+- **Official docs:** Configuring Superset (superset_config.py, SECRET_KEY, re-encrypt-secrets) · Securing Superset for production · Security: roles and permissions (Admin / Alpha / Gamma, datasource access, row-level security) · Connecting to databases · StarRocks in Superset (dialect, URI) · Adding drivers in Docker (E79) · Superset support in the StarRocks docs (E82) · Importing and exporting · Superset on Kubernetes (E80) · Superset Kubernetes Operator and its releases (D27) · Creating your first dashboard (6.1.0)
+- **Papers and essays:** Why most dashboards fail (Stephen Few): the design rules of slide 7
+- **Talks:** no recorded Superset talk could be confirmed; closest: Preset at Airflow Summit 2021 (slides), assets managed from a pipeline
+- **Problems (34 leads, 7 problems):** a Superset image with the right drivers (E79, E82) · Superset on Kubernetes (E80, E81: enableServiceLinks) · secrets and access (SECRET_KEY, roles, read-only) · dashboards as code (SIP-54, export/import edge cases) · native filter scopes (E83) · dashboard design · Kustomize overlays (E86)
+- **Basics:** Superset (first dashboard in 6.1.0) → dashboard design → Kustomize overlays
+- Reading-list rows were picked from search summaries, not read in full: treat them as leads
+
+Speaker notes: As in Tasks 3 and 4, the packs are this deck's bibliography.
