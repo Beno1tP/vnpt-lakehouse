@@ -184,6 +184,15 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 - Open: **E17** (confirm in HMS log; hadoop-aws 3.1.0), infra redesign toward pulled images + compose config, disk audit (setup used 30–50 GB).
 - Data reminder: trial/imaginary data, lab only; keep local.
 
+## 8e. Status 2026-11-13 (presentation prep)
+
+- Restarts: twice `minikube start` → (since 11-13) `make mode-pipeline` → `k8s-up` → `demo-task5` → `demo-check DEMO_TASK=5` ALL PASS. The restart order (`mode-pipeline` first) is in `docs/task5/07_demo.md`.
+- Disk: C: 37 → **55 GB free** (pip cache, 3 unused node images, Windows temporary files, `fstrim` + diskpart compaction of both vhdx). E88 (Claude's `crictl` pipe deleted the kube-apiserver image; restored, repo digest verified) and E89 (silent unpause loop after a restart; fixed: wait for the api-server, print FAIL) in `docs/task5/05_errors_and_fixes.md`.
+- Slides: `docs/task3/4/5/slides.md` (structure of the Task 1–2 decks) + global view, hop by hop, stack compared, lifecycle, tested vs not, sources from Bee's learning packs (PDFs kept locally in `docs/task*/`, git-ignored: the large-file hook refuses them).
+- Lab-recommended checks run on frozen Gold: `make all` 142 passed; `dbt test` PASS=37 = 34 tests + 3 REFRESH hooks (README table). Claude's earlier pytest counts (63–73) were estimates from a dot line, not pytest's count.
+- Found: the lab doc's diagram puts Gold in Iceberg; we built it in StarRocks (Bước 4): leader question 1 in `docs/leader-questions.md`.
+- Next: final presentation (run sheet in this session; `demo-task3` needs `superset-down && starrocks-down` first), then the from-zero acceptance and the cleanup. Errors continue from **E90**.
+
 ## 8d. Status 2026-11-13 (Task 5 done and frozen)
 
 - Task 5 done, tag `task5-v1`; read `docs/task5/README.md` and `FREEZE.md` first. All five lab tasks are done.

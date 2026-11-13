@@ -552,9 +552,9 @@ maintenance:   ## Task 2 2.5c: Iceberg maintenance now (same template as DAG lak
 venv:          ## dev: local .venv with the pinned tools + job deps (requirements-dev.txt, ~330 MB, git-ignored)
 	test -x .venv/bin/python || python3 -m venv .venv
 	.venv/bin/pip install -q -r requirements-dev.txt
-lint:          ## dev: ruff check + ruff format --check (same as CI)
-	.venv/bin/ruff check .
-	.venv/bin/ruff format --check .
+lint:          ## dev: ruff check + ruff format --check (same as CI: no cache, E84)
+	.venv/bin/ruff check --no-cache .
+	.venv/bin/ruff format --no-cache --check .
 fmt:           ## dev: apply ruff format + safe ruff fixes
 	.venv/bin/ruff format .
 	.venv/bin/ruff check --fix .
