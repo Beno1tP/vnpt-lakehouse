@@ -52,6 +52,21 @@ the tag, then build from it), `make demo-task4` + `make demo-check DEMO_TASK=4`.
 = freezing its input (the Silver tag) + its code (the dbt image digest); the var picks which Silver snapshot the
 staging models read, and the gate checks that input before any Gold is built.
 
+### The lab's recommended checks, mapped to ours (run 2026-11-13 07:41 UTC = 14:41 ICT, frozen Gold)
+
+dbt runs in a one-off pod with the pinned image (`make dbt CMD="…"`), not from a local `cd dbt`: it needs the StarRocks
+connection inside the cluster. dbt counts the 3 `on-run-start` REFRESH hooks as passed nodes in every run, so PASS = tests + 3.
+The project has **34 tests** (`make dbt CMD="ls --resource-type test --output name"`).
+
+| Lab recommends | Ours | Result |
+|---|---|---|
+| `cd dbt && dbt test` | `make dbt CMD="test"` | PASS=37 = 34 tests + 3 hooks, ERROR=0 |
+| `dbt test --select staging` | `make dbt CMD="test --select staging"` | PASS=4 = `assert_silver_counts` + 3 hooks |
+| `dbt test --select gold` | `make dbt CMD="test --select gold"` | PASS=9 = 5 `reconcile_uc*` + `assert_bitmap_users` + 3 hooks |
+| `dbt test --select test_valid_intent` | no test has that name; same idea: `accepted_values` on `dim_intent.intent_group` + `relationships` `fct_prediction.final_intent` → `dim_intent` (`make dbt CMD="test --select dim_intent fct_prediction,test_type:generic"`) | PASS=15 = 12 tests + 3 hooks |
+| `pytest tests/ -v` | `make test` (`testpaths = tests/unit`); `tests/dags` needs Airflow and runs in CI's "DAG integrity" job inside the Airflow image | 142 passed |
+| `make lint` / `make test` / `make all` | same targets (`lint` = ruff check + format check, no cache since E84) | all passed |
+
 ## Versions and why
 
 | Component | Pin | Why |

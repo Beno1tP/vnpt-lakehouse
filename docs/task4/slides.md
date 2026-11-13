@@ -416,7 +416,7 @@ Speaker notes: This is the slide to remember: a wrong distinct count looks plaus
 - make gold-check: 22 counts and measure sums (e.g. UC5 10,588 understood / 141 not; UC8 89 new, 112 active, bitmap 89) → 22/22
 - StarRocks reads Silver: 10,613 = Trino = Spark = pandas
 - Least privilege: MinIO user starrocks 6/6 read-only; bi_ro CREATE / INSERT → privilege error; grants survive rebuilds (wildcards)
-- The lab's recommended checks, run 11-13 07:41 UTC (14:41 ICT) on the frozen Gold: make all (lint + unit tests) 142 passed · dbt test PASS=37 · dbt test --select staging PASS=4 · --select gold PASS=9 · the intent tests (no test is named test_valid_intent; the same idea = accepted_values + relationships to dim_intent) PASS=15 · 0 failures, 0 errors. pytest tests/ in the lab = make test (tests/unit) + the CI job "DAG integrity" for tests/dags (needs Airflow)
+- The lab's recommended checks, run 11-13 07:41 UTC (14:41 ICT) on the frozen Gold: make all (lint + unit tests) 142 passed · dbt test PASS=37 (= the project's 34 tests + the 3 on-run-start REFRESH hooks, which dbt counts in every run) · dbt test --select staging PASS=4 (1 test + 3 hooks) · --select gold PASS=9 (6 + 3) · the intent tests (no test is named test_valid_intent; the same idea = accepted_values + relationships to dim_intent) PASS=15 (12 + 3) · 0 failures, 0 errors. pytest tests/ in the lab = make test (tests/unit) + the CI job "DAG integrity" for tests/dags (needs Airflow)
 
 Visual: four logos (pandas, Spark, Trino, StarRocks) pointing at "10,613".
 
