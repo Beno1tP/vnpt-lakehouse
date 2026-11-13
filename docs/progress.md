@@ -33,9 +33,9 @@ Update this file at the end of each work block (status, decisions, blockers).
 | MinIO | Latest stable image, single node | ✅ | Path-style access required in Spark/Trino |
 | Trino | **483** (released 2026-07-17) | ✅ keep, add in Phase 4 | Single node, small `-Xmx`. Container includes its own Java |
 | StarRocks | **3.5.21** (2026-08-28), 1 FE + 1 BE | ✅ keep, add in Phase 5 | 3.5.21 fixes an intermittent Iceberg-via-Hive-Metastore query error, which is your exact setup |
-| dbt | `dbt-core` + `dbt-starrocks`, lock in Phase 5 | ⏳ | Check adapter ↔ core compatibility then |
-| Superset | Lock in Phase 6 | ⏳ | Connects to StarRocks via MySQL protocol |
-| Spark Operator | Kubeflow Spark Operator (Helm), lock in Phase 2 | ⏳ | Must support Spark 3.5 |
+| dbt | **dbt-core 1.12.6 + dbt-starrocks 1.12.2** (image `vnpt-lake-dbt` by digest) | ✅ locked (Task 4) | the adapter only sets a floor; CI `dbt-lint` proves the pair |
+| Superset | **6.1.0** lean by digest + `starrocks` 1.3.4 + psycopg2-binary 2.9.13 (image `vnpt-lake-superset`) | ✅ locked (Task 5) | dialect installed against Superset's own pins (D26); MySQL protocol to StarRocks |
+| Spark Operator | **Kubeflow Spark Operator 2.2.1** (Helm, by digest) | ✅ locked (Task 2) | last release on Spark 3.5 (2.3+ = Spark 4.0) |
 
 **Resource settings:** `.wslconfig` → `memory=11GB`, `processors=8`, `swap=4GB`. Minikube: start with `--memory=7168 --cpus=4` (lab default). If stable, raise to `--memory=8192 --cpus=6`. CPU is not your bottleneck; RAM is.
 
@@ -64,7 +64,8 @@ The deadline is tight for "learn K8s + 8 tools". **Learn K8s just-in-time while 
 | 2 | Minikube + Airflow running the Spark job | `docs/task2/` | ✅ 10-27 (`task2-v1`): Bronze on K8s under Airflow 3.3.2, CI → GHCR by digest, 24 daily runs (18 load / 6 skip, 23/23 checks), drills 1–7, backup/restore, maintenance DAG, Telegram alerts + 2 h deadline, remote logs, from zero `make k8s-up && make k8s-demo` with 0 restarts; E25–E53; summary `docs/task2/README.md` |
 | 3 | Trino querying Iceberg (starts with Silver, D6) | `docs/task3/` | ✅ 11-10 (`task3-v1`): Silver job in `chatbot_bronze` (28/28 per day, backfill twice identical), Trino 483 read-only (2 layers), Trino = pandas = Spark 191/191 (`make trino-check` + asset-triggered DAG `trino_reconcile`), explain plans + time travel, frozen `task3_v1` (5 tables), demo-task3 ALL PASS 4,964 Mi; E63–E66; from zero deferred to after Task 5; summary `docs/task3/README.md` |
 | 4 | StarRocks Gold via SQL/dbt | `docs/task4/` | ✅ 11-12 (`task4-v1`): StarRocks 3.5.21 on Minikube (operator 1.11.8, modes), external Iceberg catalog, dbt star + gold_uc4…uc8 (PASS=56, reconciled vs pandas), DAG gold_build on asset lake_silver, freeze task4_v1 + rebuild from the tag, demo-task4 ALL PASS 5,092 Mi; E67–E78; summary `docs/task4/README.md`, `FREEZE.md` |
-| 5 | Superset dashboard UC4–UC8 | `docs/task5/` | ⬜ plan written 11-06 (D19–D22) |
+| 5 | Superset dashboard UC4–UC8 | `docs/task5/` | ✅ 11-13 (`task5-v1`): Superset 6.1.0 (own image by digest, own manifests: chart 0.22.8 deprecated), read-only on Gold as `bi_ro`, dashboard 14 charts + 2 native filters, datasets as code (14 metrics, 20 checks), `superset-check` 33/33 as read-only `checker`, dashboard as code in Git + rebuild drill on an empty DB, demo-task5 ALL PASS 6,116 Mi; E79–E89; summary `docs/task5/README.md`, `FREEZE.md` |
+| — | Final presentation prep | `docs/task*/slides.md`, `docs/leader-questions.md` | ✅ decks for Tasks 1–5 (3–5 extended from the learning packs) · ✅ run-through on the cluster · ✅ lab-recommended checks run (`make all` 142 passed, `dbt test` 34 tests + 3 hooks) · ✅ leader questions (12) · ✅ disk 37 → 55 GB free · ⬜ the presentation itself · ⬜ from-zero acceptance (after it, question 12) · ⬜ cleanup (`minikube delete` only then) |
 
 ## 4b. Day plan (10-15) and actual outcome
 
@@ -155,7 +156,7 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 
 ## 6. Open questions / blockers
 
-- [ ] (10-23 leader: 18 days OK; start with the 2 existing intents; decide again at Task 5) UC6 (top 12 intents vs only 2 intents in data) and UC7 (30-day comparison vs ~18 days of data): raise with leader. Facts from Bronze (10-16): `UPDATED_INTENT` 0 non-null; `INTENT_NAME` = xin_chao 10,622 · fallback 107; `final_intent` = xin_chao 10,588 · fallback 107 · bot_khong_hieu 34; NLU_THRESHOLD always 0.8; 1 BOT_ID; STEP 2 values. Proposal: UC6 = generic top-N (N=12) on `final_intent` (shows 3 now, no invented labels); UC7 = window parameter anchored to max event date, empty previous window → NULL change
+- [x] (10-23 leader: 18 days OK; start with the 2 existing intents; decide again at Task 5) UC6 (top 12 intents vs only 2 intents in data) and UC7 (30-day comparison vs ~18 days of data): raise with leader. Facts from Bronze (10-16): `UPDATED_INTENT` 0 non-null; `INTENT_NAME` = xin_chao 10,622 · fallback 107; `final_intent` = xin_chao 10,588 · fallback 107 · bot_khong_hieu 34; NLU_THRESHOLD always 0.8; 1 BOT_ID; STEP 2 values. Proposal: UC6 = generic top-N (N=12) on `final_intent` (shows 3 now, no invented labels); UC7 = window parameter anchored to max event date, empty previous window → NULL change → **decided provisionally** in Task 4 (`docs/metrics.md` M1–M4: generic top-N, UC7 vs D−30 with % NULL, UC8 over 24 calendar days); still open for the leader in `docs/leader-questions.md` (#6–#9)
 - [x] `apache/hive:4.0.1` exists (also `standalone-metastore-4.1.0` / `4.2.1`) — no longer used (E16)
 - [x] Hadoop bundled in `apache/hive:3.1.3` = hadoop-common **3.1.0** → `HADOOP_AWS_VERSION=3.1.0`
 - [x] `apache/spark:3.5.9-scala2.12-java17-python3-ubuntu` pulls
@@ -175,7 +176,7 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 | RAM exhaustion | Pods `Pending` / `OOMKilled`, Windows swapping | Scale idle services to 0; lower heaps; run in phases |
 | Version incompatibility | `ClassNotFoundException`, S3 auth errors | Stick to the matrix; change one version at a time |
 | Schedule slip | Phase not done by its day | Cut from "Could", then "Should"; never cut reconciliation |
-| Disk growth | < 30 GB free | Prune images; expire snapshots; compact the WSL2 disk |
+| Disk growth | < 30 GB free | Prune images; expire snapshots; compact the WSL2 disk. ✅ 11-13: 55 GB free after the compaction |
 
 
 ## 7b. Handoff to Claude Code (2026-10-16 13:50)
@@ -191,6 +192,7 @@ Status: ⬜ not started · 🔄 in progress · ✅ done · ⛔ blocked
 - Slides: `docs/task3/4/5/slides.md` (structure of the Task 1–2 decks) + global view, hop by hop, stack compared, lifecycle, tested vs not, sources from Bee's learning packs (PDFs kept locally in `docs/task*/`, git-ignored: the large-file hook refuses them).
 - Lab-recommended checks run on frozen Gold: `make all` 142 passed; `dbt test` PASS=37 = 34 tests + 3 REFRESH hooks (README table). Claude's earlier pytest counts (63–73) were estimates from a dot line, not pytest's count.
 - Found: the lab doc's diagram puts Gold in Iceberg; we built it in StarRocks (Bước 4): leader question 1 in `docs/leader-questions.md`.
+- Ticked 11-13: §4 Task 5 ✅ + presentation-prep row, §2 dbt/Superset/Spark Operator locked, §6 UC6/UC7 item, step tables of `docs/task2–5/03_plan.md`.
 - Next: final presentation (run sheet in this session; `demo-task3` needs `superset-down && starrocks-down` first), then the from-zero acceptance and the cleanup. Errors continue from **E90**.
 
 ## 8d. Status 2026-11-13 (Task 5 done and frozen)
