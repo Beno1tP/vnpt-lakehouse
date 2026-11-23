@@ -373,7 +373,9 @@ demo-task2:    ## Demo profile (B3): view-only. Scheduler, dag-processor, trigge
 	kubectl -n spark-jobs rollout status deploy/spark-history --timeout=600s
 	kubectl -n airflow rollout status deploy/airflow-api-server --timeout=600s
 	@echo "demo-task2: view-only (no scheduler). UIs: make airflow-ui (viewer), make minio-ui (demo-viewer), port-forward History: kubectl -n spark-jobs port-forward svc/spark-history 18080:18080. Back to building: make demo-pipeline"
-demo-task3:    ## Demo profile (Task 3): view-only like demo-task2 + Trino up (~5 Gi requests; no Spark can start)
+demo-task3:    ## Demo profile (Task 3): view-only like demo-task2 + Trino up (~5 Gi requests; no Spark can start). Superset + StarRocks -> 0 first (E90)
+	$(MAKE) --no-print-directory superset-down
+	$(MAKE) --no-print-directory starrocks-down
 	$(MAKE) --no-print-directory demo-task2
 	kubectl -n trino scale deploy/trino-coordinator --replicas=1
 	kubectl -n trino rollout status deploy/trino-coordinator --timeout=600s
